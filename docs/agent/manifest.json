@@ -1,0 +1,11 @@
+{
+  "kit_version": "1.0",
+  "canonical_agent_file": "AGENTS.md",
+  "canonical_rules": ".agents/rules",
+  "canonical_skills": ".agents/skills",
+  "authoritative_references": [
+    "docs/reference/BACKEND_ARCHITECTURE.md",
+    "docs/reference/BACKEND_CODING_RULES.md",
+    "docs/reference/DATABASE_DESIGN.md"
+  ]
+}

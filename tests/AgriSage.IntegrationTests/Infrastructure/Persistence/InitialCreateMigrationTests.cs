@@ -1,0 +1,83 @@
+using AgriSage.Infrastructure.Persistence;
+using AgriSage.Infrastructure.Persistence.Migrations;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Migrations.Operations;
+
+namespace AgriSage.IntegrationTests.Infrastructure.Persistence;
+
+// Reviews InitialCreate without a database: migrations are the schema source of truth after AGRI-14.
+public class InitialCreateMigrationTests
+{
+    private static AgriSageDbContext CreateContext() =>
+        new(new DbContextOptionsBuilder<AgriSageDbContext>()
+            .UseNpgsql("Host=localhost;Database=agrisage_model_only")
+            .Options);
+
+    [Fact]
+    public void InitialCreate_is_the_only_migration()
+    {
+        using var context = CreateContext();
+
+        var migration = Assert.Single(context.Database.GetMigrations());
+
+        Assert.EndsWith("_InitialCreate", migration);
+    }
+
+    [Fact]
+    public void Model_snapshot_matches_the_current_model()
+    {
+        using var context = CreateContext();
+
+        Assert.False(context.Database.HasPendingModelChanges());
+    }
+
+    [Fact]
+    public void Up_creates_the_67_tables_without_destructive_operations()
+    {
+        var operations = new InitialCreate().UpOperations;
+
+        Assert.Equal(67, operations.OfType<CreateTableOperation>().Count());
+        Assert.DoesNotContain(operations, operation =>
+            operation is DropTableOperation or DropColumnOperation or DropIndexOperation or DropForeignKeyOperation
+                or RenameTableOperation or RenameColumnOperation or AlterColumnOperation or AlterTableOperation
+                or DeleteDataOperation or UpdateDataOperation or InsertDataOperation);
+    }
+
+    [Fact]
+    public void No_foreign_key_cascades_or_sets_null()
+    {
+        var operations = new InitialCreate().UpOperations;
+        var foreignKeys = operations.OfType<CreateTableOperation>().SelectMany(table => table.ForeignKeys)
+            .Concat(operations.OfType<AddForeignKeyOperation>())
+            .ToList();
+
+        Assert.Equal(263, foreignKeys.Count);
+        Assert.All(foreignKeys, foreignKey => Assert.Contains(foreignKey.OnDelete, new[] { ReferentialAction.Restrict, ReferentialAction.NoAction }));
+    }
+
+    [Fact]
+    public void Expression_indexes_are_created_last_and_dropped_first_from_PostgreSqlRawIndexes()
+    {
+        var migration = new InitialCreate();
+
+        var upSql = migration.UpOperations.OfType<SqlOperation>().Select(operation => operation.Sql);
+        var downSql = migration.DownOperations.Take(2).OfType<SqlOperation>().Select(operation => operation.Sql);
+
+        Assert.Equal(PostgreSqlRawIndexes.All, upSql);
+        Assert.IsType<SqlOperation>(migration.UpOperations[^1]);
+        Assert.Equal([PostgreSqlRawIndexes.DropUsersEmailLower, PostgreSqlRawIndexes.DropInventoryLotsLogicalLot], downSql);
+    }
+
+    [Fact]
+    public void Down_drops_every_table_it_created()
+    {
+        var migration = new InitialCreate();
+
+        var created = migration.UpOperations.OfType<CreateTableOperation>().Select(table => table.Name).Order();
+        var dropped = migration.DownOperations.OfType<DropTableOperation>().Select(table => table.Name).Order();
+
+        Assert.Equal(created, dropped);
+    }
+}

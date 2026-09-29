@@ -1,0 +1,27 @@
+# Business Invariants
+
+- System operates one active store but Store remains a real entity; never hard-code Store ID.
+- Registered Farmer and Walk-in sale flows are distinct.
+- Walk-in cannot use individual credit or debt.
+- One Farmer has one current Customer Group.
+- Price overrides require authorized staff, original suggested price, actor, and reason.
+- Sell only valid Product Packaging quantities; inventory core is tracked in base units.
+- Expired/blocked/quarantined lots are not eligible for reservation/allocation/sale.
+- FEFO proposes lots; staff confirms actual physical lot.
+- Inventory costing = Weighted Average Cost per logical Inventory Lot.
+- Stock cannot be silently adjusted.
+- Pickup and Delivery both recognize stock/financial effects only on actual fulfillment.
+- Partial fulfillment and multiple delivery attempts are supported.
+- Successful delivery requires proof according to the frozen business rule.
+- Credit exposure accounts for outstanding AR and active credit reservations.
+- Debt is created only for the unpaid portion of successfully fulfilled credit goods.
+- Payment↔Debt is many-to-many through Payment Allocations.
+- Debt changes are ledgered.
+- Return cannot exceed fulfilled quantity not already returned.
+- Return financial settlement reduces attributable unpaid debt first, then refunds paid value.
+- No automatic payOS refund in MVP; external refund is recorded.
+- Product review requires successful purchase/fulfillment.
+- AI diagnosis is not commercially authoritative until authorized Human Review.
+- Human Review decisions: CONFIRMED / CORRECTED / INCONCLUSIVE.
+- Only verified diagnosis can create treatment/product recommendations.
+- Promotions are out of scope.
