@@ -95,11 +95,18 @@ setup documentation
   Deferred — AGRI-14: real `DbUpdateConcurrencyException` / query-filter SQL tests against PostgreSQL.
   Later: map concurrency conflicts to 409/retry per use case, business Audit Log writing, Auth issuing `sub`,
   root version bump on child-only changes and soft-delete cascade to children (both undefined by the design).
-- In progress — AGRI-14 Initial migration: DB configuration refactored (`Database` section in
-  `appsettings.Development.json` → Supabase `agrisage-dev`, secret `Database:Password` only; `DatabaseOptions`),
-  `dotnet-ef` 10.0.12 local tool, `Persistence/Migrations/<ts>_InitialCreate` + snapshot generated and reviewed
-  (67 tables, 263 FKs Restrict/NoAction, 212 indexes incl. 2 raw expression indexes, 163 CHECKs).
-  **Not applied to Supabase yet** — waiting for explicit approval. The Direct host is IPv6-only.
+- Done — AGRI-14 Initial migration: DB configuration refactored (`Database` section in
+  `appsettings.Development.json` → Supabase `agrisage-dev` through the **Session Pooler**
+  (`aws-0-ap-southeast-1.pooler.supabase.com:5432`, user `postgres.<project-ref>`; the Direct host is IPv6-only),
+  secret `Database:Password` only; `DatabaseOptions`), `dotnet-ef` 10.0.12 local tool,
+  `Persistence/Migrations/20260929092546_InitialCreate` + snapshot. **Applied to `agrisage-dev` (PostgreSQL 17.6)**
+  and verified against the live database: 67 business tables + `__EFMigrationsHistory`, 1008 columns, 263 FKs
+  (117 Restrict / 146 No Action / 0 Cascade), 163 CHECKs, 212 non-PK indexes (24 partial) incl. the 2 raw expression
+  indexes (`NULLS NOT DISTINCT` present), `version` on the 4 designed tables, 0 rows (no seed data yet).
+  Real-PostgreSQL tests: `RealDatabaseTests` (opt-in, `AGRISAGE_DB_TESTS=1`, every test rolled back) cover soft delete +
+  query filter, `DbUpdateConcurrencyException`, unique/partial/raw indexes, CHECKs, Restrict FK and rollback cleanup.
+  Open: Supabase Data API / RLS (tables carry default `anon`/`authenticated` grants, RLS off — the Data API must stay
+  disabled for `public`); reference seed data is a separate task.
 
 ## Not Yet Implied by Foundation Completion
 

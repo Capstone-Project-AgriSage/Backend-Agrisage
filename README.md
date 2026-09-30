@@ -39,10 +39,10 @@ The non-secret connection settings are committed per environment in the `Databas
 
 ```json
 "Database": {
-  "Host": "db.<project-ref>.supabase.co",
+  "Host": "aws-0-ap-southeast-1.pooler.supabase.com",
   "Port": 5432,
   "Database": "postgres",
-  "Username": "postgres",
+  "Username": "postgres.<project-ref>",
   "SslMode": "Require"
 }
 ```
@@ -56,9 +56,10 @@ dotnet user-secrets set "Database:Password" "<password>" --project src/AgriSage.
 
 Other environments override any key with environment variables (`Database__Host`, `Database__Password`, …).
 
-The Supabase **Direct connection** host is **IPv6-only**. If your network has no IPv6, use the Supabase
-**Session Pooler** instead (port 5432): override `Database:Host` with the pooler host and `Database:Username`
-with `postgres.<project-ref>` in your User Secrets — do not commit personal overrides.
+The committed default is the Supabase **Session Pooler** (port 5432, IPv4-compatible; the username is
+`postgres.<project-ref>`). The **Direct connection** host (`db.<project-ref>.supabase.co`) is IPv6-only; a
+developer on an IPv6 network may override `Database:Host` / `Database:Username` in their own User Secrets —
+do not commit personal overrides.
 
 ### EF Core migrations
 
@@ -67,6 +68,19 @@ The EF CLI is pinned as a local tool (`dotnet-tools.json` at the repository root
 ```bash
 dotnet tool restore
 dotnet ef migrations list --project src/AgriSage.Infrastructure --startup-project src/AgriSage.Api
+```
+
+Apply pending migrations to the configured database (explicit, reviewed step — never on app startup):
+
+```bash
+dotnet ef database update --project src/AgriSage.Infrastructure --startup-project src/AgriSage.Api
+```
+
+Tests against the real development database are opt-in and always roll back their transaction:
+
+```bash
+# PowerShell: $env:AGRISAGE_DB_TESTS = "1"      bash: export AGRISAGE_DB_TESTS=1
+dotnet test tests/AgriSage.IntegrationTests --filter "FullyQualifiedName~RealDatabaseTests"
 ```
 
 Migrations live in `src/AgriSage.Infrastructure/Persistence/Migrations` and are the schema source of truth.
