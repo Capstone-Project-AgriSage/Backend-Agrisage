@@ -1,5 +1,6 @@
 using AgriSage.Application.Features.Auth.Interfaces;
 using AgriSage.Application.Features.Auth.Services;
+using AgriSage.Application.Features.Files;
 using AgriSage.Application.Features.Products.Interfaces;
 using AgriSage.Application.Features.Products.Services;
 using AgriSage.Application.Features.Staff.Interfaces;
@@ -27,6 +28,7 @@ public static class DependencyInjection
         services.AddScoped<IProductService, ProductService>();
         services.AddScoped<IStoreProductService, StoreProductService>();
         services.AddScoped<ICatalogService, CatalogService>();
+        services.AddScoped<IProductImageService, ProductImageService>();
 
         // Further feature application services are registered here by later tasks.
 

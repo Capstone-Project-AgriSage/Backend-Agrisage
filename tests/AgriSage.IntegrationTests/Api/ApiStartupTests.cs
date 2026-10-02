@@ -3,6 +3,7 @@ using AgriSage.Application.Common.Interfaces;
 using AgriSage.Application.Features.Auth.Dtos.Requests;
 using AgriSage.Application.Features.Auth.Interfaces;
 using AgriSage.Application.Features.Auth.Services;
+using AgriSage.Application.Features.Files;
 using AgriSage.Application.Features.Staff.Dtos.Requests;
 using AgriSage.Application.Features.Staff.Interfaces;
 using AgriSage.Application.Features.Staff.Services;
@@ -77,6 +78,8 @@ public class ApiStartupTests : IClassFixture<ApiStartupTests.DevelopmentApiFacto
 
         Assert.IsType<AuthService>(provider.GetRequiredService<IAuthService>());
         Assert.IsType<AdminBootstrapService>(provider.GetRequiredService<IAdminBootstrapService>());
+        Assert.IsType<ProductImageService>(provider.GetRequiredService<IProductImageService>());
+        Assert.IsType<AgriSage.Infrastructure.Storage.SupabaseFileStorageService>(provider.GetRequiredService<IFileStorageService>());
         Assert.IsType<StaffService>(provider.GetRequiredService<IStaffService>());
         Assert.IsType<UserAccessValidator>(provider.GetRequiredService<IUserAccessValidator>());
         Assert.NotNull(provider.GetRequiredService<FluentValidation.IValidator<CreateStaffRequest>>());

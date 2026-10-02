@@ -7,6 +7,9 @@ public static class RateLimitingExtensions
 {
     public const string AuthPolicy = "auth";
 
+    // Image uploads: bounded so the storage quota cannot be burned quickly.
+    public const string UploadPolicy = "upload";
+
     // Public catalog reads: generous, only to slow down scraping.
     public const string PublicPolicy = "public";
 
@@ -31,6 +34,15 @@ public static class RateLimitingExtensions
                 _ => new FixedWindowRateLimiterOptions
                 {
                     PermitLimit = 120,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueLimit = 0
+                }));
+
+            options.AddPolicy(UploadPolicy, httpContext => RateLimitPartition.GetFixedWindowLimiter(
+                httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 30,
                     Window = TimeSpan.FromMinutes(1),
                     QueueLimit = 0
                 }));

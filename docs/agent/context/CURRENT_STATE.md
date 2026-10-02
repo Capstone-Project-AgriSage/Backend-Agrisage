@@ -155,6 +155,15 @@ setup documentation
   tests, all rolled back). No catalog data created on `agrisage-dev`. Not included: image upload (Supabase Storage),
   prices, stock.
 
+- Done (branch `feature/storage`, not pushed) — Image upload:
+  `Application/Features/Files` (`ProductImageService`, `ImageRules`), `Infrastructure/Storage`
+  (`SupabaseFileStorageService`, `StorageOptions`), `Api/Features/Files/FilesController`, `StorageUnavailableException`
+  → 503, rate limit `upload`. No schema change, no migration, no new package. Verified offline: build 0 warnings/0 errors;
+  371 unit + 253 integration passed (60 real-DB/real-storage tests skipped without their flags). The real Supabase test
+  (`AGRISAGE_STORAGE_TESTS=1`) passed against `agrisage-dev`: upload, public read, delete (the bucket was left empty).
+  Supabase reports a missing object as HTTP 400 `not_found` (handled as "already deleted"); public URLs are served
+  through a CDN, so a deleted image can stay visible briefly — names are unique GUIDs, so nothing is ever overwritten.
+
 ## Not Yet Implied by Foundation Completion
 
 Foundation completion does not mean these business APIs are complete:

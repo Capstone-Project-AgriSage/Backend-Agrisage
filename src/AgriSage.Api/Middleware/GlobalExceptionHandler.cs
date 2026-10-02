@@ -51,6 +51,7 @@ public sealed class GlobalExceptionHandler(
             StatusCodes.Status409Conflict, "Conflict.", "The record was changed by someone else. Reload and try again."),
         DbUpdateException update when databaseErrors.IsUniqueViolation(update) => Problem(
             StatusCodes.Status409Conflict, "Conflict.", "A record with the same unique value already exists."),
+        StorageUnavailableException storage => Problem(StatusCodes.Status503ServiceUnavailable, "Service unavailable.", storage.Message),
         BusinessRuleException rule => Problem(StatusCodes.Status422UnprocessableEntity, "Business rule violated.", rule.Message),
         DomainException domain => Problem(StatusCodes.Status422UnprocessableEntity, "Business rule violated.", domain.Message),
         _ => Problem(StatusCodes.Status500InternalServerError, "Server error.", "An unexpected error occurred.")

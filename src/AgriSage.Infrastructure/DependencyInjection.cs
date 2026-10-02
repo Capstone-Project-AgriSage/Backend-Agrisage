@@ -4,6 +4,7 @@ using AgriSage.Infrastructure.Persistence;
 using AgriSage.Infrastructure.Persistence.Interceptors;
 using AgriSage.Infrastructure.Persistence.Seed;
 using AgriSage.Infrastructure.Services;
+using AgriSage.Infrastructure.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -60,7 +61,11 @@ public static class DependencyInjection
         services.AddOptions<SeedStoreOptions>().Bind(configuration.GetSection(SeedStoreOptions.SectionName));
         services.AddScoped<DatabaseSeeder>();
 
-        // Provider adapters (payOS, AI, storage) are registered here by later tasks.
+        // Object storage (Supabase); nothing connects at startup and a missing configuration fails only on use.
+        services.AddOptions<StorageOptions>().Bind(configuration.GetSection(StorageOptions.SectionName));
+        services.AddHttpClient<IFileStorageService, SupabaseFileStorageService>(client => client.Timeout = TimeSpan.FromSeconds(30));
+
+        // Further provider adapters (payOS, AI) are registered here by later tasks.
 
         return services;
     }

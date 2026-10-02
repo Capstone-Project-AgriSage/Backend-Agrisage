@@ -24,6 +24,7 @@ public class GlobalExceptionHandlerTests
         { new DbUpdateConcurrencyException("stale"), 409 },
         { new BusinessRuleException("rule"), 422 },
         { new DomainException("invariant"), 422 },
+        { new StorageUnavailableException(), 503 },
         { new InvalidOperationException("boom"), 500 }
     };
 
