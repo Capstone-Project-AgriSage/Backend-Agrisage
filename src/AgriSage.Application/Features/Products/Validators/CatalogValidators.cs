@@ -109,6 +109,9 @@ public sealed class CreateProductRequestValidator : AbstractValidator<CreateProd
         RuleFor(r => r.Name).NotEmpty().MaximumLength(255);
         RuleFor(r => r.CategoryId).NotEmpty();
         RuleFor(r => r.ImageUrl).MustBeImageUrl().When(r => !string.IsNullOrWhiteSpace(r.ImageUrl));
+        RuleFor(r => r.RequiresLotTracking).Equal(true)
+            .When(r => r.RequiresExpiryDate)
+            .WithMessage("A product that requires an expiry date must also require lot tracking.");
 
         RuleFor(r => r.Packagings).NotNull().NotEmpty().WithMessage("At least one packaging is required.");
         RuleForEach(r => r.Packagings).SetValidator(new PackagingRequestValidator());

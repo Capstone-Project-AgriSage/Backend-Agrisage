@@ -57,6 +57,7 @@ public static class DependencyInjection
         });
 
         services.AddScoped<IAgriSageDbContext>(provider => provider.GetRequiredService<AgriSageDbContext>());
+        services.AddScoped<IRowLockService, RowLockService>();
 
         services.AddOptions<SeedStoreOptions>().Bind(configuration.GetSection(SeedStoreOptions.SectionName));
         services.AddScoped<DatabaseSeeder>();

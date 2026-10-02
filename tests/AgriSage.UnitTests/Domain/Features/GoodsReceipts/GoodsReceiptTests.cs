@@ -23,6 +23,56 @@ public class GoodsReceiptTests
         _box = box;
     }
 
+    // One (fake) lot per active item, as the confirmation workflow supplies.
+    private static Dictionary<Guid, Guid> LotsFor(GoodsReceipt receipt) =>
+        receipt.Items.Where(i => !i.IsDeleted).ToDictionary(i => i.Id, _ => Guid.NewGuid());
+
+    [Fact]
+    public void Confirm_assigns_the_lot_of_every_item()
+    {
+        var receipt = CreateReceipt();
+        var first = receipt.AddItem(_storeProduct, _box, 1, 100m);
+        var second = receipt.AddItem(_storeProduct, _bottle, 2, 10m);
+        var lots = LotsFor(receipt);
+
+        receipt.Confirm(StaffId, Now, lots);
+
+        Assert.Equal(lots[first.Id], first.InventoryLotId);
+        Assert.Equal(lots[second.Id], second.InventoryLotId);
+    }
+
+    [Fact]
+    public void Confirm_rejects_a_missing_or_unknown_lot_assignment_without_changing_anything()
+    {
+        var receipt = CreateReceipt();
+        var item = receipt.AddItem(_storeProduct, _box, 1, 100m);
+        receipt.AddItem(_storeProduct, _bottle, 2, 10m);
+
+        Assert.Throws<DomainException>(() => receipt.Confirm(StaffId, Now, new Dictionary<Guid, Guid> { [item.Id] = Guid.NewGuid() }));
+        Assert.Throws<DomainException>(() => receipt.Confirm(StaffId, Now, new Dictionary<Guid, Guid>()));
+        var withUnknown = LotsFor(receipt);
+        withUnknown[Guid.NewGuid()] = Guid.NewGuid();
+        Assert.Throws<DomainException>(() => receipt.Confirm(StaffId, Now, withUnknown));
+
+        Assert.Equal(GoodsReceiptStatus.Draft, receipt.Status);
+        Assert.Null(item.InventoryLotId);
+        Assert.Null(receipt.ConfirmedBy);
+    }
+
+    [Fact]
+    public void Removed_items_need_no_lot()
+    {
+        var receipt = CreateReceipt();
+        var kept = receipt.AddItem(_storeProduct, _box, 1, 100m);
+        var removed = receipt.AddItem(_storeProduct, _bottle, 2, 10m);
+        receipt.RemoveItem(removed.Id, StaffId, Now);
+
+        receipt.Confirm(StaffId, Now, new Dictionary<Guid, Guid> { [kept.Id] = Guid.NewGuid() });
+
+        Assert.NotNull(kept.InventoryLotId);
+        Assert.Null(removed.InventoryLotId);
+    }
+
     private static GoodsReceipt CreateReceipt() =>
         new(Guid.NewGuid(), Guid.NewGuid(), "GR-0001", Now, StaffId, GoodsReceiptSourceType.Manual);
 
@@ -76,7 +126,7 @@ public class GoodsReceiptTests
     {
         var receipt = CreateReceipt();
         var item = receipt.AddItem(_storeProduct, _box, 1, 100m);
-        receipt.Confirm(StaffId, Now);
+        receipt.Confirm(StaffId, Now, LotsFor(receipt));
 
         Assert.Throws<DomainException>(() => item.MarkDeleted(StaffId, Now));
         Assert.False(item.IsDeleted);
@@ -130,7 +180,7 @@ public class GoodsReceiptTests
         var item = receipt.AddItem(_storeProduct, _box, 1, 100m);
         receipt.RemoveItem(item.Id, StaffId, Now);
 
-        Assert.Throws<DomainException>(() => receipt.Confirm(StaffId, Now));
+        Assert.Throws<DomainException>(() => receipt.Confirm(StaffId, Now, LotsFor(receipt)));
         Assert.Equal(GoodsReceiptStatus.Draft, receipt.Status);
     }
 
@@ -140,7 +190,7 @@ public class GoodsReceiptTests
         var receipt = CreateReceipt();
         receipt.AddItem(_storeProduct, _box, 1, 100m);
 
-        receipt.Confirm(StaffId, Now);
+        receipt.Confirm(StaffId, Now, LotsFor(receipt));
 
         Assert.Equal(GoodsReceiptStatus.Confirmed, receipt.Status);
         Assert.Equal(StaffId, receipt.ConfirmedBy);
@@ -152,13 +202,13 @@ public class GoodsReceiptTests
     {
         var receipt = CreateReceipt();
         var item = receipt.AddItem(_storeProduct, _box, 1, 100m);
-        receipt.Confirm(StaffId, Now);
+        receipt.Confirm(StaffId, Now, LotsFor(receipt));
 
         Assert.Throws<DomainException>(() => receipt.AddItem(_storeProduct, _box, 1, 100m));
         Assert.Throws<DomainException>(() => receipt.UpdateItem(item.Id, 5, 100m, null, null, null, null));
         Assert.Throws<DomainException>(() => receipt.RemoveItem(item.Id, StaffId, Now));
         Assert.Throws<DomainException>(() => receipt.UpdateHeader(Guid.NewGuid(), "INV-1", null, Now, StaffId, null));
-        Assert.Throws<DomainException>(() => receipt.Confirm(StaffId, Now));
+        Assert.Throws<DomainException>(() => receipt.Confirm(StaffId, Now, LotsFor(receipt)));
         Assert.Throws<DomainException>(() => receipt.Cancel(StaffId, Now, "Wrong supplier"));
         Assert.Throws<DomainException>(() => receipt.MarkDeleted(StaffId, Now));
 
@@ -178,7 +228,7 @@ public class GoodsReceiptTests
         Assert.Equal(StaffId, receipt.CancelledBy);
         Assert.Equal("Duplicate entry", receipt.CancelReason);
         Assert.Throws<DomainException>(() => receipt.AddItem(_storeProduct, _box, 1, 100m));
-        Assert.Throws<DomainException>(() => receipt.Confirm(StaffId, Now));
+        Assert.Throws<DomainException>(() => receipt.Confirm(StaffId, Now, LotsFor(receipt)));
     }
 
     [Fact]

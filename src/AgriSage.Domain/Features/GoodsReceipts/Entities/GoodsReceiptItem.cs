@@ -62,6 +62,8 @@ public sealed class GoodsReceiptItem : SoftDeletableChildEntity
 
     public string? Note { get; private set; }
 
+    internal void AssignLot(Guid inventoryLotId) => InventoryLotId = inventoryLotId;
+
     internal void Update(
         long receivedQuantity,
         decimal purchaseUnitCost,

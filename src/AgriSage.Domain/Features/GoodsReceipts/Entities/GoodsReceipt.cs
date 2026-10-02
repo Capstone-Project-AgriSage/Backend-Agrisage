@@ -163,13 +163,31 @@ public sealed class GoodsReceipt : SoftDeletableEntity
         RecalculateTotals();
     }
 
-    public void Confirm(Guid confirmedBy, DateTimeOffset confirmedAt)
+    // The Inventory Lot of every active item is resolved by the confirmation workflow and passed in (item id → lot id);
+    // an item without a lot, or an unknown item id, is rejected before anything changes.
+    public void Confirm(Guid confirmedBy, DateTimeOffset confirmedAt, IReadOnlyDictionary<Guid, Guid> inventoryLotIdsByItemId)
     {
         EnsureDraft();
 
-        if (!_items.Any(i => !i.IsDeleted))
+        var activeItems = _items.Where(i => !i.IsDeleted).ToList();
+        if (activeItems.Count == 0)
         {
             throw new DomainException($"Goods receipt '{ReceiptNumber}' has no items to confirm.");
+        }
+
+        if (inventoryLotIdsByItemId.Keys.Any(id => activeItems.All(i => i.Id != id)))
+        {
+            throw new DomainException($"Goods receipt '{ReceiptNumber}': a lot was supplied for an unknown item.");
+        }
+
+        if (activeItems.Any(i => !inventoryLotIdsByItemId.ContainsKey(i.Id)))
+        {
+            throw new DomainException($"Goods receipt '{ReceiptNumber}': every item needs an inventory lot to be confirmed.");
+        }
+
+        foreach (var item in activeItems)
+        {
+            item.AssignLot(inventoryLotIdsByItemId[item.Id]);
         }
 
         Status = GoodsReceiptStatus.Confirmed;

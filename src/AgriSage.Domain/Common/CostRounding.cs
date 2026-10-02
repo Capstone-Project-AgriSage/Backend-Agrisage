@@ -2,7 +2,7 @@ namespace AgriSage.Domain.Common;
 
 // Single source of the rounding rules (coding rule #61, database design §35.1 / §35.10).
 // Money inputs are never rounded: inputs with more than 2 decimals are rejected by Guard.Money.
-internal static class CostRounding
+public static class CostRounding
 {
     public const int UnitCostDecimals = 6;
     public const int MoneyDecimals = 2;

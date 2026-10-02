@@ -174,8 +174,35 @@ public sealed class AgriSageDbContext : DbContext, IAgriSageDbContext
 
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
-    public Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default) =>
-        Database.BeginTransactionAsync(cancellationToken);
+    // A use case that runs inside an existing transaction (tests, or an outer unit of work) joins it instead of failing:
+    // the outer owner commits or rolls back. There are no independent nested transactions (coding rule #18).
+    public async Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default) =>
+        Database.CurrentTransaction is { } existing
+            ? new JoinedTransaction(existing)
+            : await Database.BeginTransactionAsync(cancellationToken);
+
+    private sealed class JoinedTransaction(IDbContextTransaction outer) : IDbContextTransaction
+    {
+        public Guid TransactionId => outer.TransactionId;
+
+        public void Commit()
+        {
+        }
+
+        public Task CommitAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public void Rollback()
+        {
+        }
+
+        public Task RollbackAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public void Dispose()
+        {
+        }
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
 
     // FK indexes are created by PersistenceConventions instead (operational FKs only, not actor FKs).
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder) =>

@@ -26,6 +26,13 @@ public sealed class Product : SoftDeletableEntity
         string? imageUrl = null,
         ProductStatus status = ProductStatus.Active)
     {
+        // Expiry is tracked per Inventory Lot: a product without lot tracking has one no-lot bucket that cannot
+        // keep different expiry dates apart (database design §35.17).
+        if (requiresExpiryDate && !requiresLotTracking)
+        {
+            throw new DomainException("A product that requires an expiry date must also require lot tracking.");
+        }
+
         Sku = Guard.NotNullOrWhiteSpace(sku);
         RequiresLotTracking = requiresLotTracking;
         RequiresExpiryDate = requiresExpiryDate;

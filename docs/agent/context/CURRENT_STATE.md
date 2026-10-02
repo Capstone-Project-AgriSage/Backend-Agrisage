@@ -164,6 +164,16 @@ setup documentation
   Supabase reports a missing object as HTTP 400 `not_found` (handled as "already deleted"); public URLs are served
   through a CDN, so a deleted image can stay visible briefly — names are unique GUIDs, so nothing is ever overwritten.
 
+- Done (branch `feature/goods-receipts`, not committed) — Suppliers + Goods Receiving:
+  `Application/Features/Suppliers`, `GoodsReceipts` (`GoodsReceiptService`, `GoodsReceiptConfirmer`, `ReceiptItemRules`),
+  `Inventory` (lots, stock movements, lot status), `Common` (`BusinessCalendar`, `DocumentNumbers`, `EnumText`,
+  `IRowLockService`), `Infrastructure/Persistence/RowLockService`, Api controllers `Suppliers`, `GoodsReceipts`,
+  `Inventory`, `ApiRoles.Operate`. Domain: `GoodsReceipt.Confirm` takes the lot per item; `Product` rejects expiry
+  without lot tracking. No schema change, no migration, no new package. Verified: build 0 warnings/0 errors; 408 unit +
+  385 integration passed with `AGRISAGE_DB_TESTS=1` (all real-DB tests rolled back; 1 skipped = Supabase Storage).
+  Decisions: `DECISIONS.md` (Receiving rows), `DATABASE_DESIGN.md` §35.17. Not included: Excel import, reversal of a
+  confirmed receipt, stock-take/adjustment, reservations.
+
 ## Not Yet Implied by Foundation Completion
 
 Foundation completion does not mean these business APIs are complete:

@@ -208,6 +208,24 @@ dotnet user-secrets set "Storage:SecretKey" "<sb_secret_… key>" --project src/
 - Optional real test against Supabase (uploads a 1x1 image, reads it, deletes it):
   `AGRISAGE_STORAGE_TESTS=1 dotnet test tests/AgriSage.IntegrationTests --filter "FullyQualifiedName~RealStorageTests"`.
 
+### Suppliers, goods receiving and stock
+
+Roles: Admin, Store Owner and Sales draft receipts and read stock; **only Admin and Store Owner confirm receipts and
+change lot status**; suppliers are managed by Admin/Store Owner (Sales read only). Delivery staff and farmers: no access.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET/POST /api/suppliers`, `GET/PUT/DELETE /api/suppliers/{id}`, `POST …/activate`, `…/deactivate` | Suppliers (unique code per store; delete only if never used) |
+| `GET/POST /api/goods-receipts`, `GET/PUT /api/goods-receipts/{id}` | Receipts (numbers `GR-yyyyMMdd-NNNN`); edit while DRAFT |
+| `POST /{id}/items`, `PUT/DELETE /{id}/items/{itemId}` | Receipt lines (purchase packaging, lot, expiry, unit cost ≤ 2 decimals) |
+| `POST /{id}/cancel`, `DELETE /{id}` | Cancel with reason / soft delete a DRAFT |
+| `POST /{id}/confirm` | Admin/Owner: create or find lots, add stock at weighted average cost, post STOCK_IN |
+| `GET /api/inventory/lots`, `/lots/{id}` | Stock per lot: on hand, reserved, available, average cost, expiry |
+| `POST /api/inventory/lots/{id}/status` | Admin/Owner: ACTIVE / QUARANTINED / BLOCKED / EXPIRED |
+| `GET /api/inventory/stock-movements`, `/{id}` | Stock movement ledger |
+
+A confirmed receipt cannot be edited or deleted; reversal and Excel import are later tasks.
+
 ### First Admin
 
 Needs the reference seed first (the `ADMIN` role). Password only from User Secrets / environment, never appsettings:

@@ -367,6 +367,7 @@ AgriSage.Application/
 │   │   ├── ICurrentUserService.cs
 │   │   ├── IDateTimeProvider.cs
 │   │   ├── IFileStorageService.cs
+│   │   ├── IRowLockService.cs        (row lock inside a use-case transaction; Infrastructure implements it)
 │   │   ├── IPaymentGateway.cs
 │   │   └── IAiDiagnosisClient.cs
 │   │
