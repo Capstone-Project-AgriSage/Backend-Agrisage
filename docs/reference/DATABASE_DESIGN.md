@@ -6438,6 +6438,30 @@ Every enum-backed varchar column also has an IN (...) CHECK of its
 documented values (§0.5).
 ```
 
+## 35.16 Catalog clarifications
+
+```text
+product_packagings.status (free varchar in §13): allowed values ACTIVE / INACTIVE.
+INACTIVE keeps the history of a packaging that is no longer sold or bought.
+
+A Store Product may be created or marked sellable only if the Product is ACTIVE and
+has an ACTIVE base packaging and at least one ACTIVE sale packaging.
+
+product_active_ingredients UNIQUE(product_id, active_ingredient_id) also counts
+soft-deleted rows: adding a removed ingredient again revives the old row
+(Domain Reinstate), it never inserts a second one.
+
+categories.code has no unique constraint in the schema; Application rejects a code
+already used by another non-deleted category (case-insensitive).
+
+Product DELETE = status DISCONTINUED and the Store Products are deactivated (SKU and
+history kept). Packagings, categories, brands and active ingredients are soft deleted
+only when nothing references them.
+
+Public catalog (no sign-in): only ACTIVE, sellable Store Products of ACTIVE Products;
+no stock, minimum stock, store SKU, lot/expiry flags, internal statuses or audit data.
+```
+
 ## 35.15 Persistence behavior (AGRI-13)
 
 ```text

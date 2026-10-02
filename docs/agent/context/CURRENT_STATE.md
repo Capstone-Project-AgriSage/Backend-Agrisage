@@ -146,6 +146,15 @@ setup documentation
   (still 1 user: the Admin). Still deferred to the mentor decision: OTP / phone and email verification,
   forgot-password, refresh token, lockout after failed attempts.
 
+- Done (code + tests, branch `feature/catalog`, not pushed) — Catalog: `Application/Features/Products` (category,
+  brand, active ingredient, unit, product with packagings and ingredients, store product, public catalog services,
+  `CatalogRules`), `Api/Features/Products` (staff controllers + `CatalogController`, anonymous, rate limit `public`),
+  Domain `SoftDeletableEntity.Restore` + `ProductActiveIngredient.Reinstate` + `PackagingStatus`.
+  No schema change, no migration, no new package. Decisions: `DECISIONS.md` (Catalog rows), `DATABASE_DESIGN.md` §35.16.
+  Verified: build 0 warnings/0 errors; 346 unit + 277 integration passed with `AGRISAGE_DB_TESTS=1` (59 PostgreSQL
+  tests, all rolled back). No catalog data created on `agrisage-dev`. Not included: image upload (Supabase Storage),
+  prices, stock.
+
 ## Not Yet Implied by Foundation Completion
 
 Foundation completion does not mean these business APIs are complete:

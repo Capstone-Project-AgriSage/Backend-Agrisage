@@ -7,6 +7,9 @@ public static class RateLimitingExtensions
 {
     public const string AuthPolicy = "auth";
 
+    // Public catalog reads: generous, only to slow down scraping.
+    public const string PublicPolicy = "public";
+
     // Limits register/login attempts per client IP (password guessing, account spam). Fixed window, no queue.
     // Behind a proxy the forwarded client IP must be configured at deployment, otherwise all clients share one bucket.
     public static IServiceCollection AddApiRateLimiting(this IServiceCollection services)
@@ -19,6 +22,15 @@ public static class RateLimitingExtensions
                 _ => new FixedWindowRateLimiterOptions
                 {
                     PermitLimit = 10,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueLimit = 0
+                }));
+
+            options.AddPolicy(PublicPolicy, httpContext => RateLimitPartition.GetFixedWindowLimiter(
+                httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 120,
                     Window = TimeSpan.FromMinutes(1),
                     QueueLimit = 0
                 }));

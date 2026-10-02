@@ -34,4 +34,12 @@ public sealed class ProductActiveIngredient : SoftDeletableEntity
         Concentration = concentration;
         Note = note;
     }
+
+    // UNIQUE(product_id, active_ingredient_id) also counts deleted rows, so re-adding a removed ingredient
+    // revives the old row (database design §35.16).
+    public void Reinstate(string? concentration, string? note)
+    {
+        Restore();
+        Update(concentration, note);
+    }
 }

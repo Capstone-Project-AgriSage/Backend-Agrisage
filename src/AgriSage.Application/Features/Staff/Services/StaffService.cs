@@ -218,19 +218,8 @@ public sealed class StaffService(
         }
     }
 
-    private async Task<Guid> GetActiveStoreIdAsync(CancellationToken cancellationToken)
-    {
-        var ids = await context.Stores.AsNoTracking()
-            .Where(s => s.Status == StoreStatus.Active)
-            .Select(s => s.Id).Take(2).ToListAsync(cancellationToken);
-
-        return ids.Count switch
-        {
-            1 => ids[0],
-            0 => throw new BusinessRuleException("No active store is configured."),
-            _ => throw new BusinessRuleException("More than one active store exists; the system operates a single store.")
-        };
-    }
+    private Task<Guid> GetActiveStoreIdAsync(CancellationToken cancellationToken) =>
+        ActiveStore.GetIdAsync(context, cancellationToken);
 
     private async Task EnsureContactIsFreeAsync(string? phone, string? email, Guid? exceptUserId, CancellationToken cancellationToken)
     {

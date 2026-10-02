@@ -31,6 +31,20 @@ public abstract class SoftDeletableEntity : AuditableEntity
         DeletedBy = deletedBy;
     }
 
+    // Only for link rows whose unique index also counts deleted rows (e.g. product ↔ active ingredient):
+    // adding the same pair again revives the old row instead of violating the index. Subclasses expose it
+    // deliberately; it is never public on the base type.
+    protected void Restore()
+    {
+        if (!IsDeleted)
+        {
+            throw new DomainException($"{GetType().Name} '{Id}' is not deleted.");
+        }
+
+        DeletedAt = null;
+        DeletedBy = null;
+    }
+
     private void EnsureNotDeleted()
     {
         if (IsDeleted)

@@ -167,6 +167,23 @@ automatically). Role gate: `ADMIN` or `STORE_OWNER`; Application enforces who ma
 - A locked, left or deleted account is rejected on its next request even if its token has not expired.
 - Not implemented: forced password change on first login, email/phone verification, password reset by email/SMS.
 
+### Catalog (categories, brands, products)
+
+Staff-facing (Bearer token): **read** = Admin, Store Owner, Sales, Delivery; **write** = Admin, Store Owner.
+
+| Endpoints | Purpose |
+|---|---|
+| `api/categories` (+ `/tree`, `/{id}/activate`, `/deactivate`) | Categories with parent/child tree |
+| `api/brands`, `api/active-ingredients` | Brands and active ingredients |
+| `api/units` | Units (reference data, read-only) |
+| `api/products` (+ `/{id}/status`, `/{id}/packagings`, `/{id}/ingredients`) | Products with packagings (exactly one base packaging, conversion 1) and ingredients |
+| `api/store-products` (+ `/mark-sellable`, `/mark-not-sellable`, `/activate`, `/deactivate`) | Products offered by the active store |
+
+Public catalog for farmers and visitors, **no sign-in**, rate limited (120 requests/minute per IP):
+`GET /api/catalog/categories`, `/brands`, `/products` (filters `categoryId` incl. sub-categories, `brandId`, `search`),
+`/products/{id}` (id = store-product id). Only ACTIVE, sellable products are listed; no stock, cost or internal data;
+prices arrive with the price lists. Image fields take absolute `https` URLs (upload to Supabase Storage comes later).
+
 ### First Admin
 
 Needs the reference seed first (the `ADMIN` role). Password only from User Secrets / environment, never appsettings:
