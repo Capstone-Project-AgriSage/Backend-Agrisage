@@ -158,6 +158,9 @@ Rules:
 - `code` unique per store (409). `effectiveTo` > `effectiveFrom` when given.
 - Items: only ACTIVE **sale** packagings of the given store product; `sellingPrice` ≥ 0, ≤ 2 decimals;
   one row per (store product, packaging) — the bulk PUT upserts; at most 500 lines per call.
+  Prices in VND should be whole numbers: payOS accepts only whole VND (decision C-D9 of
+  `API_CONTRACT_PAYMENTS_INVENTORY_RETURNS.md`), so a fractional total must be settled partly in cash.
+  The UI should warn on a fractional price; the API still accepts up to 2 decimals.
 - Items may change while the list is ACTIVE; this affects carts and **new** orders only (order lines keep
   their snapshot). Each change is audited.
 - At most one ACTIVE walk-in default list at any time (activating a second one → 422).
