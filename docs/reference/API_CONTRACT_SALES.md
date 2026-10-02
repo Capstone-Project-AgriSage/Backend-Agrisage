@@ -516,7 +516,7 @@ bodies below. The server accepts only URLs of the `delivery-proofs` bucket.
 - Something delivered → one transaction (`DeliveryAttemptCompleter`): `FulfillmentPostingService` (A4) →
   SALE movement linked to the attempt → delivery and order statuses (§XVII).
 - A photo saved on an attempt or incident can no longer be deleted through `DELETE /api/files/delivery-proofs`
-  (A6 must add this check to that endpoint).
+  (A6 must add this check to that endpoint; C5 extends it to refund proof photos, decision C-D3).
 
 `DeliveryAttemptResponse`:
 

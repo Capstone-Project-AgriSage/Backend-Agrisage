@@ -1,6 +1,6 @@
 # API Contract — Payments, payOS, Stocktake/Adjustments and Returns (Group C)
 
-Version 1.3 — 2026-10-02 (C-D1, C-D2 settled with a schema change; C-D7..C-D9 settled). Scope: tasks C1–C5 and the interfaces group C provides to groups A and B.
+Version 1.4 — 2026-10-02 (all decisions C-D1..C-D9 settled). Scope: tasks C1–C5 and the interfaces group C provides to groups A and B.
 
 Sources: `DATABASE_DESIGN.md` §28–29, §36–37, §52–54, §7.5, §XVI-D, §XXII, §35.7–35.11; `BUSINESS_RULES.md`
 rules 10, 25–27, 30–33, 52–58. When this file and the design disagree, the design wins and this file is
@@ -160,6 +160,7 @@ Refunds of a cancelled order (Manage; staff pay back outside the system, no auto
 | GET | `/api/stocktakes/{id}` | Operate | query: `onlyDifferences`, `onlyUncounted` | `200 StocktakeResponse` |
 | POST | `/api/stocktakes/{id}/start` | Operate | — | `200 StocktakeResponse` (IN_PROGRESS) |
 | PUT | `/api/stocktakes/{id}/counts` | Operate | `{ counts: [ { itemId, countedQuantity, unitCost?, reasonCode?, note? } ] }` | `200 StocktakeResponse` |
+| POST | `/api/stocktakes/{id}/refresh-stale` | Operate | — | `200 StocktakeResponse` (stale lines re-snapshotted, their counts cleared) |
 | POST | `/api/stocktakes/{id}/complete` | Manage | — | `200 StocktakeResponse` (COMPLETED) |
 | POST | `/api/stocktakes/{id}/cancel` | Operate | `{ reason? }` | `200 StocktakeResponse` |
 | DELETE | `/api/stocktakes/{id}` | Operate | — | `204` (DRAFT only) |
@@ -175,11 +176,17 @@ Rules:
   completion otherwise).
 - `reasonCode`: `DAMAGED | EXPIRED | LOST | STOCKTAKE_DIFFERENCE | MANUAL_CORRECTION | OTHER`; required when
   the difference ≠ 0.
-- Complete (one transaction): every line counted (§35.8); refuse (422, listing the lots) if a lot had any
-  stock movement after the snapshot — those lines are recounted after a fresh stocktake; lock lot balances;
-  one ADJUSTMENT_IN movement (`ReceiveStock` at the snapshot/entered cost) and one ADJUSTMENT_OUT movement
-  (`IssueUnreserved` at average cost), both linked by `stocktake_id`; a decrease below the lot's reserved
-  quantity is refused (422) — the reservation must be moved first.
+- **Stale line (decision C-D6):** a line whose lot's current `quantity_on_hand` ≠ its
+  `system_quantity_snapshot` (the lot was sold, received or adjusted after the snapshot). `GET` marks such
+  lines `isStale: true`. `refresh-stale` re-snapshots only those lines (current on hand and average cost) and
+  clears their count, so staff recount just those lots — never the whole stocktake. C2 adds the Domain method
+  (`Stocktake.RefreshItem`, IN_PROGRESS only) with unit tests. Known limit: movements that cancel each other
+  out (e.g. −1 then +1) leave on hand equal to the snapshot and are not detected; counting while the store is
+  not selling avoids it.
+- Complete (one transaction): every line counted (§35.8); lock lot balances; refuse (422, listing the lots) if
+  any line is stale; one ADJUSTMENT_IN movement (`ReceiveStock` at the snapshot/entered cost) and one
+  ADJUSTMENT_OUT movement (`IssueUnreserved` at average cost), both linked by `stocktake_id`; a decrease below
+  the lot's reserved quantity is refused (422) — the reservation must be moved first.
 - Lots that physically exist but are not in the system are not created by a stocktake (use a goods
   receipt).
 
@@ -420,7 +427,7 @@ PostgreSQL. In addition:
 | Task | Must prove |
 |---|---|
 | C1 | no overpayment, allocation only on PAID and only to the payment's own order, prepayment consumed oldest first, reversal refused once consumed; cancelling a paid order reverses the unconsumed part and requests one refund per payment, refund cap per payment, completing refunds marks the payment (PARTIALLY_)REFUNDED |
-| C2 | adjustment movements and costs, uncounted line blocks completion, stale lot blocks completion, never below reserved |
+| C2 | adjustment movements and costs, uncounted line blocks completion, stale line blocks completion until refreshed and recounted (only that line), never below reserved |
 | C3 | webhook idempotent (same payload twice = one PAID, also concurrently), bad signature 400, registration test and unknown code 200, amount mismatch and overpayment stay PENDING, fractional amount 422, expired link synced to FAILED; adapter tested with a fake gateway, real payOS only opt-in |
 | C4 | returnable quantity counts in-flight returns, return value rounding example, RETURN_IN at original COGS into the original lot, debt-first settlement (design §XXII: 8M → debt 8M; 15M → debt 10M + refund 5M) |
 | C5 | refund total cap, failed refund retried, return COMPLETED only when refunds cover the total |
@@ -429,7 +436,7 @@ PostgreSQL. In addition:
 
 ## 10. Decisions
 
-### 10.1 Settled by the team (2026-10-02)
+All decisions of group C are settled by the team (2026-10-02); none is pending.
 
 | # | Decision |
 |---|---|
@@ -438,12 +445,7 @@ PostgreSQL. In addition:
 | C-D9 | payOS amounts are whole VND; a fractional amount is refused (422) and that part is paid in cash. VND price lists and price overrides should use whole numbers |
 | C-D1 | **Schema change (migration `PaymentOrderLinkAndOrderRefunds`, design §35.18):** `payments.order_id` (NULL FK orders; ORDER_PAYMENT ⇒ NOT NULL, DEBT_REPAYMENT ⇒ NULL). A PENDING payOS payment knows its order from creation; an ORDER payment is allocated only to that order. payOS debt repayments are allocated oldest due date first (no entry selection online) |
 | C-D2 | **Schema change (same migration):** `refunds.sales_return_id` becomes NULL, new `refunds.order_id`; exactly one source; a cancelled-order refund needs its original payment. Cancelling an order (or its last open quantity) reverses the unconsumed ORDER allocations and requests one PENDING refund per payment through the Order aggregate; staff pay back in cash or by bank transfer and complete it |
-
-### 10.2 Proposed defaults (applied unless the team objects before C starts)
-
-| # | Decision |
-|---|---|
-| C-D3 | Refund proof images reuse the delivery photo upload (`/api/files/delivery-proofs`) |
-| C-D4 | No overpayment: order payments ≤ remaining to pay; debt repayments ≤ current balance, fully allocated |
-| C-D5 | Roles: cash payments, stocktake create/count, return request/receive/inspect = Operate; stocktake completion, manual adjustments, return approve/reject/complete-inspection, all refunds = Manage; Farmers pay, request and cancel only their own |
-| C-D6 | A stocktake completion is refused if a counted lot moved after its snapshot; staff recount in a new stocktake |
+| C-D3 | Refund proof images (return refunds and cancelled-order refunds) use the delivery photo upload `POST /api/files/delivery-proofs`. A photo referenced by `delivery_attempts.proof_image_url`, `delivery_incidents.evidence_image_url` or `refunds.proof_file_url` can no longer be deleted through `DELETE /api/files/delivery-proofs` (422); A6 adds the check for attempts/incidents, C5 extends it to refunds |
+| C-D4 | No overpayment: an order payment ≤ order total − already paid; a debt repayment ≤ current debt balance and is fully allocated. At the counter staff record only the amount due and give change physically |
+| C-D5 | Roles: cash payments, payment queries, stocktake create/count/refresh, return request/receive/inspect = Operate; stocktake completion, manual stock adjustments, return approve/reject/complete-inspection and every refund (return or cancelled order) = Manage; Farmers pay, request returns and cancel only their own. Unlike goods receipt confirmation (open to Sales), stocktake completion and manual adjustments stay with Admin/Store Owner because they can **decrease** stock — the person who counts is not the person who approves |
+| C-D6 | A stale stocktake line (current on hand ≠ snapshot) blocks completion; `POST /api/stocktakes/{id}/refresh-stale` re-snapshots only the stale lines and clears their counts for a recount (§4.1). Counting while the store is not selling is recommended |
