@@ -13,3 +13,6 @@ Use progressive disclosure. Open only what the task needs.
 | `CURRENT_STATE.md` | Planning current implementation work |
 
 For exact details, use authoritative files in `docs/reference/`.
+Routes, bodies and cross-module interfaces of orders/fulfillment/delivery (group A): `docs/reference/API_CONTRACT_SALES.md`.
+Routes, bodies and interfaces of customers/addresses/groups/price lists/credit/debt (group B): `docs/reference/API_CONTRACT_CUSTOMERS_CREDIT.md`.
+Routes, bodies and interfaces of payments/payOS/stocktake/adjustments/returns/refunds (group C): `docs/reference/API_CONTRACT_PAYMENTS_INVENTORY_RETURNS.md`.
