@@ -17,10 +17,11 @@ public sealed class SupabaseFileStorageService(
 {
     public async Task<StoredFileResult> UploadAsync(FileUploadRequest request, CancellationToken cancellationToken)
     {
-        var settings = RequireConfigured();
+        var settings = RequireConfigured(request.Area);
+        var bucket = settings.BucketFor(request.Area);
         var key = $"{request.Folder.Trim('/')}/{request.FileName}";
 
-        using var message = new HttpRequestMessage(HttpMethod.Post, ObjectUri(settings, key));
+        using var message = new HttpRequestMessage(HttpMethod.Post, ObjectUri(settings, bucket, key));
         Authorize(message, settings);
         message.Headers.TryAddWithoutValidation("x-upsert", "false");
         message.Content = new StreamContent(request.Content);
@@ -35,14 +36,15 @@ public sealed class SupabaseFileStorageService(
 
         var size = request.Content.CanSeek ? request.Content.Length : 0;
 
-        return new StoredFileResult(key, PublicUrl(settings, key), size);
+        return new StoredFileResult(key, PublicUrl(settings, bucket, key), size);
     }
 
-    public async Task DeleteAsync(string storageKey, CancellationToken cancellationToken)
+    public async Task DeleteAsync(string storageKey, StorageArea area, CancellationToken cancellationToken)
     {
-        var settings = RequireConfigured();
+        var settings = RequireConfigured(area);
+        var bucket = settings.BucketFor(area);
 
-        using var message = new HttpRequestMessage(HttpMethod.Delete, ObjectUri(settings, storageKey));
+        using var message = new HttpRequestMessage(HttpMethod.Delete, ObjectUri(settings, bucket, storageKey));
         Authorize(message, settings);
 
         using var response = await SendAsync(message, cancellationToken);
@@ -91,10 +93,10 @@ public sealed class SupabaseFileStorageService(
         }
     }
 
-    private StorageOptions RequireConfigured()
+    private StorageOptions RequireConfigured(StorageArea area)
     {
         var settings = options.Value;
-        if (!settings.IsConfigured)
+        if (!settings.IsConfigured || string.IsNullOrWhiteSpace(settings.BucketFor(area)))
         {
             logger.LogError("File storage is not configured (Storage:Url, Storage:Bucket, Storage:SecretKey).");
             throw new StorageUnavailableException();
@@ -114,11 +116,11 @@ public sealed class SupabaseFileStorageService(
         }
     }
 
-    private static Uri ObjectUri(StorageOptions settings, string key) =>
-        new($"{settings.Url!.TrimEnd('/')}/storage/v1/object/{Uri.EscapeDataString(settings.Bucket)}/{EscapeKey(key)}");
+    private static Uri ObjectUri(StorageOptions settings, string bucket, string key) =>
+        new($"{settings.Url!.TrimEnd('/')}/storage/v1/object/{Uri.EscapeDataString(bucket)}/{EscapeKey(key)}");
 
-    private static string PublicUrl(StorageOptions settings, string key) =>
-        $"{settings.Url!.TrimEnd('/')}/storage/v1/object/public/{Uri.EscapeDataString(settings.Bucket)}/{EscapeKey(key)}";
+    private static string PublicUrl(StorageOptions settings, string bucket, string key) =>
+        $"{settings.Url!.TrimEnd('/')}/storage/v1/object/public/{Uri.EscapeDataString(bucket)}/{EscapeKey(key)}";
 
     private static string EscapeKey(string key) => string.Join('/', key.Split('/').Select(Uri.EscapeDataString));
 }

@@ -61,10 +61,11 @@ public class FilesHttpTests : IClassFixture<FilesHttpTests.FilesApiFactory>
     public async Task Only_admin_and_store_owner_can_upload_or_delete(string role)
     {
         using var client = ClientFor(role);
+        var uploadsBefore = _factory.Storage.Uploads.Count;
 
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsync("/api/files/product-images", Form(Png), Token)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.DeleteAsync($"/api/files/product-images?key={ValidKey}", Token)).StatusCode);
-        Assert.Empty(_factory.Storage.Uploads);
+        Assert.Equal(uploadsBefore, _factory.Storage.Uploads.Count);
     }
 
     [Theory]
@@ -134,11 +135,12 @@ public class FilesHttpTests : IClassFixture<FilesHttpTests.FilesApiFactory>
     public async Task Delete_rejects_keys_that_are_not_uploaded_images(string key)
     {
         using var client = ClientFor("STORE_OWNER");
+        var deletedBefore = _factory.Storage.Deleted.Count;
 
         var response = await client.DeleteAsync($"/api/files/product-images?key={Uri.EscapeDataString(key)}", Token);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Empty(_factory.Storage.Deleted);
+        Assert.Equal(deletedBefore, _factory.Storage.Deleted.Count);
     }
 
     [Fact]
@@ -186,13 +188,115 @@ public class FilesHttpTests : IClassFixture<FilesHttpTests.FilesApiFactory>
         Assert.True(item.TryGetProperty("delete", out _));
     }
 
-    public sealed record UploadedFile(string FileName, string ContentType, string Folder, byte[] Bytes);
+    [Fact]
+    public async Task Delivery_photo_endpoints_need_a_token()
+    {
+        using var client = ClientFor(null);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.PostAsync("/api/files/delivery-proofs", Form(Png), Token)).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.DeleteAsync($"/api/files/delivery-proofs?key={ValidKey}", Token)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Farmers_cannot_upload_or_delete_delivery_photos()
+    {
+        using var client = ClientFor("FARMER");
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsync("/api/files/delivery-proofs", Form(Png), Token)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.DeleteAsync($"/api/files/delivery-proofs?key={ValidKey}", Token)).StatusCode);
+    }
+
+    [Theory]
+    [InlineData("ADMIN")]
+    [InlineData("STORE_OWNER")]
+    [InlineData("SALES_STAFF")]
+    [InlineData("DELIVERY_STAFF")]
+    public async Task Every_staff_role_can_upload_a_delivery_photo_into_the_proofs_area(string role)
+    {
+        using var client = ClientFor(role);
+        var before = _factory.Storage.Uploads.Count;
+
+        var response = await client.PostAsync("/api/files/delivery-proofs", Form(Png, "../../evil.php", type: "text/html"), Token);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Token)).RootElement;
+        Assert.Matches(@"^\d{4}/\d{2}/[0-9a-f]{32}\.png$", body.GetProperty("storageKey").GetString());
+        var upload = _factory.Storage.Uploads[before];
+        Assert.Equal(StorageArea.DeliveryProofs, upload.Area);
+        Assert.DoesNotContain("evil", upload.FileName);
+    }
+
+    [Fact]
+    public async Task Delivery_photos_may_be_up_to_five_megabytes_but_not_more()
+    {
+        using var client = ClientFor("DELIVERY_STAFF");
+        var four = new byte[4 * 1024 * 1024];
+        var six = new byte[5 * 1024 * 1024 + 1];
+        Png.CopyTo(four, 0);
+        Png.CopyTo(six, 0);
+
+        Assert.Equal(HttpStatusCode.Created, (await client.PostAsync("/api/files/delivery-proofs", Form(four), Token)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsync("/api/files/delivery-proofs", Form(six), Token)).StatusCode);
+    }
+
+    [Fact]
+    public async Task A_non_image_is_rejected_as_a_delivery_photo()
+    {
+        using var client = ClientFor("DELIVERY_STAFF");
+        var before = _factory.Storage.Uploads.Count;
+
+        var response = await client.PostAsync("/api/files/delivery-proofs", Form("<html></html>"u8.ToArray(), "p.jpg", type: "image/jpeg"), Token);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(before, _factory.Storage.Uploads.Count);
+    }
+
+    [Theory]
+    [InlineData("SALES_STAFF")]
+    [InlineData("DELIVERY_STAFF")]
+    public async Task Only_admin_and_store_owner_delete_delivery_photos(string role)
+    {
+        using var client = ClientFor(role);
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.DeleteAsync($"/api/files/delivery-proofs?key={ValidKey}", Token)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Admin_deletes_a_delivery_photo_from_the_proofs_area_and_bad_keys_are_rejected()
+    {
+        using var client = ClientFor("ADMIN");
+        var deletedBefore = _factory.Storage.DeletedAreas.Count;
+
+        var deleted = await client.DeleteAsync($"/api/files/delivery-proofs?key={ValidKey}", Token);
+        var invalid = await client.DeleteAsync("/api/files/delivery-proofs?key=../../etc/passwd", Token);
+
+        Assert.Equal(HttpStatusCode.NoContent, deleted.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+        Assert.Equal(deletedBefore + 1, _factory.Storage.DeletedAreas.Count);
+        Assert.Equal(StorageArea.DeliveryProofs, _factory.Storage.DeletedAreas[^1]);
+    }
+
+    [Fact]
+    public async Task Product_image_uploads_stay_in_the_product_images_area()
+    {
+        using var client = ClientFor("ADMIN");
+        var before = _factory.Storage.Uploads.Count;
+
+        await client.PostAsync("/api/files/product-images", Form(Png), Token);
+
+        Assert.Equal(StorageArea.ProductImages, _factory.Storage.Uploads[before].Area);
+    }
+
+    public sealed record UploadedFile(
+        string FileName, string ContentType, string Folder, byte[] Bytes, StorageArea Area = StorageArea.ProductImages);
 
     public sealed class FakeStorage : IFileStorageService
     {
         public List<UploadedFile> Uploads { get; } = [];
 
         public List<string> Deleted { get; } = [];
+
+        public List<StorageArea> DeletedAreas { get; } = [];
 
         public bool Fail { get; set; }
 
@@ -205,15 +309,16 @@ public class FilesHttpTests : IClassFixture<FilesHttpTests.FilesApiFactory>
 
             using var copy = new MemoryStream();
             request.Content.CopyTo(copy);
-            Uploads.Add(new UploadedFile(request.FileName, request.ContentType, request.Folder, copy.ToArray()));
+            Uploads.Add(new UploadedFile(request.FileName, request.ContentType, request.Folder, copy.ToArray(), request.Area));
             var key = $"{request.Folder}/{request.FileName}";
 
             return Task.FromResult(new StoredFileResult(key, $"https://cdn.example.com/{key}", copy.Length));
         }
 
-        public Task DeleteAsync(string storageKey, CancellationToken cancellationToken)
+        public Task DeleteAsync(string storageKey, StorageArea area, CancellationToken cancellationToken)
         {
             Deleted.Add(storageKey);
+            DeletedAreas.Add(area);
             return Task.CompletedTask;
         }
     }

@@ -5,5 +5,5 @@ public interface IFileStorageService
 {
     Task<StoredFileResult> UploadAsync(FileUploadRequest request, CancellationToken cancellationToken);
 
-    Task DeleteAsync(string storageKey, CancellationToken cancellationToken);
+    Task DeleteAsync(string storageKey, StorageArea area, CancellationToken cancellationToken);
 }

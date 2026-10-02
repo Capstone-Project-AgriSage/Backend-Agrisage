@@ -4,11 +4,14 @@ namespace AgriSage.Application.Features.Files;
 
 public sealed record ImageType(string ContentType, string Extension);
 
-// Rules for uploaded product/brand images. The type is decided by the file content (magic bytes), never by the
+// Rules for uploaded product/brand images and delivery photos. The type is decided by the file content (magic bytes), never by the
 // client-supplied name or Content-Type.
 public static partial class ImageRules
 {
     public const long MaxBytes = 3 * 1024 * 1024;
+
+    // Phone photos taken on delivery are larger than catalog images.
+    public const long MaxProofBytes = 5 * 1024 * 1024;
 
     public static readonly ImageType Jpeg = new("image/jpeg", ".jpg");
     public static readonly ImageType Png = new("image/png", ".png");

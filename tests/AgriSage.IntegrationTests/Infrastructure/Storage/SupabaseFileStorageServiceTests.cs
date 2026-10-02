@@ -75,6 +75,41 @@ public class SupabaseFileStorageServiceTests
     }
 
     [Fact]
+    public async Task Delivery_proofs_use_their_own_bucket_for_upload_and_delete()
+    {
+        var upload = new RecordingHandler();
+        var delete = new RecordingHandler();
+        var request = Upload() with { Area = StorageArea.DeliveryProofs };
+
+        var result = await Create(upload).UploadAsync(request, Token);
+        await Create(delete).DeleteAsync("2026/10/0123456789abcdef0123456789abcdef.png", StorageArea.DeliveryProofs, Token);
+
+        Assert.Equal(
+            "https://abcdefgh.supabase.co/storage/v1/object/delivery-proofs/2026/10/0123456789abcdef0123456789abcdef.png",
+            upload.Request!.RequestUri!.ToString());
+        Assert.Equal(
+            "https://abcdefgh.supabase.co/storage/v1/object/public/delivery-proofs/2026/10/0123456789abcdef0123456789abcdef.png",
+            result.Url);
+        Assert.Equal(
+            "https://abcdefgh.supabase.co/storage/v1/object/delivery-proofs/2026/10/0123456789abcdef0123456789abcdef.png",
+            delete.Request!.RequestUri!.ToString());
+    }
+
+    [Fact]
+    public async Task A_blank_delivery_proof_bucket_fails_only_delivery_uploads()
+    {
+        var handler = new RecordingHandler();
+        var adapter = new SupabaseFileStorageService(
+            new HttpClient(handler),
+            Options.Create(new StorageOptions { Url = Url, Bucket = "product-images", DeliveryProofBucket = " ", SecretKey = SecretKey }),
+            NullLogger<SupabaseFileStorageService>.Instance);
+
+        await adapter.UploadAsync(Upload(), Token);
+        await Assert.ThrowsAsync<StorageUnavailableException>(() =>
+            adapter.UploadAsync(Upload() with { Area = StorageArea.DeliveryProofs }, Token));
+    }
+
+    [Fact]
     public async Task New_secret_keys_go_in_the_apikey_header_only()
     {
         var handler = new RecordingHandler();
@@ -91,7 +126,7 @@ public class SupabaseFileStorageServiceTests
         var handler = new RecordingHandler();
         const string jwt = "eyJhbGciOiJIUzI1NiJ9.e30.signature";
 
-        await Create(handler, key: jwt).DeleteAsync("2026/10/x.png", Token);
+        await Create(handler, key: jwt).DeleteAsync("2026/10/x.png", StorageArea.ProductImages, Token);
 
         Assert.Equal(jwt, handler.Request!.Headers.GetValues("apikey").Single());
         Assert.Equal("Bearer", handler.Request.Headers.Authorization!.Scheme);
@@ -104,8 +139,8 @@ public class SupabaseFileStorageServiceTests
         var found = new RecordingHandler(HttpStatusCode.OK);
         var missing = new RecordingHandler(HttpStatusCode.NotFound);
 
-        await Create(found).DeleteAsync("2026/10/0123456789abcdef0123456789abcdef.png", Token);
-        await Create(missing).DeleteAsync("2026/10/0123456789abcdef0123456789abcdef.png", Token);
+        await Create(found).DeleteAsync("2026/10/0123456789abcdef0123456789abcdef.png", StorageArea.ProductImages, Token);
+        await Create(missing).DeleteAsync("2026/10/0123456789abcdef0123456789abcdef.png", StorageArea.ProductImages, Token);
 
         Assert.Equal(HttpMethod.Delete, found.Request!.Method);
         Assert.Equal(
@@ -118,11 +153,11 @@ public class SupabaseFileStorageServiceTests
     {
         const string notFound = "{\"statusCode\":\"404\",\"error\":\"not_found\",\"message\":\"Object not found\"}";
 
-        await Create(new RecordingHandler(HttpStatusCode.BadRequest, body: notFound)).DeleteAsync("2026/10/x.png", Token);
+        await Create(new RecordingHandler(HttpStatusCode.BadRequest, body: notFound)).DeleteAsync("2026/10/x.png", StorageArea.ProductImages, Token);
 
         // Any other 400 is still an error.
         await Assert.ThrowsAsync<StorageUnavailableException>(() =>
-            Create(new RecordingHandler(HttpStatusCode.BadRequest, body: "{\"error\":\"invalid_request\"}")).DeleteAsync("2026/10/x.png", Token));
+            Create(new RecordingHandler(HttpStatusCode.BadRequest, body: "{\"error\":\"invalid_request\"}")).DeleteAsync("2026/10/x.png", StorageArea.ProductImages, Token));
         // A not-found answer to an upload is never accepted.
         await Assert.ThrowsAsync<StorageUnavailableException>(() =>
             Create(new RecordingHandler(HttpStatusCode.BadRequest, body: notFound)).UploadAsync(Upload(), Token));
@@ -139,7 +174,7 @@ public class SupabaseFileStorageServiceTests
         var upload = await Assert.ThrowsAsync<StorageUnavailableException>(() =>
             Create(new RecordingHandler(status)).UploadAsync(Upload(), Token));
         var delete = await Assert.ThrowsAsync<StorageUnavailableException>(() =>
-            Create(new RecordingHandler(status)).DeleteAsync("2026/10/x.png", Token));
+            Create(new RecordingHandler(status)).DeleteAsync("2026/10/x.png", StorageArea.ProductImages, Token));
 
         foreach (var message in new[] { upload.Message, delete.Message })
         {
@@ -182,7 +217,7 @@ public class SupabaseFileStorageServiceTests
         var handler = new RecordingHandler();
 
         await Assert.ThrowsAsync<StorageUnavailableException>(() => Create(handler, url, key).UploadAsync(Upload(), Token));
-        await Assert.ThrowsAsync<StorageUnavailableException>(() => Create(handler, url, key).DeleteAsync("a/b.png", Token));
+        await Assert.ThrowsAsync<StorageUnavailableException>(() => Create(handler, url, key).DeleteAsync("a/b.png", StorageArea.ProductImages, Token));
 
         Assert.Null(handler.Request);
     }

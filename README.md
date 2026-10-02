@@ -204,6 +204,10 @@ dotnet user-secrets set "Storage:SecretKey" "<sb_secret_… key>" --project src/
 ```
 
 - The secret key is server-side only (it bypasses all access rules): never put it in a client, a commit or a chat.
+- **Delivery photos** (proof of delivery, incident evidence): `POST /api/files/delivery-proofs` (every staff role, max 5 MB,
+  same type rules) and `DELETE /api/files/delivery-proofs?key=…` (Admin/Store Owner only). They use a second **public**
+  bucket named `delivery-proofs` (`Storage:DeliveryProofBucket`): create it in Supabase like the first one. Only the URL is
+  saved by the delivery use cases, never the file.
 - A missing or wrong configuration makes uploads answer `503`; nothing else in the API is affected.
 - Optional real test against Supabase (uploads a 1x1 image, reads it, deletes it):
   `AGRISAGE_STORAGE_TESTS=1 dotnet test tests/AgriSage.IntegrationTests --filter "FullyQualifiedName~RealStorageTests"`.

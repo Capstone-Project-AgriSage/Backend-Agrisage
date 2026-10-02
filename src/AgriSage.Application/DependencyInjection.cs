@@ -32,6 +32,7 @@ public static class DependencyInjection
         services.AddScoped<IStoreProductService, StoreProductService>();
         services.AddScoped<ICatalogService, CatalogService>();
         services.AddScoped<IProductImageService, ProductImageService>();
+        services.AddScoped<IDeliveryProofService, DeliveryProofService>();
 
         services.AddScoped<ISupplierService, SupplierService>();
         services.AddScoped<GoodsReceiptConfirmer>();

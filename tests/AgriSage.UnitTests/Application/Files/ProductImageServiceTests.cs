@@ -36,7 +36,7 @@ public class ProductImageServiceTests
             return Task.FromResult(new StoredFileResult(key, $"https://cdn.example.com/{key}", UploadedBytes.Length));
         }
 
-        public Task DeleteAsync(string storageKey, CancellationToken cancellationToken)
+        public Task DeleteAsync(string storageKey, StorageArea area, CancellationToken cancellationToken)
         {
             Deleted = storageKey;
             return Task.CompletedTask;

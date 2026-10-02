@@ -173,6 +173,10 @@ setup documentation
   385 integration passed with `AGRISAGE_DB_TESTS=1` (all real-DB tests rolled back; 1 skipped = Supabase Storage).
   Decisions: `DECISIONS.md` (Receiving rows), `DATABASE_DESIGN.md` §35.17. Not included: Excel import, reversal of a
   confirmed receipt, stock-take/adjustment, reservations.
+- Done (branch `feature/delivery-proof-upload`, not pushed) — Delivery photo upload:
+  `POST/DELETE /api/files/delivery-proofs`, `IDeliveryProofService`, shared `ImageUploader`, `StorageArea` on
+  `IFileStorageService`, `StorageOptions.DeliveryProofBucket`. No schema change, no migration, no new package.
+  Offline tests pass; the real Supabase test needs the public bucket `delivery-proofs` to be created first (not created yet).
 
 ## Not Yet Implied by Foundation Completion
 

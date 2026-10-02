@@ -1,5 +1,6 @@
 using System.Net;
 using System.Runtime.CompilerServices;
+using AgriSage.Application.Common.Interfaces;
 using AgriSage.Application.Features.Files;
 using AgriSage.Infrastructure.Storage;
 using Microsoft.Extensions.Configuration;
@@ -91,7 +92,41 @@ public class RealStorageTests
         {
             if (key is not null)
             {
-                await storage.DeleteAsync(key, CancellationToken.None);
+                await storage.DeleteAsync(key, StorageArea.ProductImages, CancellationToken.None);
+            }
+        }
+    }
+
+    // Needs the public bucket "delivery-proofs" to exist (Storage:DeliveryProofBucket); the test leaves it empty.
+    [RealStorageFact]
+    public async Task Delivery_photo_goes_to_its_own_bucket_and_can_be_deleted()
+    {
+        var options = LoadOptions();
+        Assert.True(options.IsConfigured, "Storage:Url, Storage:Bucket and Storage:SecretKey must be configured.");
+        var storage = new SupabaseFileStorageService(
+            new HttpClient(), Options.Create(options), NullLogger<SupabaseFileStorageService>.Instance);
+        var proofs = new DeliveryProofService(storage, new AgriSage.Infrastructure.Services.DateTimeProvider());
+        using var reader = new HttpClient();
+        string? key = null;
+
+        try
+        {
+            var uploaded = await proofs.UploadAsync(new MemoryStream(TinyPng), Token);
+            key = uploaded.StorageKey;
+
+            Assert.StartsWith($"{options.Url!.TrimEnd('/')}/storage/v1/object/public/{options.DeliveryProofBucket}/", uploaded.Url);
+            var download = await reader.GetAsync(uploaded.Url, Token);
+            Assert.Equal(HttpStatusCode.OK, download.StatusCode);
+            Assert.Equal(TinyPng, await download.Content.ReadAsByteArrayAsync(Token));
+
+            await proofs.DeleteAsync(key, Token);
+            key = null;
+        }
+        finally
+        {
+            if (key is not null)
+            {
+                await storage.DeleteAsync(key, StorageArea.DeliveryProofs, CancellationToken.None);
             }
         }
     }
