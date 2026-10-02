@@ -47,6 +47,7 @@ public class ReceivingHttpTests : IClassFixture<StaffHttpTests.StaffApiFactory>
         { "POST", $"/api/goods-receipts/{Id}/items" },
         { "PUT", $"/api/goods-receipts/{Id}/items/{Id}" },
         { "DELETE", $"/api/goods-receipts/{Id}/items/{Id}" },
+        { "POST", $"/api/goods-receipts/{Id}/confirm" },
         { "POST", $"/api/goods-receipts/{Id}/cancel" },
         { "DELETE", $"/api/goods-receipts/{Id}" },
         { "GET", "/api/inventory/lots" },
@@ -55,7 +56,7 @@ public class ReceivingHttpTests : IClassFixture<StaffHttpTests.StaffApiFactory>
         { "GET", $"/api/inventory/stock-movements/{Id}" }
     };
 
-    // Endpoints only Admin and Store Owner may call.
+    // Endpoints only Admin and Store Owner may call (confirming a receipt is open to Sales).
     public static TheoryData<string, string> ManageEndpoints => new()
     {
         { "POST", "/api/suppliers" },
@@ -63,7 +64,6 @@ public class ReceivingHttpTests : IClassFixture<StaffHttpTests.StaffApiFactory>
         { "POST", $"/api/suppliers/{Id}/activate" },
         { "POST", $"/api/suppliers/{Id}/deactivate" },
         { "DELETE", $"/api/suppliers/{Id}" },
-        { "POST", $"/api/goods-receipts/{Id}/confirm" },
         { "POST", $"/api/inventory/lots/{Id}/status" }
     };
 
@@ -92,7 +92,7 @@ public class ReceivingHttpTests : IClassFixture<StaffHttpTests.StaffApiFactory>
 
     [Theory]
     [MemberData(nameof(ManageEndpoints))]
-    public async Task Sales_staff_cannot_confirm_receipts_or_manage_suppliers_and_lots(string method, string url)
+    public async Task Sales_staff_cannot_manage_suppliers_or_change_lot_status(string method, string url)
     {
         using var client = ClientFor("SALES_STAFF");
 
@@ -103,7 +103,7 @@ public class ReceivingHttpTests : IClassFixture<StaffHttpTests.StaffApiFactory>
     [InlineData("ADMIN")]
     [InlineData("STORE_OWNER")]
     [InlineData("SALES_STAFF")]
-    public async Task Sales_can_draft_receipts_and_read_stock_so_these_reach_validation(string role)
+    public async Task Sales_can_run_receiving_and_read_stock_so_these_reach_validation(string role)
     {
         using var client = ClientFor(role);
 

@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace AgriSage.Api.Features.GoodsReceipts;
 
-// Draft work: Admin, Store Owner, Sales. Confirming changes stock and cost, so only Admin and Store Owner may do it.
+// Admin, Store Owner and Sales run the whole receiving flow, including confirmation.
 [ApiController]
 [Route("api/goods-receipts")]
 [Authorize(Roles = ApiRoles.Operate)]
@@ -64,9 +64,8 @@ public sealed class GoodsReceiptsController(IGoodsReceiptService service) : Cont
         return NoContent();
     }
 
-    // Creates/finds lots, adds stock at cost, posts STOCK_IN, marks the receipt CONFIRMED. Admin and Store Owner only.
+    // Creates/finds lots, adds stock at cost, posts STOCK_IN, marks the receipt CONFIRMED.
     [HttpPost("{id:guid}/confirm")]
-    [Authorize(Roles = ApiRoles.Manage)]
     public async Task<ActionResult<GoodsReceiptResponse>> Confirm(Guid id, CancellationToken cancellationToken) =>
         await service.ConfirmAsync(id, cancellationToken);
 }

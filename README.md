@@ -210,8 +210,8 @@ dotnet user-secrets set "Storage:SecretKey" "<sb_secret_… key>" --project src/
 
 ### Suppliers, goods receiving and stock
 
-Roles: Admin, Store Owner and Sales draft receipts and read stock; **only Admin and Store Owner confirm receipts and
-change lot status**; suppliers are managed by Admin/Store Owner (Sales read only). Delivery staff and farmers: no access.
+Roles: Admin, Store Owner and Sales draft and **confirm** receipts and read stock; only Admin and Store Owner
+change lot status; suppliers are managed by Admin/Store Owner (Sales read only). Delivery staff and farmers: no access.
 
 | Endpoint | Purpose |
 |---|---|
@@ -219,7 +219,7 @@ change lot status**; suppliers are managed by Admin/Store Owner (Sales read only
 | `GET/POST /api/goods-receipts`, `GET/PUT /api/goods-receipts/{id}` | Receipts (numbers `GR-yyyyMMdd-NNNN`); edit while DRAFT |
 | `POST /{id}/items`, `PUT/DELETE /{id}/items/{itemId}` | Receipt lines (purchase packaging, lot, expiry, unit cost ≤ 2 decimals) |
 | `POST /{id}/cancel`, `DELETE /{id}` | Cancel with reason / soft delete a DRAFT |
-| `POST /{id}/confirm` | Admin/Owner: create or find lots, add stock at weighted average cost, post STOCK_IN |
+| `POST /{id}/confirm` | Create or find lots, add stock at weighted average cost, post STOCK_IN |
 | `GET /api/inventory/lots`, `/lots/{id}` | Stock per lot: on hand, reserved, available, average cost, expiry |
 | `POST /api/inventory/lots/{id}/status` | Admin/Owner: ACTIVE / QUARANTINED / BLOCKED / EXPIRED |
 | `GET /api/inventory/stock-movements`, `/{id}` | Stock movement ledger |
