@@ -1,5 +1,8 @@
 using System.Net;
 using AgriSage.Application.Common.Interfaces;
+using AgriSage.Application.Features.Auth.Dtos.Requests;
+using AgriSage.Application.Features.Auth.Interfaces;
+using AgriSage.Application.Features.Auth.Services;
 using AgriSage.Infrastructure.Persistence;
 using AgriSage.Infrastructure.Persistence.Interceptors;
 using AgriSage.Infrastructure.Persistence.Seed;
@@ -61,6 +64,21 @@ public class ApiStartupTests : IClassFixture<ApiStartupTests.DevelopmentApiFacto
             interceptor => Assert.IsType<SoftDeleteInterceptor>(interceptor),
             interceptor => Assert.IsType<AuditableEntityInterceptor>(interceptor),
             interceptor => Assert.IsType<ConcurrencyVersionInterceptor>(interceptor));
+    }
+
+    [Fact]
+    public void Auth_services_are_registered()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var provider = scope.ServiceProvider;
+
+        Assert.IsType<AuthService>(provider.GetRequiredService<IAuthService>());
+        Assert.IsType<AdminBootstrapService>(provider.GetRequiredService<IAdminBootstrapService>());
+        Assert.NotNull(provider.GetRequiredService<IPasswordHashService>());
+        Assert.NotNull(provider.GetRequiredService<IAccessTokenService>());
+        Assert.NotNull(provider.GetRequiredService<IDatabaseErrorClassifier>());
+        Assert.NotNull(provider.GetRequiredService<FluentValidation.IValidator<RegisterFarmerRequest>>());
+        Assert.NotNull(provider.GetRequiredService<FluentValidation.IValidator<LoginRequest>>());
     }
 
     [Fact]

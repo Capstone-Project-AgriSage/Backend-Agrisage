@@ -8,8 +8,6 @@ namespace AgriSage.Infrastructure.Authentication;
 // → null; an authenticated caller without a valid `sub` is an error rather than a silent null actor.
 public sealed class CurrentUserService(IHttpContextAccessor httpContextAccessor) : ICurrentUserService
 {
-    private const string SubjectClaimType = "sub";
-
     public bool IsAuthenticated => httpContextAccessor.HttpContext?.User.Identity?.IsAuthenticated == true;
 
     public Guid? UserId
@@ -21,7 +19,7 @@ public sealed class CurrentUserService(IHttpContextAccessor httpContextAccessor)
                 return null;
             }
 
-            var subject = httpContextAccessor.HttpContext!.User.FindFirst(SubjectClaimType)?.Value;
+            var subject = httpContextAccessor.HttpContext!.User.FindFirst(AgriSageClaimTypes.Subject)?.Value;
 
             return Guid.TryParse(subject, out var userId)
                 ? userId

@@ -24,6 +24,9 @@ public static class DependencyInjection
 
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
+        services.AddSingleton<IPasswordHashService, PasswordHashService>();
+        services.AddSingleton<IAccessTokenService, AccessTokenService>();
+        services.AddSingleton<IDatabaseErrorClassifier, NpgsqlErrorClassifier>();
 
         services.AddScoped<SoftDeleteInterceptor>();
         services.AddScoped<AuditableEntityInterceptor>();

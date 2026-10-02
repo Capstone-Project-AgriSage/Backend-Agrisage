@@ -696,7 +696,11 @@ ValidationException
 ConflictException
 ForbiddenException
 BusinessRuleException
+AuthenticationFailedException   (401: sai thông tin đăng nhập / chưa xác thực)
 ```
+
+`GlobalExceptionHandler` (Api) ánh xạ: Validation 400, AuthenticationFailed 401, Forbidden 403, NotFound 404,
+Conflict 409, BusinessRule/Domain 422, còn lại 500 (không lộ chi tiết).
 
 Không trả `bool`, `null`, hoặc string tùy ý cho business failure.
 

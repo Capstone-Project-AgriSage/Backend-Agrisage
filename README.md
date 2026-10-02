@@ -129,6 +129,38 @@ injects a failure after `SaveChangesAsync` to prove all four groups are reverted
 the tests use rollback-only Store fixtures; after reference seed they reuse the existing Store inside
 the rolled-back session, so they do not introduce a second operational store.
 
+## Authentication
+
+JWT access token only (no refresh token yet). Farmers self-register; staff accounts are created later by Admin.
+
+| Endpoint | Auth | Purpose |
+|---|---|---|
+| `POST /api/auth/register` | anonymous, rate limited | Register a Farmer (phone or email + password); returns a token |
+| `POST /api/auth/login` | anonymous, rate limited | Login by phone or email; returns a token |
+| `GET /api/auth/me` | Bearer token | Current account |
+
+- Phone numbers are Vietnamese mobiles, stored as `0xxxxxxxxx` (`+84…`, `84…`, spaces, dots and dashes are accepted).
+  Emails are stored lower-case. Password: 8–128 characters.
+- Token claims: `sub` = user id, `role` = `FARMER` / `STORE_OWNER` / `SALES_STAFF` / `DELIVERY_STAFF` / `ADMIN`.
+  Lifetime = `Jwt:AccessTokenMinutes` (60).
+- Rate limit: 10 requests/minute per client IP on register and login (429 beyond that).
+- Phone numbers are **not verified yet** (`phone_verified = false`, no OTP); the store confirms customers.
+  Not implemented: refresh tokens, password reset, account lockout after failed attempts, OTP.
+
+### First Admin
+
+Needs the reference seed first (the `ADMIN` role). Password only from User Secrets / environment, never appsettings:
+
+```bash
+dotnet user-secrets set "AdminBootstrap:Email" "admin@example.com" --project src/AgriSage.Api
+dotnet user-secrets set "AdminBootstrap:Password" "<password>" --project src/AgriSage.Api
+# optional: AdminBootstrap:FullName (default "Administrator"), AdminBootstrap:PhoneNumber
+dotnet run --project src/AgriSage.Api -- --create-admin
+```
+
+The command creates the Admin and exits (no HTTP). It is idempotent: if an Admin already exists nothing changes.
+`--seed` and `--create-admin` can be combined (seed runs first).
+
 ## Run
 
 ```bash

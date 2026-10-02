@@ -64,6 +64,17 @@ These are stable decisions currently frozen for backend implementation.
 | EF CLI | `dotnet-ef` pinned as a local tool (`dotnet-tools.json`) at the EF Core version (10.0.12); no design-time factory — tools use the Api host |
 | Raw SQL in migrations | InitialCreate calls `migrationBuilder.Sql(PostgreSqlRawIndexes.…)`; those constants are frozen — changes need new constants + a new migration |
 | Constraint names | Configured names must be ≤ 63 chars so EF never truncates them (`~`); enforced by `PersistenceModelTests` |
+| Auth tokens | JWT access token only (HS256, claims `sub` = users.id, `role` = role code, `jti`); no refresh token (no table in the 67-table baseline) |
+| Registration | Only Farmers self-register (`POST /api/auth/register`, role forced to FARMER, FarmerProfile created in the same SaveChanges); staff accounts are created later by Admin |
+| Phone/email normalization | Vietnamese mobile `0(3|5|7|8|9)xxxxxxxx` stored as `0…` (`+84`/`84` accepted); email trimmed + lower-case; duplicates checked on normalized values (unique indexes compare the stored text) |
+| Password policy | 8–128 characters, no composition rule (length over complexity); hashing = ASP.NET Core PBKDF2 `PasswordHasher`, rehash on login when needed |
+| Login behavior | Wrong password and unknown account give the same 401 message and the same work (dummy hash); non-ACTIVE account → 403 only after the password verified; success records `last_login_at` |
+| Phone verification | No OTP yet: `phone_verified = false`; trust comes from the store approving customers/credit. OTP (Zalo ZBS/ZNS or SMS) is a later task behind a sender abstraction |
+| Auth rate limit | Fixed window 10 requests/minute per client IP on register/login (429); behind a proxy the forwarded IP must be configured at deployment |
+| Exception → HTTP | `GlobalExceptionHandler` (RFC 7807 + `traceId`): Validation 400, AuthenticationFailed 401, Forbidden 403, NotFound 404, Conflict / concurrency / unique violation 409, BusinessRule / Domain 422, other 500 with no details |
+| Request validation | `ValidationFilter` runs the FluentValidation validator of every action argument before the action |
+| Operator commands | `--seed` and `--create-admin` run one-shot against the configured DB and exit before HTTP (`MaintenanceCommands`); output is counts/safe messages only |
+| First Admin | `--create-admin` with `AdminBootstrap:Email` / `:Password` (secrets, never appsettings); idempotent: any existing Admin → no change |
 | Bulk EF APIs | `ExecuteDelete*` forbidden for business entities; `ExecuteUpdate*` forbidden for normal business mutations unless reviewed (they bypass the interceptors) |
 | Reference seed scope | Only 5 English-named roles, 9 approved units (BOTTLE/BOX/CARTON/BAG/PACK/KG/GRAM/LITER/ML), 5 Rice disease classes (HEALTHY alone is healthy; knowledge fields NULL), one configured Store; no users or business transactions |
 | Reference seed activation | Api `--seed` runs once and exits before HTTP startup; never automatic startup seed or migration seed; Supabase seed execution requires separate explicit approval |

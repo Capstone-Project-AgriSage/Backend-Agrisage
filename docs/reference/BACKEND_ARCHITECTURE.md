@@ -1032,6 +1032,13 @@ Login Response
 
 JWT-related implementation belongs in Infrastructure.
 
+Implemented (Auth task): `IAuthService` (Application) uses `IPasswordHashService` and `IAccessTokenService`
+(implemented in Infrastructure: PBKDF2 hasher, HS256 JWT). Claims: `sub` = users.id, `role` = role code
+(`FARMER`, `STORE_OWNER`, `SALES_STAFF`, `DELIVERY_STAFF`, `ADMIN`), `jti`; the Api keeps short claim names
+(`MapInboundClaims = false`) and sets `NameClaimType = sub`, `RoleClaimType = role`.
+The Api has `Middleware/GlobalExceptionHandler`, `Filters/ValidationFilter`, `Extensions/RateLimitingExtensions`
+and `Extensions/MaintenanceCommands` (`--seed`, `--create-admin`).
+
 Application uses:
 
 ```text

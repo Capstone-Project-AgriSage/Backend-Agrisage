@@ -79,6 +79,9 @@ internal static class RealDb
 
         public MutableUser CurrentUser { get; } = new();
 
+        // When set, contexts take the acting user from it instead of CurrentUser (e.g. a real CurrentUserService).
+        public ICurrentUserService? CurrentUserOverride { get; set; }
+
         public static async Task<Session> StartAsync()
         {
             var connection = new NpgsqlConnection(ConnectionString());
@@ -95,7 +98,7 @@ internal static class RealDb
             var context = new AgriSageDbContext(new DbContextOptionsBuilder<AgriSageDbContext>()
                 .UseNpgsql(_connection)
                 .AddInterceptors(
-                    new SoftDeleteInterceptor(CurrentUser, clock),
+                    new SoftDeleteInterceptor(CurrentUserOverride ?? CurrentUser, clock),
                     new AuditableEntityInterceptor(clock),
                     new ConcurrencyVersionInterceptor())
                 .AddInterceptors(additionalInterceptors)

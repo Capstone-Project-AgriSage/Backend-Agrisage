@@ -1,3 +1,5 @@
+using AgriSage.Application.Features.Auth.Interfaces;
+using AgriSage.Application.Features.Auth.Services;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -9,7 +11,10 @@ public static class DependencyInjection
     {
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly);
 
-        // Feature application services are registered here by later tasks.
+        services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IAdminBootstrapService, AdminBootstrapService>();
+
+        // Further feature application services are registered here by later tasks.
 
         return services;
     }

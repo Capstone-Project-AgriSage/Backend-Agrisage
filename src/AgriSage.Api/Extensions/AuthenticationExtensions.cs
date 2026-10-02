@@ -30,6 +30,9 @@ public static class AuthenticationExtensions
                     ValidAudience = jwt.Audience,
                     ValidateIssuerSigningKey = true,
                     IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.SigningKey)),
+                    ValidAlgorithms = [SecurityAlgorithms.HmacSha256],
+                    NameClaimType = AgriSageClaimTypes.Subject,
+                    RoleClaimType = AgriSageClaimTypes.Role,
                     ValidateLifetime = true,
                     ClockSkew = TimeSpan.FromSeconds(30)
                 };

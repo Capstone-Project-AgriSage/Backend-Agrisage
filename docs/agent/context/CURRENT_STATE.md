@@ -126,6 +126,18 @@ setup documentation
   STORE_OWNER), 9 units, 5 diseases (exactly one `is_healthy_class`), 1 store `AGRISAGE-DEV` ACTIVE, 0 soft-deleted
   rows, 0 rows in every other business table. The reference seed tests roll back all data.
 
+- Done — Auth: `POST /api/auth/register|login`, `GET /api/auth/me`
+  (`Api/Features/Auth`), `Application/Features/Auth` (service, DTOs, validators, `ContactNormalizer`,
+  `AuthenticationFailedException`), Infrastructure `PasswordHashService` (PBKDF2), `AccessTokenService` (JWT),
+  `NpgsqlErrorClassifier`, `AgriSageClaimTypes`; Api `GlobalExceptionHandler`, `ValidationFilter`, rate limiting,
+  `MaintenanceCommands` (`--seed`, `--create-admin`). No schema change, no migration, no new package version.
+  Decisions: see `DECISIONS.md` (Auth rows). Not implemented: refresh token, OTP/verify, password reset, lockout,
+  user management API. Verified: build 0 warnings/0 errors; 285 unit + 162 integration passed (23+9 PostgreSQL tests
+  run with `AGRISAGE_DB_TESTS=1`, all rolled back).
+  **First Admin created on `agrisage-dev`** (user-approved `--create-admin`): 1 user, role ADMIN, ACTIVE, PBKDF2 hash;
+  a second run changed nothing. The password lives only in the developer's User Secrets
+  (`AdminBootstrap:Password`); there is no change-password feature yet.
+
 ## Not Yet Implied by Foundation Completion
 
 Foundation completion does not mean these business APIs are complete:

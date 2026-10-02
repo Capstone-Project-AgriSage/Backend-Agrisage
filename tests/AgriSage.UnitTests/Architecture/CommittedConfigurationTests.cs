@@ -26,6 +26,11 @@ public class CommittedConfigurationTests
 
         Assert.False(root.TryGetProperty("ConnectionStrings", out _), $"{relativePath} must not contain a connection string.");
 
+        if (root.TryGetProperty("AdminBootstrap", out var admin))
+        {
+            Assert.False(admin.TryGetProperty("Password", out _), $"{relativePath} must not contain AdminBootstrap:Password.");
+        }
+
         if (root.TryGetProperty("Jwt", out var jwt) && jwt.TryGetProperty("SigningKey", out var signingKey))
         {
             Assert.Equal(string.Empty, signingKey.GetString());
