@@ -147,6 +147,26 @@ JWT access token only (no refresh token yet). Farmers self-register; staff accou
 - Phone numbers are **not verified yet** (`phone_verified = false`, no OTP); the store confirms customers.
   Not implemented: refresh tokens, password reset, account lockout after failed attempts, OTP.
 
+### Staff management (Admin / Store Owner)
+
+Staff = Store Owner, Sales Staff, Delivery Staff of the single active store (the `StoreMember` is created
+automatically). Role gate: `ADMIN` or `STORE_OWNER`; Application enforces who may manage whom.
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /api/staff` | Create a staff account (role `STORE_OWNER` / `SALES_STAFF` / `DELIVERY_STAFF`, initial password chosen by the creator) |
+| `GET /api/staff` | List (paged); filters `role`, `status`, `search` |
+| `GET /api/staff/{id}` · `PUT /api/staff/{id}` | Details / update name, contact, employee code, join date |
+| `POST /api/staff/{id}/lock` · `/unlock` | Lock / unlock the account (takes effect immediately) |
+| `POST /api/staff/{id}/reset-password` | Set a new password for a staff member |
+| `DELETE /api/staff/{id}` | Leave the store and lock the account (the user row is kept) |
+| `POST /api/auth/change-password` | Any signed-in user changes their own password |
+
+- Admin manages all three staff roles. A Store Owner manages Sales and Delivery staff only (never another Store Owner
+  or an Admin). Admin accounts are not staff: they only come from `--create-admin`.
+- A locked, left or deleted account is rejected on its next request even if its token has not expired.
+- Not implemented: forced password change on first login, email/phone verification, password reset by email/SMS.
+
 ### First Admin
 
 Needs the reference seed first (the `ADMIN` role). Password only from User Secrets / environment, never appsettings:

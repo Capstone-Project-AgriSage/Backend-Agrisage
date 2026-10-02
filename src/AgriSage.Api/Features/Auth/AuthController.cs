@@ -31,6 +31,16 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
     public async Task<ActionResult<AuthResponse>> Login(LoginRequest request, CancellationToken cancellationToken) =>
         await authService.LoginAsync(request, cancellationToken);
 
+    [HttpPost("change-password")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> ChangePassword(ChangePasswordRequest request, CancellationToken cancellationToken)
+    {
+        await authService.ChangePasswordAsync(request, cancellationToken);
+
+        return NoContent();
+    }
+
     [HttpGet("me")]
     [Authorize]
     [ProducesResponseType<CurrentUserResponse>(StatusCodes.Status200OK)]

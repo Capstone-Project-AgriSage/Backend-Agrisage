@@ -10,4 +10,7 @@ public interface IAuthService
     Task<AuthResponse> LoginAsync(LoginRequest request, CancellationToken cancellationToken);
 
     Task<CurrentUserResponse> GetCurrentUserAsync(CancellationToken cancellationToken);
+
+    // Changes the caller's own password; the current password must be supplied.
+    Task ChangePasswordAsync(ChangePasswordRequest request, CancellationToken cancellationToken);
 }

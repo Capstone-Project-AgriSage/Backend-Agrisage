@@ -138,6 +138,14 @@ setup documentation
   a second run changed nothing. The password lives only in the developer's User Secrets
   (`AdminBootstrap:Password`); there is no change-password feature yet.
 
+- Done (code + tests, not committed yet) — Staff management: `Application/Features/Staff` (`StaffPolicy`,
+  `StaffService`, DTOs, validators), `Api/Features/Staff/StaffController`, `POST /api/auth/change-password`,
+  `UserAccessValidator` + JWT `OnTokenValidated` (locked accounts rejected immediately), `ICurrentUserService.Role`.
+  No schema change, no migration, no new package. Verified: build 0 warnings/0 errors; 321 unit + 190 integration
+  passed with `AGRISAGE_DB_TESTS=1` (45 PostgreSQL tests, all rolled back). No staff created on `agrisage-dev`
+  (still 1 user: the Admin). Still deferred to the mentor decision: OTP / phone and email verification,
+  forgot-password, refresh token, lockout after failed attempts.
+
 ## Not Yet Implied by Foundation Completion
 
 Foundation completion does not mean these business APIs are complete:

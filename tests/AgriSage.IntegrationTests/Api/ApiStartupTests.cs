@@ -3,6 +3,9 @@ using AgriSage.Application.Common.Interfaces;
 using AgriSage.Application.Features.Auth.Dtos.Requests;
 using AgriSage.Application.Features.Auth.Interfaces;
 using AgriSage.Application.Features.Auth.Services;
+using AgriSage.Application.Features.Staff.Dtos.Requests;
+using AgriSage.Application.Features.Staff.Interfaces;
+using AgriSage.Application.Features.Staff.Services;
 using AgriSage.Infrastructure.Persistence;
 using AgriSage.Infrastructure.Persistence.Interceptors;
 using AgriSage.Infrastructure.Persistence.Seed;
@@ -74,6 +77,10 @@ public class ApiStartupTests : IClassFixture<ApiStartupTests.DevelopmentApiFacto
 
         Assert.IsType<AuthService>(provider.GetRequiredService<IAuthService>());
         Assert.IsType<AdminBootstrapService>(provider.GetRequiredService<IAdminBootstrapService>());
+        Assert.IsType<StaffService>(provider.GetRequiredService<IStaffService>());
+        Assert.IsType<UserAccessValidator>(provider.GetRequiredService<IUserAccessValidator>());
+        Assert.NotNull(provider.GetRequiredService<FluentValidation.IValidator<CreateStaffRequest>>());
+        Assert.NotNull(provider.GetRequiredService<FluentValidation.IValidator<StaffListRequest>>());
         Assert.NotNull(provider.GetRequiredService<IPasswordHashService>());
         Assert.NotNull(provider.GetRequiredService<IAccessTokenService>());
         Assert.NotNull(provider.GetRequiredService<IDatabaseErrorClassifier>());

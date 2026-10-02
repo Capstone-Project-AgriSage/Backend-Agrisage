@@ -24,6 +24,9 @@ public class ReferenceSeedDatabaseTests
         await using var context = session.NewContext();
         var store = await TestStoreAsync(context);
         var before = await CountsAsync(context);
+        // Accounts exist now (the first Admin); the seed must not add or change any.
+        var usersBefore = await context.Users.CountAsync(Token);
+        var membersBefore = await context.StoreMembers.CountAsync(Token);
         var result = await Seeder(context, store).SeedAsync(Token);
         var after = await CountsAsync(context);
         Assert.Equal(new DatabaseSeeder.Result(5, 9, 5, 1), after);
@@ -55,8 +58,8 @@ public class ReferenceSeedDatabaseTests
         Assert.Null(storedStore.PhoneNumber);
         Assert.Null(storedStore.Email);
         Assert.Null(storedStore.TaxCode);
-        Assert.Equal(0, await context.Users.CountAsync(Token));
-        Assert.Equal(0, await context.StoreMembers.CountAsync(Token));
+        Assert.Equal(usersBefore, await context.Users.CountAsync(Token));
+        Assert.Equal(membersBefore, await context.StoreMembers.CountAsync(Token));
         Assert.Equal(0, await context.Products.CountAsync(Token));
         Assert.Equal(0, await context.Orders.CountAsync(Token));
         Assert.Equal(0, await context.StockMovements.CountAsync(Token));

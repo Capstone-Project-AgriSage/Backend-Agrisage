@@ -201,6 +201,9 @@ public class AuthDatabaseTests
         await using var session = await RealDb.Session.StartAsync();
         await using var context = session.NewContext();
         await EnsureRoleAsync(context, RoleCode.Admin);
+        // agrisage-dev already has its first Admin: hide existing admins inside this (rolled back) transaction.
+        await context.Database.ExecuteSqlRawAsync(
+            "UPDATE users SET deleted_at = now() WHERE role_id IN (SELECT id FROM roles WHERE code = 'ADMIN')", Token);
         var (_, admin) = Services(context);
         var email = $"{Guid.NewGuid():N}@example.com";
         var request = new CreateAdminRequest("Administrator", email, null, "password1");

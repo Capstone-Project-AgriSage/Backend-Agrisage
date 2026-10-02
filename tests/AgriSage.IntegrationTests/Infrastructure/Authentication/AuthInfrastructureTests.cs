@@ -106,6 +106,15 @@ public class AuthInfrastructureTests : IClassFixture<ApiStartupTests.Development
 
         Assert.True(currentUser.IsAuthenticated);
         Assert.Equal(userId, currentUser.UserId);
+        Assert.Equal("SALES_STAFF", ((ICurrentUserService)currentUser).Role);
+    }
+
+    [Fact]
+    public void Current_user_has_no_role_without_a_request()
+    {
+        ICurrentUserService currentUser = new CurrentUserService(new HttpContextAccessor());
+
+        Assert.Null(currentUser.Role);
     }
 
     [Fact]

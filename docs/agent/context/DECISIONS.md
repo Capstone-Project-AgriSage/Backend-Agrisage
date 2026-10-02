@@ -75,6 +75,11 @@ These are stable decisions currently frozen for backend implementation.
 | Request validation | `ValidationFilter` runs the FluentValidation validator of every action argument before the action |
 | Operator commands | `--seed` and `--create-admin` run one-shot against the configured DB and exit before HTTP (`MaintenanceCommands`); output is counts/safe messages only |
 | First Admin | `--create-admin` with `AdminBootstrap:Email` / `:Password` (secrets, never appsettings); idempotent: any existing Admin → no change |
+| Staff management API | `api/staff` for Admin and Store Owner; staff = Store Owner / Sales / Delivery members of the single ACTIVE store (StoreMember created automatically, store taken from the active Store, never hard-coded); Admin accounts are not staff |
+| Staff permission matrix | Admin manages Store Owner, Sales, Delivery; Store Owner manages Sales and Delivery only (never Store Owner or Admin); the role is read from the JWT, enforced in `StaffPolicy` + `StaffService` (HTTP `[Authorize(Roles)]` is only the first gate) |
+| Staff removal | `DELETE /api/staff/{id}` = StoreMember → LEFT + user LOCKED, not a soft delete (a soft-deleted user would disappear from history queries through the query filter); unlock re-activates the member |
+| Initial staff password | Chosen by the creator and handed over; no forced change on first login (no column); reset by Admin/Owner; users change their own with `POST /api/auth/change-password` |
+| Immediate lock | Every authenticated request checks the account is ACTIVE and not deleted (`IUserAccessValidator` in `JwtBearerEvents.OnTokenValidated`), so a lock does not wait for the token to expire; costs one small query per request |
 | Bulk EF APIs | `ExecuteDelete*` forbidden for business entities; `ExecuteUpdate*` forbidden for normal business mutations unless reviewed (they bypass the interceptors) |
 | Reference seed scope | Only 5 English-named roles, 9 approved units (BOTTLE/BOX/CARTON/BAG/PACK/KG/GRAM/LITER/ML), 5 Rice disease classes (HEALTHY alone is healthy; knowledge fields NULL), one configured Store; no users or business transactions |
 | Reference seed activation | Api `--seed` runs once and exits before HTTP startup; never automatic startup seed or migration seed; Supabase seed execution requires separate explicit approval |
