@@ -2,10 +2,12 @@ using System.Net;
 using AgriSage.Application.Common.Interfaces;
 using AgriSage.Infrastructure.Persistence;
 using AgriSage.Infrastructure.Persistence.Interceptors;
+using AgriSage.Infrastructure.Persistence.Seed;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace AgriSage.IntegrationTests.Api;
 
@@ -70,6 +72,20 @@ public class ApiStartupTests : IClassFixture<ApiStartupTests.DevelopmentApiFacto
 
         Assert.False(currentUser.IsAuthenticated);
         Assert.Null(currentUser.UserId);
+    }
+
+    [Fact]
+    public void Reference_seeder_and_approved_development_store_options_resolve_without_seeding()
+    {
+        using var scope = _factory.Services.CreateScope();
+        Assert.Same(scope.ServiceProvider.GetRequiredService<DatabaseSeeder>(),
+            scope.ServiceProvider.GetRequiredService<DatabaseSeeder>());
+        var store = scope.ServiceProvider.GetRequiredService<IOptions<SeedStoreOptions>>().Value;
+        store.Validate();
+        Assert.Equal("AGRISAGE-DEV", store.Code);
+        Assert.Equal("AgriSage Dev Store", store.Name);
+        Assert.Equal("Dev address - to be replaced", store.AddressLine);
+        Assert.Equal("Can Tho", store.Province);
     }
 
     public sealed class DevelopmentApiFactory : WebApplicationFactory<Program>

@@ -7,6 +7,7 @@ using AgriSage.Domain.Features.Stores.Entities;
 using AgriSage.Infrastructure.Persistence;
 using AgriSage.Infrastructure.Persistence.Interceptors;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
 
@@ -88,7 +89,7 @@ internal static class RealDb
 
         // Contexts share the connection and its transaction, so they see each other's uncommitted rows —
         // which lets one test simulate two concurrent writers.
-        public AgriSageDbContext NewContext()
+        public AgriSageDbContext NewContext(params IInterceptor[] additionalInterceptors)
         {
             var clock = new Clock();
             var context = new AgriSageDbContext(new DbContextOptionsBuilder<AgriSageDbContext>()
@@ -97,6 +98,7 @@ internal static class RealDb
                     new SoftDeleteInterceptor(CurrentUser, clock),
                     new AuditableEntityInterceptor(clock),
                     new ConcurrencyVersionInterceptor())
+                .AddInterceptors(additionalInterceptors)
                 .Options);
 
             context.Database.UseTransaction(_transaction);

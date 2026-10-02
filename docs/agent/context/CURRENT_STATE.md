@@ -108,6 +108,24 @@ setup documentation
   Open: Supabase Data API / RLS (tables carry default `anon`/`authenticated` grants, RLS off — the Data API must stay
   disabled for `public`); reference seed data is a separate task.
 
+- Done — Reference data seed (`docs/agent/requests/SEED_REFERENCE_DATA.md`):
+  `Infrastructure/Persistence/Seed/` has Role/Unit/Disease/Store seeders, `DatabaseSeeder`, validated Store options,
+  read-only approved catalogs and safe seed errors. Api `--seed` runs then exits before HTTP startup; no auto-seed,
+  new package, Domain/EF configuration change or migration. Natural-key lookups include soft-deleted rows;
+  deleted matches fail, live rows are never overwritten, a different ACTIVE store blocks the operation.
+  One owned transaction and one SaveChanges; rollback-only tests supply their transaction and use a savepoint
+  (no nested transaction or outer commit). Dev Store values are explicitly approved TEMPORARY data:
+  AGRISAGE-DEV / AgriSage Dev Store / Dev address - to be replaced / Can Tho; optional fields NULL.
+  Verified 2026-09-30: restore succeeded; build 0 warnings/0 errors; offline 233 unit passed and
+  102 integration passed / 23 real tests skipped; final full run with `AGRISAGE_DB_TESTS=1`:
+  233 unit + 125 integration passed, 0 failed/0 skipped (including 10 new seed PostgreSQL tests).
+  Tests verify 5 roles / 9 units / 5 diseases / 1 store, second run adds 0, preserved values/IDs/timestamps,
+  all four deleted-code conflicts, ACTIVE-store conflict, failure after SaveChanges rollback, and test cleanup.
+  **Applied to `agrisage-dev`** (user-approved): first `--seed` run added roles=5, units=9, diseases=5, stores=1;
+  the second run added 0 (idempotent). Read-only verification: 5 roles (ADMIN, DELIVERY_STAFF, FARMER, SALES_STAFF,
+  STORE_OWNER), 9 units, 5 diseases (exactly one `is_healthy_class`), 1 store `AGRISAGE-DEV` ACTIVE, 0 soft-deleted
+  rows, 0 rows in every other business table. The reference seed tests roll back all data.
+
 ## Not Yet Implied by Foundation Completion
 
 Foundation completion does not mean these business APIs are complete:

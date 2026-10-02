@@ -2,6 +2,7 @@ using AgriSage.Application.Common.Interfaces;
 using AgriSage.Infrastructure.Authentication;
 using AgriSage.Infrastructure.Persistence;
 using AgriSage.Infrastructure.Persistence.Interceptors;
+using AgriSage.Infrastructure.Persistence.Seed;
 using AgriSage.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -52,6 +53,9 @@ public static class DependencyInjection
         });
 
         services.AddScoped<IAgriSageDbContext>(provider => provider.GetRequiredService<AgriSageDbContext>());
+
+        services.AddOptions<SeedStoreOptions>().Bind(configuration.GetSection(SeedStoreOptions.SectionName));
+        services.AddScoped<DatabaseSeeder>();
 
         // Provider adapters (payOS, AI, storage) are registered here by later tasks.
 

@@ -87,6 +87,48 @@ Migrations live in `src/AgriSage.Infrastructure/Persistence/Migrations` and are 
 Review every generated migration before applying it (coding rules #53–#54); applying to Supabase is a
 separate, explicitly approved step.
 
+### Reference seed (explicit command)
+
+`--seed` creates only 5 roles, 9 units, 5 rice disease classes and one configured store, then exits
+without starting HTTP. It does not run on ordinary application startup or apply any migration.
+The command uses the existing `Database` settings and `Database:Password` secret; it prints added
+row counts or safe error messages, never credentials or a connection string. Exit code is 0 on
+success and 1 on failure/cancellation.
+
+`Seed:Store` in `appsettings.Development.json` currently contains team-approved **temporary dev data**:
+`AGRISAGE-DEV`, `AgriSage Dev Store`, `Dev address - to be replaced`, `Can Tho`; optional fields are null.
+Replace these values with approved operational information before production. Missing fields,
+`<ĐIỀN>` placeholders and values exceeding database column lengths are rejected before connecting.
+
+**Running this command against `agrisage-dev` is still pending separate explicit approval.** After
+approval, from the repository root with the Development secrets configured:
+
+```bash
+dotnet run --project src/AgriSage.Api --launch-profile https -- --seed
+```
+
+All four groups share one transaction and one `SaveChangesAsync`. Existing natural codes are
+checked including soft-deleted rows: existing live records are preserved; a matching soft-deleted
+record causes an error and rollback, never automatic restoration. A different ACTIVE store also
+causes an error. A second successful invocation reports zero added rows. Changing Store configuration
+does not update an existing store.
+
+Offline tests keep `AGRISAGE_DB_TESTS` unset or set to `0`. To run the seed tests on PostgreSQL
+after approval for rollback-only tests:
+
+```powershell
+$env:AGRISAGE_DB_TESTS = "1"
+dotnet test tests/AgriSage.IntegrationTests --filter "FullyQualifiedName~ReferenceSeedDatabaseTests"
+Remove-Item Env:AGRISAGE_DB_TESTS
+```
+
+These tests reuse `RealDb.Session` and its outer transaction; the seeder creates a savepoint instead
+of a nested transaction and never commits that outer transaction. They are serialized against other
+test collections because reference codes are fixed. Every session rolls back, including a test that
+injects a failure after `SaveChangesAsync` to prove all four groups are reverted. On an empty database
+the tests use rollback-only Store fixtures; after reference seed they reuse the existing Store inside
+the rolled-back session, so they do not introduce a second operational store.
+
 ## Run
 
 ```bash

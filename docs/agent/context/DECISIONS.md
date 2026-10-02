@@ -65,9 +65,15 @@ These are stable decisions currently frozen for backend implementation.
 | Raw SQL in migrations | InitialCreate calls `migrationBuilder.Sql(PostgreSqlRawIndexes.…)`; those constants are frozen — changes need new constants + a new migration |
 | Constraint names | Configured names must be ≤ 63 chars so EF never truncates them (`~`); enforced by `PersistenceModelTests` |
 | Bulk EF APIs | `ExecuteDelete*` forbidden for business entities; `ExecuteUpdate*` forbidden for normal business mutations unless reviewed (they bypass the interceptors) |
+| Reference seed scope | Only 5 English-named roles, 9 approved units (BOTTLE/BOX/CARTON/BAG/PACK/KG/GRAM/LITER/ML), 5 Rice disease classes (HEALTHY alone is healthy; knowledge fields NULL), one configured Store; no users or business transactions |
+| Reference seed activation | Api `--seed` runs once and exits before HTTP startup; never automatic startup seed or migration seed; Supabase seed execution requires separate explicit approval |
+| Reference seed persistence | Infrastructure `Persistence/Seed/DatabaseSeeder` owns one transaction and one SaveChanges; existing transaction uses an isolated savepoint without commit/nested transaction (rollback-only RealDb tests); natural-code lookup includes soft-deleted rows, fails on deleted matches, preserves live rows |
+| Initial dev Store seed | `Seed:Store` holds approved temporary development data: AGRISAGE-DEV / AgriSage Dev Store / Dev address - to be replaced / Can Tho; optional fields NULL; not production information and no hard-coded Store ID; a different ACTIVE store blocks seed |
 
 Full rationale for the rows above: `docs/reference/DATABASE_DESIGN.md` §XXXV,
 `docs/reference/BACKEND_CODING_RULES.md` #61–#64.
+Reference seed requirements: `docs/agent/requests/SEED_REFERENCE_DATA.md`; approved units, English role
+names, temporary dev Store values and `--seed` activation were confirmed by the team on 2026-09-30.
 
 If a task proposes changing one of these decisions, treat it as an architecture/business decision,
 not a normal implementation detail.
