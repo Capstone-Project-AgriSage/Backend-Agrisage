@@ -177,6 +177,11 @@ setup documentation
   `POST/DELETE /api/files/delivery-proofs`, `IDeliveryProofService`, shared `ImageUploader`, `StorageArea` on
   `IFileStorageService`, `StorageOptions.DeliveryProofBucket`. No schema change, no migration, no new package.
   Offline tests pass; the real Supabase test needs the public bucket `delivery-proofs` to be created first (not created yet).
+- Done (branch `feature/payment-order-link-refunds`) — Schema change C-D1/C-D2:
+  migration `20261002155111_PaymentOrderLinkAndOrderRefunds` (`payments.order_id`, cancelled-order refunds;
+  design §35.18), `Payment` requires/limits its order, `Order.RequestCancellationRefund` + complete/fail/cancel,
+  EF mapping, migration review tests, rolled-back real-DB tests (run only after the migration is applied to
+  `agrisage-dev`).
 
 ## Not Yet Implied by Foundation Completion
 

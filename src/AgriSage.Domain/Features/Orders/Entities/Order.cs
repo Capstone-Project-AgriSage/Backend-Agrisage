@@ -3,16 +3,20 @@ using AgriSage.Domain.Common.Exceptions;
 using AgriSage.Domain.Features.Customers.Entities;
 using AgriSage.Domain.Features.Orders.Enums;
 using AgriSage.Domain.Features.Products.Entities;
+using AgriSage.Domain.Features.Returns.Entities;
+using AgriSage.Domain.Features.Returns.Enums;
 
 namespace AgriSage.Domain.Features.Orders.Entities;
 
-// Online Farmer order or Store counter order; aggregate root for Order Items.
+// Online Farmer order or Store counter order; aggregate root for Order Items and for the Refunds of order
+// prepayment left unused when the Order is cancelled in full or in part (database design §35.18).
 // Lifecycle (database design §35.4): PENDING_CONFIRMATION → CONFIRMED → [PREPARING] → READY_FOR_FULFILLMENT,
 // then status is derived from fulfilled/cancelled quantities. Items change only while PENDING_CONFIRMATION.
 // Credit profile checks, reservations, payments and debt posting are done by the calling use cases.
 public sealed class Order : SoftDeletableEntity, IHasConcurrencyVersion
 {
     private readonly List<OrderItem> _items = [];
+    private readonly List<Refund> _cancellationRefunds = [];
 
     private Order()
     {
@@ -129,6 +133,8 @@ public sealed class Order : SoftDeletableEntity, IHasConcurrencyVersion
     public long Version { get; private set; }
 
     public IReadOnlyCollection<OrderItem> Items => _items.AsReadOnly();
+
+    public IReadOnlyCollection<Refund> CancellationRefunds => _cancellationRefunds.AsReadOnly();
 
     public OrderItem AddItem(
         StoreProduct storeProduct,
@@ -270,6 +276,41 @@ public sealed class Order : SoftDeletableEntity, IHasConcurrencyVersion
         CancelReason = reason;
     }
 
+    // Money paid for this Order that will never be consumed because the Order (or its remainder) was cancelled.
+    // The caller has reversed the payment's unconsumed ORDER allocation and checks that the amount does not exceed
+    // it (cross-aggregate); staff hand the money back outside the system (no automatic payOS refund).
+    public Refund RequestCancellationRefund(
+        string refundNumber,
+        Guid originalPaymentId,
+        RefundMethod refundMethod,
+        decimal amount,
+        Guid requestedBy,
+        DateTimeOffset requestedAt,
+        string? note = null)
+    {
+        EnsureStatus(OrderStatus.Cancelled, OrderStatus.PartiallyCancelled);
+
+        var refund = Refund.ForCancelledOrder(
+            StoreId, refundNumber, Id, originalPaymentId, refundMethod, amount, requestedBy, requestedAt, note);
+        _cancellationRefunds.Add(refund);
+
+        return refund;
+    }
+
+    public void CompleteCancellationRefund(
+        Guid refundId,
+        Guid completedBy,
+        DateTimeOffset completedAt,
+        string? externalReference = null,
+        string? proofFileUrl = null) =>
+        GetCancellationRefund(refundId).Complete(completedBy, completedAt, externalReference, proofFileUrl);
+
+    // A failed refund is retried with a new one.
+    public void FailCancellationRefund(Guid refundId) => GetCancellationRefund(refundId).Fail();
+
+    public void CancelCancellationRefund(Guid refundId, Guid cancelledBy, DateTimeOffset cancelledAt, string? reason = null) =>
+        GetCancellationRefund(refundId).Cancel(cancelledBy, cancelledAt, reason);
+
     protected override void EnsureCanBeDeleted() => EnsurePending();
 
     private IEnumerable<OrderItem> ActiveItems => _items.Where(i => !i.IsDeleted);
@@ -319,6 +360,10 @@ public sealed class Order : SoftDeletableEntity, IHasConcurrencyVersion
         DeliveryLatitude = deliveryAddress?.Latitude;
         DeliveryLongitude = deliveryAddress?.Longitude;
     }
+
+    private Refund GetCancellationRefund(Guid refundId) =>
+        _cancellationRefunds.SingleOrDefault(r => r.Id == refundId && !r.IsDeleted)
+        ?? throw new DomainException($"Refund '{refundId}' was not found on order '{OrderNumber}'.");
 
     private OrderItem GetItem(Guid itemId) =>
         ActiveItems.SingleOrDefault(i => i.Id == itemId)

@@ -48,6 +48,7 @@ internal sealed class OrderConfiguration : EntityConfiguration<Order>
         builder.HasUserReference(order => order.PickupCompletedBy);
         builder.HasUserReference(order => order.CancelledBy);
         builder.HasMany(order => order.Items).WithOne().HasForeignKey(item => item.OrderId);
+        builder.HasMany(order => order.CancellationRefunds).WithOne().HasForeignKey(refund => refund.OrderId);
 
         builder.HasIndex(order => new { order.StoreId, order.OrderNumber }).IsUnique();
         builder.HasIndex(order => new { order.StoreId, order.CreatedAt }).IsDescending(false, true);

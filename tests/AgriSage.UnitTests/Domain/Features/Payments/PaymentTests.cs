@@ -8,12 +8,15 @@ public class PaymentTests
 {
     private static readonly DateTimeOffset Now = new(2026, 9, 1, 8, 0, 0, TimeSpan.Zero);
     private static readonly Guid StaffId = Guid.NewGuid();
+    private static readonly Guid OrderId = Guid.NewGuid();
 
     private static Payment CreatePayment(
         PaymentContext context = PaymentContext.OrderPayment,
         PaymentMethod method = PaymentMethod.Cash,
         decimal amount = 50_000_000m) =>
-        new(Guid.NewGuid(), "PAY-0001", context, method, amount, Now, payerFarmerProfileId: Guid.NewGuid());
+        new(
+            Guid.NewGuid(), "PAY-0001", context, method, amount, Now, payerFarmerProfileId: Guid.NewGuid(),
+            orderId: context == PaymentContext.OrderPayment ? OrderId : null);
 
     private static Payment CreatePaidCashPayment(PaymentContext context = PaymentContext.OrderPayment)
     {
@@ -55,11 +58,34 @@ public class PaymentTests
     }
 
     [Fact]
+    public void An_order_payment_names_its_order_and_a_debt_repayment_has_none()
+    {
+        Assert.Throws<DomainException>(() =>
+            new Payment(Guid.NewGuid(), "PAY-1", PaymentContext.OrderPayment, PaymentMethod.Cash, 1m, Now));
+        Assert.Throws<DomainException>(() =>
+            new Payment(Guid.NewGuid(), "PAY-1", PaymentContext.OrderPayment, PaymentMethod.Cash, 1m, Now, orderId: Guid.Empty));
+        Assert.Throws<DomainException>(() =>
+            new Payment(Guid.NewGuid(), "PAY-1", PaymentContext.DebtRepayment, PaymentMethod.Cash, 1m, Now, orderId: OrderId));
+
+        Assert.Equal(OrderId, CreatePayment().OrderId);
+        Assert.Null(CreatePayment(PaymentContext.DebtRepayment).OrderId);
+    }
+
+    [Fact]
+    public void An_order_payment_is_allocated_only_to_its_own_order()
+    {
+        var payment = CreatePaidCashPayment();
+
+        Assert.Throws<DomainException>(() => payment.AllocateToOrder(Guid.NewGuid(), 10_000m, Now));
+        Assert.Equal(OrderId, payment.AllocateToOrder(OrderId, 10_000m, Now).OrderId);
+    }
+
+    [Fact]
     public void Allocation_requires_a_paid_payment()
     {
         var payment = CreatePayment();
 
-        Assert.Throws<DomainException>(() => payment.AllocateToOrder(Guid.NewGuid(), 10_000m, Now));
+        Assert.Throws<DomainException>(() => payment.AllocateToOrder(OrderId, 10_000m, Now));
     }
 
     [Fact]
@@ -69,9 +95,9 @@ public class PaymentTests
         var debtPayment = CreatePaidCashPayment(PaymentContext.DebtRepayment);
 
         Assert.Throws<DomainException>(() => orderPayment.AllocateToDebtEntry(Guid.NewGuid(), 10_000m, Now));
-        Assert.Throws<DomainException>(() => debtPayment.AllocateToOrder(Guid.NewGuid(), 10_000m, Now));
+        Assert.Throws<DomainException>(() => debtPayment.AllocateToOrder(OrderId, 10_000m, Now));
 
-        var toOrder = orderPayment.AllocateToOrder(Guid.NewGuid(), 10_000m, Now, StaffId);
+        var toOrder = orderPayment.AllocateToOrder(OrderId, 10_000m, Now, StaffId);
         var toDebt = debtPayment.AllocateToDebtEntry(Guid.NewGuid(), 10_000m, Now, StaffId);
         Assert.NotNull(toOrder.OrderId);
         Assert.Null(toOrder.DebtEntryId);
@@ -94,7 +120,7 @@ public class PaymentTests
     public void Prepayment_consumption_cannot_exceed_the_order_allocation()
     {
         var payment = CreatePaidCashPayment();
-        var allocation = payment.AllocateToOrder(Guid.NewGuid(), 10_000_000m, Now);
+        var allocation = payment.AllocateToOrder(OrderId, 10_000_000m, Now);
 
         payment.ConsumePrepayment(allocation.Id, 6_000_000m);
 
@@ -106,8 +132,8 @@ public class PaymentTests
     public void Order_allocation_with_consumed_prepayment_cannot_be_reversed()
     {
         var payment = CreatePaidCashPayment();
-        var consumed = payment.AllocateToOrder(Guid.NewGuid(), 10_000_000m, Now);
-        var unused = payment.AllocateToOrder(Guid.NewGuid(), 10_000_000m, Now);
+        var consumed = payment.AllocateToOrder(OrderId, 10_000_000m, Now);
+        var unused = payment.AllocateToOrder(OrderId, 10_000_000m, Now);
         payment.ConsumePrepayment(consumed.Id, 1_000m);
 
         Assert.Throws<DomainException>(() => payment.ReverseAllocation(consumed.Id, StaffId, Now));
@@ -121,7 +147,7 @@ public class PaymentTests
     public void Paid_payment_cannot_be_deleted_and_allocation_cannot_be_deleted_directly()
     {
         var payment = CreatePaidCashPayment();
-        var allocation = payment.AllocateToOrder(Guid.NewGuid(), 10_000m, Now);
+        var allocation = payment.AllocateToOrder(OrderId, 10_000m, Now);
 
         Assert.Throws<DomainException>(() => payment.MarkDeleted(StaffId, Now));
         Assert.Throws<DomainException>(() => allocation.MarkDeleted(StaffId, Now));

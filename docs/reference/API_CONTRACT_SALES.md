@@ -1,6 +1,6 @@
 # API Contract — Sales, Order Fulfillment and Delivery (Group A)
 
-Version 1.2 — 2026-10-02 (decisions D1–D10 settled; §9.4 added). Scope: tasks A1–A6 (cart, orders, confirmation and stock reservation, pickup,
+Version 1.3 — 2026-10-02 (decisions D1–D10 settled; §9.4 returns cancelled-order refunds). Scope: tasks A1–A6 (cart, orders, confirmation and stock reservation, pickup,
 delivery notes, delivery attempts and incidents) and the cross-module interfaces that group A uses from
 groups B (customers, pricing, credit, debt) and C (payments).
 
@@ -286,7 +286,7 @@ Rules:
 - Cancel: allowed before anything is fulfilled (`PENDING_CONFIRMATION`, `CONFIRMED`, `PREPARING`,
   `READY_FOR_FULFILLMENT`); in one transaction it releases the inventory reservation (A3), the credit
   reservation (§9.2 `ReleaseAsync`) and reverses the unconsumed order payments (§9.4); the response of
-  §9.4 tells staff how much to hand back. After a partial fulfillment use cancel-remaining (A4) instead.
+  §9.4 lists the refunds to hand back. After a partial fulfillment use cancel-remaining (A4) instead.
 
 ---
 
@@ -641,7 +641,9 @@ not be left registered once B/C deliver the real one (task A7).
 ### 9.4 `IOrderPaymentCancellation` — owner C (Payments)
 
 Defined in `API_CONTRACT_PAYMENTS_INVENTORY_RETURNS.md` §3.2. Called by order cancellation (A2) to reverse
-the unconsumed order payments; returns the amount staff hand back. Temporary implementation (A): returns 0.
+the unconsumed order payments and request one PENDING refund per payment (design §35.18); returns those
+refunds so the response can tell staff what to hand back. Called after `Cancel` and after a cancel-remaining
+(A4) that leaves the order PARTIALLY_CANCELLED. Temporary implementation (A): returns an empty list.
 
 `relatedStockMovementId` in `ResolveIncidentRequest` (A6) must be an ADJUSTMENT movement created through
 C's `POST /api/inventory/adjustments` (decision D5).

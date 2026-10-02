@@ -15,14 +15,15 @@ public class InitialCreateMigrationTests
             .UseNpgsql("Host=localhost;Database=agrisage_model_only")
             .Options);
 
+    // Every new migration is added here on purpose, so it cannot slip in without a reviewed test.
     [Fact]
-    public void InitialCreate_is_the_only_migration()
+    public void Migrations_are_the_reviewed_list_in_order()
     {
         using var context = CreateContext();
 
-        var migration = Assert.Single(context.Database.GetMigrations());
-
-        Assert.EndsWith("_InitialCreate", migration);
+        Assert.Equal(
+            ["20260929092546_InitialCreate", "20261002155111_PaymentOrderLinkAndOrderRefunds"],
+            context.Database.GetMigrations());
     }
 
     [Fact]

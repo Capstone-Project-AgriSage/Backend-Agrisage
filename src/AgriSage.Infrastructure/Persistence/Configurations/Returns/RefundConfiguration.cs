@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace AgriSage.Infrastructure.Persistence.Configurations.Returns;
 
-// Table 54: refunds.
+// Table 54: refunds. Source = a sales return or a cancelled order, exactly one (database design §35.18).
 internal sealed class RefundConfiguration : EntityConfiguration<Refund>
 {
     protected override string TableName => "refunds";
@@ -36,5 +36,7 @@ internal sealed class RefundConfiguration : EntityConfiguration<Refund>
         builder.HasIndex(refund => new { refund.Status, refund.RequestedAt });
 
         builder.HasCheck("amount", "amount > 0");
+        builder.HasCheck("source", "num_nonnulls(sales_return_id, order_id) = 1");
+        builder.HasCheck("order_payment", "order_id IS NULL OR original_payment_id IS NOT NULL");
     }
 }

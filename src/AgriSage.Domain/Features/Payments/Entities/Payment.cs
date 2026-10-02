@@ -6,6 +6,8 @@ using AgriSage.Domain.Features.Payments.Enums;
 namespace AgriSage.Domain.Features.Payments.Entities;
 
 // Incoming payment (cash or payOS) for an Order or for debt repayment; aggregate root for its Allocations.
+// An ORDER_PAYMENT names its Order from creation (order_id, database design §35.18), so a PENDING payOS payment
+// already knows its target; a DEBT_REPAYMENT has no Order.
 // Webhook verification and idempotency are handled by the calling use case; refunds belong to Return/Refund.
 public sealed class Payment : SoftDeletableEntity
 {
@@ -27,11 +29,22 @@ public sealed class Payment : SoftDeletableEntity
         Guid? payerFarmerProfileId = null,
         Guid? createdBy = null,
         string? note = null,
-        string currency = DefaultCurrency)
+        string currency = DefaultCurrency,
+        Guid? orderId = null)
     {
         if (Guard.NotNullOrWhiteSpace(currency).Length != 3)
         {
             throw new DomainException("Currency must be a 3-letter code.");
+        }
+
+        if (paymentContext == PaymentContext.OrderPayment && (orderId is null || orderId == Guid.Empty))
+        {
+            throw new DomainException("An ORDER_PAYMENT must name its order.");
+        }
+
+        if (paymentContext == PaymentContext.DebtRepayment && orderId is not null)
+        {
+            throw new DomainException("A DEBT_REPAYMENT cannot reference an order.");
         }
 
         StoreId = storeId;
@@ -42,12 +55,16 @@ public sealed class Payment : SoftDeletableEntity
         Currency = currency;
         InitiatedAt = initiatedAt;
         PayerFarmerProfileId = payerFarmerProfileId;
+        OrderId = orderId;
         CreatedBy = createdBy;
         Note = note;
         Status = PaymentStatus.Pending;
     }
 
     public Guid StoreId { get; private set; }
+
+    // ORDER_PAYMENT only: the order this money is for (allocations go to this order only).
+    public Guid? OrderId { get; private set; }
 
     public string PaymentNumber { get; private set; } = null!;
 
@@ -170,8 +187,15 @@ public sealed class Payment : SoftDeletableEntity
         Guid orderId,
         decimal amount,
         DateTimeOffset allocatedAt,
-        Guid? allocatedBy = null) =>
-        Allocate(PaymentAllocationType.Order, orderId, amount, allocatedAt, allocatedBy);
+        Guid? allocatedBy = null)
+    {
+        if (PaymentContext == PaymentContext.OrderPayment && orderId != OrderId)
+        {
+            throw new DomainException($"Payment '{PaymentNumber}' is for another order.");
+        }
+
+        return Allocate(PaymentAllocationType.Order, orderId, amount, allocatedAt, allocatedBy);
+    }
 
     public PaymentAllocation AllocateToDebtEntry(
         Guid debtEntryId,

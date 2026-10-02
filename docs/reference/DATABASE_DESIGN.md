@@ -2271,6 +2271,7 @@ store_id                uuid NOT NULL FK stores.id
 payment_number          varchar(50) NOT NULL
 
 payer_farmer_profile_id uuid NULL FK farmer_profiles.id
+order_id                uuid NULL FK orders.id          (§35.18)
 
 payment_context         varchar(30) NOT NULL
 payment_method          varchar(20) NOT NULL
@@ -4239,7 +4240,8 @@ store_id                    uuid NOT NULL FK stores.id
 
 refund_number               varchar(50) NOT NULL
 
-sales_return_id             uuid NOT NULL FK sales_returns.id
+sales_return_id             uuid NULL FK sales_returns.id   (§35.18)
+order_id                    uuid NULL FK orders.id          (§35.18)
 original_payment_id         uuid NULL FK payments.id
 
 refund_method               varchar(30) NOT NULL
@@ -6436,6 +6438,41 @@ Additional single-row DB rules (beyond the "Constraints" sections):
 - articles: PUBLISHED ⇒ published_at NOT NULL.
 Every enum-backed varchar column also has an IN (...) CHECK of its
 documented values (§0.5).
+```
+
+## 35.18 Payment target and cancelled-order refunds (tables 36, 54) — migration PaymentOrderLinkAndOrderRefunds
+
+```text
+Approved by the team on 2026-10-02 (decisions C-D1 / C-D2 in API_CONTRACT_PAYMENTS_INVENTORY_RETURNS.md).
+This is the first schema change after InitialCreate; the table count stays 67.
+
+payments.order_id  uuid NULL FK orders.id (NO ACTION), indexed.
+  CHECK ck_payments_order_context:
+    (payment_context = 'ORDER_PAYMENT'  AND order_id IS NOT NULL)
+    OR (payment_context = 'DEBT_REPAYMENT' AND order_id IS NULL)
+  Reason: a PENDING payOS payment must know its order before any allocation exists
+  (allocations are created only once PAID, §35.7). An ORDER_PAYMENT is allocated only
+  to its own order. A DEBT_REPAYMENT through payOS is allocated oldest due date first
+  when it becomes PAID (explicit entry selection is a counter/cash feature).
+
+refunds.sales_return_id becomes NULL; refunds.order_id uuid NULL FK orders.id (NO ACTION), indexed.
+  CHECK ck_refunds_source:        num_nonnulls(sales_return_id, order_id) = 1
+  CHECK ck_refunds_order_payment: order_id IS NULL OR original_payment_id IS NOT NULL
+  Reason: under the confirmation rule (FULL_PAYMENT orders are paid before confirmation)
+  a paid order may be cancelled (e.g. out of stock), and money paid but never consumed
+  must leave the store with a record.
+
+Cancelled-order refund (source = order):
+  - only for an Order that is CANCELLED or PARTIALLY_CANCELLED;
+  - created and changed only through the Order aggregate (Order.RequestCancellationRefund,
+    Complete/Fail/CancelCancellationRefund); a Sales Return refund is still changed only
+    through its Sales Return;
+  - always for one original payment; the cancellation use case first reverses that
+    payment's unconsumed ORDER allocation, then requests the refund; the sum of the
+    payment's cancelled-order refunds that are PENDING or COMPLETED never exceeds the
+    reversed, unconsumed amount (checked by the Application, cross-aggregate);
+  - no automatic payOS refund: staff pay back in cash or by bank transfer and record it;
+  - PENDING → COMPLETED | FAILED | CANCELLED, as for return refunds.
 ```
 
 ## 35.17 Receiving clarifications

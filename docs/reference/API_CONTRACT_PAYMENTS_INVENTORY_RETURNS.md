@@ -1,6 +1,6 @@
 # API Contract — Payments, payOS, Stocktake/Adjustments and Returns (Group C)
 
-Version 1.2 — 2026-10-02 (C3 checked against the payOS SDK and NutriPlan; C-D7..C-D9 settled). Scope: tasks C1–C5 and the interfaces group C provides to groups A and B.
+Version 1.3 — 2026-10-02 (C-D1, C-D2 settled with a schema change; C-D7..C-D9 settled). Scope: tasks C1–C5 and the interfaces group C provides to groups A and B.
 
 Sources: `DATABASE_DESIGN.md` §28–29, §36–37, §52–54, §7.5, §XVI-D, §XXII, §35.7–35.11; `BUSINESS_RULES.md`
 rules 10, 25–27, 30–33, 52–58. When this file and the design disagree, the design wins and this file is
@@ -66,9 +66,10 @@ so the real counter flow needs C1.
 Cash is received physically by the staff member, so one request creates the payment, marks it PAID
 (`confirmation_source = STAFF`, `confirmed_by` = caller) and allocates it, in one transaction.
 
-- ORDER_PAYMENT: `orderId` required; payer = the order's Farmer (null for WALK_IN). The order must not be
-  CANCELLED or COMPLETED; `amount` ≤ order total − already paid (no overpayment, 422). Creates one ORDER
-  allocation. If the order is a confirmed CREDIT order, calls B's `ICreditReservationAdjuster` (design §XVI-D).
+- ORDER_PAYMENT: `orderId` required and stored in `payments.order_id` (design §35.18); payer = the order's
+  Farmer (null for WALK_IN). The order must not be CANCELLED, PARTIALLY_CANCELLED or COMPLETED; `amount` ≤
+  order total − already paid (no overpayment, 422). Creates one ORDER allocation (only to that order). If the
+  order is a confirmed CREDIT order, calls B's `ICreditReservationAdjuster` (design §XVI-D).
 - DEBT_REPAYMENT: `farmerProfileId` required; `amount` ≤ the Farmer's current debt balance (422).
   Calls B's `IDebtRepaymentPosting.ApplyAsync` with `debtAllocations` (or null = oldest due first, rule 27);
   explicit allocations must sum to `amount`. The whole amount is allocated (no floating cash).
@@ -112,12 +113,39 @@ remainingToPay, payments: [PaymentListItem] }`.
 ```csharp
 public interface IOrderPaymentCancellation
 {
-    // The order is being cancelled before any fulfillment: reverse its unconsumed ORDER allocations
-    // (design §35.7 forbids reversing a consumed one) and cancel its PENDING payOS payments.
-    // Returns the reversed amount, which staff hand back outside the system (decision C-D2).
-    Task<decimal> ReverseForCancelledOrderAsync(Guid orderId, Guid actorId, string reason, CancellationToken cancellationToken);
+    // Called by A in its own transaction right after the order became CANCELLED, or PARTIALLY_CANCELLED after
+    // its last open quantity was cancelled (decision C-D2, design §35.18):
+    // 1. cancel the order's PENDING payOS payments (payOS cancel API first);
+    // 2. per PAID payment of the order: reverse its unconsumed ORDER allocation (a consumed allocation keeps
+    //    its consumed part; design §35.7) and request one PENDING cancelled-order refund for that amount
+    //    through Order.RequestCancellationRefund — method CASH for a cash payment, BANK_TRANSFER for payOS.
+    // Returns the requested refunds so staff know what to hand back. Never saves or commits.
+    Task<IReadOnlyList<CancellationRefundInfo>> ReverseForCancelledOrderAsync(
+        Order order, Guid actorId, string reason, CancellationToken cancellationToken);
 }
+
+public sealed record CancellationRefundInfo(
+    Guid RefundId, string RefundNumber, Guid PaymentId, string RefundMethod, decimal Amount);
 ```
+
+Refunds of a cancelled order (Manage; staff pay back outside the system, no automatic payOS refund):
+
+| Method | Route | Body | Response |
+|---|---|---|---|
+| GET | `/api/orders/{id}/refunds` | — | `200 RefundResponse[]` |
+| POST | `/api/orders/{id}/refunds` | `{ originalPaymentId, refundMethod, amount, note? }` | `201 RefundResponse` (retry after a FAILED/CANCELLED one) |
+| POST | `/api/orders/{id}/refunds/{refundId}/complete` | `{ externalReference?, proofFileUrl?, note? }` | `200 RefundResponse` |
+| POST | `/api/orders/{id}/refunds/{refundId}/fail` | `{ note? }` | `200 RefundResponse` |
+| POST | `/api/orders/{id}/refunds/{refundId}/cancel` | `{ reason }` | `200 RefundResponse` |
+
+- Only for CANCELLED / PARTIALLY_CANCELLED orders (Domain). For one payment, PENDING + COMPLETED cancelled-order
+  refunds ≤ the amount reversed from it by the cancellation (Application, under a row lock on the payment).
+- The Farmer sees the refunds of their own order in `GET /api/me/orders/{id}/payments` (`refunds` field).
+- `RefundResponse` is the same shape for return refunds and cancelled-order refunds: `id, refundNumber,
+  source (SALES_RETURN | ORDER), salesReturnId, orderId, originalPaymentId, refundMethod, amount, status,
+  externalReference, proofFileUrl, requestedBy/At, completedBy/At, cancelledBy/At, cancelReason, note`.
+- Completing refunds sets the payment PARTIALLY_REFUNDED / REFUNDED (the Payment Domain method is added by C,
+  shared with C5).
 
 ---
 
@@ -203,10 +231,13 @@ store's payOS account before go-live.
 {
   "paymentContext": "ORDER_PAYMENT | DEBT_REPAYMENT",
   "orderId": "uuid | null",
-  "amount": "number | null",
-  "debtAllocations": [ { "debtEntryId": "uuid", "amount": 500000.00 } ]
+  "amount": "number | null"
 }
 ```
+
+A payOS debt repayment has no entry selection: it is allocated oldest due date first when PAID (decision C-D1;
+the app shows the split with B's `allocation-preview`). Choosing specific debt entries is done in cash at the
+counter.
 
 `PayOsPaymentResponse`: `{ paymentId, paymentNumber, amount, checkoutUrl, qrCode, providerOrderCode,
 expiresAt, status }`. `qrCode` is the VietQR payload string (the client renders it as a QR image).
@@ -234,9 +265,9 @@ expiresAt, status }`. `qrCode` is the VietQR payload string (the client renders 
   is paid in cash. Price lists in VND should use whole numbers.
 - Creates a PENDING PAYOS payment with a new `providerOrderCode` (time-based + random suffix, retried on a
   unique clash), the description of §5.1, `expiredAt = now + PayOS:LinkExpiryMinutes` (default 30), then
-  `IPaymentGateway.CreatePaymentLinkAsync`. The intended target (order or requested debt allocations) is
-  stored with the payment (decision C-D1). If payOS refuses, the payment is marked FAILED and the API answers
-  503 without provider details.
+  `IPaymentGateway.CreatePaymentLinkAsync`. The target order is stored in `payments.order_id`; a debt
+  repayment is allocated oldest due date first when PAID (decision C-D1). If payOS refuses, the payment is
+  marked FAILED and the API answers 503 without provider details.
 - At most one PENDING payOS payment per order: a new request cancels the previous link first.
 - Cancel: `PaymentRequests.CancelAsync(orderCode, reason)` at payOS, then `Payment.Cancel`. If payOS reports
   the link as already PAID, nothing is cancelled and the payment is synced instead.
@@ -263,8 +294,9 @@ expiresAt, status }`. `qrCode` is the VietQR payload string (the client renders 
 5. `data.amount` ≠ payment amount → `200`, payment stays PENDING, error log for staff follow-up. An
    overpayment is not accepted as paid.
 6. Paid (`success` and `data.code == "00"`) → `MarkPaid(PAYOS_WEBHOOK, providerTransactionId = data.reference)`,
-   raw `data` merged into `provider_metadata` (next to the intent, C-D1), then the same allocation as cash
-   (ORDER allocation + `ICreditReservationAdjuster`, or `IDebtRepaymentPosting`). Not paid → `MarkFailed`.
+   raw `data` stored in `provider_metadata`, then the same allocation as cash
+   (ORDER allocation to `payments.order_id` + `ICreditReservationAdjuster`, or `IDebtRepaymentPosting` with no
+   explicit allocations = oldest due first). Not paid → `MarkFailed`.
 7. Paid for a payment cancelled locally → `200`, critical log (money received on a cancelled payment) for
    manual handling; nothing is allocated automatically.
 8. Unexpected exception → `500` so payOS retries; business rejections after a valid signature never answer
@@ -387,7 +419,7 @@ PostgreSQL. In addition:
 
 | Task | Must prove |
 |---|---|
-| C1 | no overpayment, allocation only on PAID, prepayment consumed oldest first, reversal refused once consumed |
+| C1 | no overpayment, allocation only on PAID and only to the payment's own order, prepayment consumed oldest first, reversal refused once consumed; cancelling a paid order reverses the unconsumed part and requests one refund per payment, refund cap per payment, completing refunds marks the payment (PARTIALLY_)REFUNDED |
 | C2 | adjustment movements and costs, uncounted line blocks completion, stale lot blocks completion, never below reserved |
 | C3 | webhook idempotent (same payload twice = one PAID, also concurrently), bad signature 400, registration test and unknown code 200, amount mismatch and overpayment stay PENDING, fractional amount 422, expired link synced to FAILED; adapter tested with a fake gateway, real payOS only opt-in |
 | C4 | returnable quantity counts in-flight returns, return value rounding example, RETURN_IN at original COGS into the original lot, debt-first settlement (design §XXII: 8M → debt 8M; 15M → debt 10M + refund 5M) |
@@ -404,13 +436,13 @@ PostgreSQL. In addition:
 | C-D7 | Use the official payOS .NET SDK (`payOS` 2.1.0, already used in NutriPlan) **only** inside `Infrastructure/Payments/PayOsPaymentGateway`; Application depends only on `IPaymentGateway`. Adding the package to `AgriSage.Infrastructure.csproj` is approved |
 | C-D8 | Missed webhook: when `sync` finds the link PAID at payOS, the payment is applied exactly like a webhook (same lock, amount check, idempotency and allocation) with `confirmation_source = PAYOS_WEBHOOK` and `provider_metadata.confirmedVia = "STATUS_QUERY"`. No schema change |
 | C-D9 | payOS amounts are whole VND; a fractional amount is refused (422) and that part is paid in cash. VND price lists and price overrides should use whole numbers |
+| C-D1 | **Schema change (migration `PaymentOrderLinkAndOrderRefunds`, design §35.18):** `payments.order_id` (NULL FK orders; ORDER_PAYMENT ⇒ NOT NULL, DEBT_REPAYMENT ⇒ NULL). A PENDING payOS payment knows its order from creation; an ORDER payment is allocated only to that order. payOS debt repayments are allocated oldest due date first (no entry selection online) |
+| C-D2 | **Schema change (same migration):** `refunds.sales_return_id` becomes NULL, new `refunds.order_id`; exactly one source; a cancelled-order refund needs its original payment. Cancelling an order (or its last open quantity) reverses the unconsumed ORDER allocations and requests one PENDING refund per payment through the Order aggregate; staff pay back in cash or by bank transfer and complete it |
 
 ### 10.2 Proposed defaults (applied unless the team objects before C starts)
 
 | # | Decision |
 |---|---|
-| C-D1 | **Schema gap:** a PENDING payOS payment has no column for its target order / debt allocations (allocations exist only once PAID). Proposal without migration: keep the intent in `payments.provider_metadata` under a reserved `intent` key (`{"intent":{"orderId":…}}` or `{"intent":{"debtAllocations":[…]}}`), and merge — never overwrite — provider data into the same JSON. Alternative: a reviewed migration adding `target_order_id`; choose one before C3 |
-| C-D2 | **Design gap:** `refunds.sales_return_id` is NOT NULL, so money paid for an order cancelled before fulfillment cannot be recorded as a refund. MVP: cancellation reverses the unconsumed ORDER allocations (`IOrderPaymentCancellation`), the payment stays PAID with an unallocated amount, staff hand the money back outside the system and the reason is audited |
 | C-D3 | Refund proof images reuse the delivery photo upload (`/api/files/delivery-proofs`) |
 | C-D4 | No overpayment: order payments ≤ remaining to pay; debt repayments ≤ current balance, fully allocated |
 | C-D5 | Roles: cash payments, stocktake create/count, return request/receive/inspect = Operate; stocktake completion, manual adjustments, return approve/reject/complete-inspection, all refunds = Manage; Farmers pay, request and cancel only their own |
