@@ -262,7 +262,7 @@ used by the cash endpoint, the payOS webhook and sync (F2.4) and F1.7.
 
 ---
 
-## 6. F1.4 — Confirmation and stock reservation (`Operate`)
+## 6. F1.4 — Confirmation and stock reservation (`Operate`) — done
 
 | Method | Route | Body | Response |
 |---|---|---|---|
@@ -285,6 +285,20 @@ used by the cash endpoint, the payOS webhook and sync (F2.4) and F1.7.
 - Version conflict on a lot balance or the order → 409.
 - The core (steps 2–5 on a tracked order, optionally with explicit lots instead of FEFO) is the shared step used
   by F1.7.
+- Built as: `FefoAllocator` (pure, `Application/Features/Orders`), `OrderConfirmer.ConfirmCoreAsync(order, chosenLots?)`
+  (returns the new `InventoryReservation`, never saves; chosen lots = `LotPick(orderItemId, lotId, baseQuantity)`, each line's
+  picks must add up to its base quantity, lots must be of the line's product and sellable), `OrderConfirmationService`
+  (endpoint transaction), `IRowLockService.LockOrderAsync` then `LockLotBalancesAsync` (ids sorted, `FOR UPDATE`).
+  Lot candidates are read once to get ids, locked, then read again so the balances are the committed ones.
+- Order of checks: status/lines → no open reservation → settlement guard → lots → FEFO → reserve. A refusal at any step
+  saves nothing. The `errors` of a shortage are keyed `items[i]` (index in the order's response order) with the SKU and
+  the missing base units. Audit: `ORDER_CONFIRMED` (reserved lots), `ORDER_PREPARING_STARTED`, `ORDER_MARKED_READY`.
+- `fefo-suggestions`: PENDING → FEFO over sellable lots now (`availableBaseQuantity` = the lot's available stock before
+  this order, only lots with a suggested quantity are listed, `shortageBaseQuantity` per line); CONFIRMED / PREPARING /
+  READY / PARTIALLY_FULFILLED → the open lines of the reservation (available = suggested = remaining reserved); CANCELLED /
+  PARTIALLY_CANCELLED / COMPLETED → 422. `reservation` returns the order's latest reservation (404 when none).
+- The payment check of decision D3 is the real settlement guard's (F3.3); L1 does not duplicate it. Until then
+  `TemporaryOrderSettlementGuard` lets FULL_PAYMENT orders through and refuses CREDIT (422).
 
 `start-preparing` (`CONFIRMED` → `PREPARING`) is optional; `mark-ready` accepts `CONFIRMED` or `PREPARING`
 (decision D10).

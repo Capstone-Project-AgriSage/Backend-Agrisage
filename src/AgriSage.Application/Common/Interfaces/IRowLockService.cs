@@ -11,4 +11,8 @@ public interface IRowLockService
 
     // Serializes cancelling or settling one payment against its payOS webhook.
     Task LockPaymentAsync(Guid paymentId, CancellationToken cancellationToken);
+
+    // Serializes reservation and issue of stock: locks the balances of the given lots in id order (no deadlock between
+    // two orders that share lots). Nothing to lock for an empty list.
+    Task LockLotBalancesAsync(IReadOnlyCollection<Guid> inventoryLotIds, CancellationToken cancellationToken);
 }
