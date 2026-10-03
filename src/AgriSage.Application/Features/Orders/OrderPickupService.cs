@@ -85,7 +85,7 @@ public sealed class OrderPickupService(
                 $"Order '{order.OrderNumber}' is {EnumText.Format(order.Status)}; the rest of a line can be cancelled only after confirmation and before the order ends.");
         }
 
-        order.CancelItemRemaining(itemId, actorId, now);
+        order.CancelItemRemaining(itemId, actorId, now, reason);
         await ReleaseReservationOfItemAsync(order, itemId, actorId, now, reason, cancellationToken);
 
         if (order.Status is OrderStatus.Cancelled or OrderStatus.PartiallyCancelled or OrderStatus.Completed)

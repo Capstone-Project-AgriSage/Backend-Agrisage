@@ -143,6 +143,12 @@ public sealed class OrderConfirmer(
         var left = lots.ToDictionary(l => l.Key, l => l.Value.IsEligibleForSale(today) ? l.Value.Balance.AvailableQuantity : 0);
         var result = new List<FefoAllocation>(items.Count);
 
+        // The same lot named twice for a line counts once (a reservation has one line per item and lot).
+        chosenLots = chosenLots
+            .GroupBy(p => (p.OrderItemId, p.InventoryLotId))
+            .Select(g => new LotPick(g.Key.OrderItemId, g.Key.InventoryLotId, g.Sum(p => p.BaseQuantity)))
+            .ToList();
+
         foreach (var item in items)
         {
             var picks = new List<FefoPick>();

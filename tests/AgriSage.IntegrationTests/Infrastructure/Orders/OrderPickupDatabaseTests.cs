@@ -410,7 +410,7 @@ public class OrderPickupDatabaseTests
 
         var ended = await env.Pickup.CancelRemainingAsync(order.Id, itemId, new CancelRemainingRequest(" Khách không lấy nữa "), Token);
 
-        Assert.Equal("PARTIALLY_CANCELLED", ended.Status);
+        Assert.Equal(("PARTIALLY_CANCELLED", "Khách không lấy nữa"), (ended.Status, ended.CancelReason));
         Assert.NotNull(ended.CompletedAt);
         var line = ended.Items.Single();
         Assert.Equal((20L, 30L, 0L, "PARTIALLY_CANCELLED"), (line.FulfilledBaseQuantity, line.CancelledBaseQuantity, line.RemainingBaseQuantity, line.Status));
@@ -438,7 +438,7 @@ public class OrderPickupDatabaseTests
 
         var single = await ConfirmedOrderAsync(env, sku, 10);
         var cancelled = await env.Pickup.CancelRemainingAsync(single.Id, single.Items.Single().Id, new CancelRemainingRequest("Đặt nhầm"), Token);
-        Assert.Equal(("CANCELLED", "CANCELLED"), (cancelled.Status, cancelled.Items.Single().Status));
+        Assert.Equal(("CANCELLED", "CANCELLED", "Đặt nhầm"), (cancelled.Status, cancelled.Items.Single().Status, cancelled.CancelReason));
         Assert.Equal((100L, 0L), await BalanceAsync(env, lot.Id));
         Assert.Equal("RELEASED", (await env.Confirmation.GetReservationAsync(single.Id, Token)).Status);
 

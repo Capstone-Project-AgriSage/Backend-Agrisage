@@ -255,11 +255,17 @@ public sealed class Order : SoftDeletableEntity, IHasConcurrencyVersion
         RefreshFulfillmentStatus(performedBy, performedAt);
     }
 
-    public void CancelItemRemaining(Guid itemId, Guid cancelledBy, DateTimeOffset cancelledAt)
+    // The reason is kept on the order when this ends it (CANCELLED or PARTIALLY_CANCELLED).
+    public void CancelItemRemaining(Guid itemId, Guid cancelledBy, DateTimeOffset cancelledAt, string? reason = null)
     {
         EnsureFulfillable();
         GetItem(itemId).CancelRemaining();
         RefreshFulfillmentStatus(cancelledBy, cancelledAt);
+
+        if (Status is OrderStatus.Cancelled or OrderStatus.PartiallyCancelled)
+        {
+            CancelReason = reason;
+        }
     }
 
     // Full cancellation is only possible before anything has been fulfilled.

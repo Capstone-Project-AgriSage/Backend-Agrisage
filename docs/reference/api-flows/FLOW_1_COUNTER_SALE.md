@@ -394,7 +394,7 @@ Built as `FulfillmentPostingService.PostAsync(order, lines, source, deliveryId?,
 - `FulfilledValue = round2(base quantity × unit price ÷ conversion)` per order item, summed over its lots.
 - When the order ends (COMPLETED, CANCELLED, PARTIALLY_CANCELLED) any reservation still open is released.
 - The note of a pickup is kept in the `ORDER_PICKED_UP` audit row (`reason`). Cancel-remaining audits
-  `ORDER_ITEM_REMAINING_CANCELLED` with the reason, releases the reservation of that line (no stock movement), and when the
+  `ORDER_ITEM_REMAINING_CANCELLED` with the reason (also stored as `cancelReason` on the order when this ends it as CANCELLED or PARTIALLY_CANCELLED), releases the reservation of that line (no stock movement), and when the
   order ends calls `IOrderSettlementGuard.ReleaseAsync` and, for CANCELLED / PARTIALLY_CANCELLED,
   `IOrderPaymentCancellation` (empty until F1.6). Both routes lock the order first.
 

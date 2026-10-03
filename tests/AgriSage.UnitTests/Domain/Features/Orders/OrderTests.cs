@@ -156,6 +156,24 @@ public class OrderTests
     }
 
     [Fact]
+    public void Cancelling_the_rest_keeps_the_reason_only_when_it_ends_the_order()
+    {
+        var (open, openItem) = CreateConfirmedOrderWithItem();
+        open.RecordFulfillment(openItem.Id, 2, StaffId, Now);
+        Assert.Equal(OrderStatus.PartiallyFulfilled, open.Status);
+        Assert.Null(open.CancelReason);
+
+        var (ended, item) = CreateConfirmedOrderWithItem();
+        ended.RecordFulfillment(item.Id, 6, StaffId, Now);
+        ended.CancelItemRemaining(item.Id, StaffId, Now, "Khách không lấy nữa");
+        Assert.Equal(("Khách không lấy nữa", OrderStatus.PartiallyCancelled), (ended.CancelReason, ended.Status));
+
+        var (untouched, untouchedItem) = CreateConfirmedOrderWithItem();
+        untouched.CancelItemRemaining(untouchedItem.Id, StaffId, Now, "Đặt nhầm");
+        Assert.Equal(("Đặt nhầm", OrderStatus.Cancelled), (untouched.CancelReason, untouched.Status));
+    }
+
+    [Fact]
     public void Full_cancellation_is_only_possible_before_fulfillment()
     {
         var (cancellable, cancellableItem) = CreateConfirmedOrderWithItem();

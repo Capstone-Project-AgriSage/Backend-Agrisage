@@ -402,6 +402,7 @@ public class OrderConfirmationDatabaseTests
         var itemId = created.Items.Single().Id;
         var order = await env.Context.Orders.Include(o => o.Items).SingleAsync(o => o.Id == created.Id, Token);
 
+        // The same lot named twice adds up like one pick: 30 + 30 of the late lot is 60.
         foreach (var bad in new LotPick[][]
                  {
                      [new(itemId, late.Id, 50)],
@@ -418,7 +419,7 @@ public class OrderConfirmationDatabaseTests
         Assert.Equal((100L, 0L), await BalanceAsync(env, late.Id));
         Assert.Equal(Domain.Features.Orders.Enums.OrderStatus.PendingConfirmation, order.Status);
 
-        var reservation = await env.Confirmer.ConfirmCoreAsync(order, [new LotPick(itemId, late.Id, 60)], Token);
+        var reservation = await env.Confirmer.ConfirmCoreAsync(order, [new LotPick(itemId, late.Id, 30), new LotPick(itemId, late.Id, 30)], Token);
         await env.Context.SaveChangesAsync(Token);
 
         // The staff's lot is used although FEFO would have taken the earlier one.
