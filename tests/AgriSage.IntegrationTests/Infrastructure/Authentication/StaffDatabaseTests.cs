@@ -1,3 +1,4 @@
+using AgriSage.Application.Common;
 using AgriSage.Application.Common.Exceptions;
 using AgriSage.Application.Features.Auth.Dtos.Requests;
 using AgriSage.Application.Features.Auth.Services;
@@ -58,8 +59,10 @@ public class StaffDatabaseTests
             var current = new RealDb.MutableUser { UserId = userId, Role = role };
             var errors = new NpgsqlErrorClassifier();
 
-            return (new StaffService(Context, hasher, current, clock, errors),
-                new AuthService(Context, hasher, tokens, current, clock, errors));
+            var audit = new AuditTrail(Context, current, clock);
+
+            return (new StaffService(Context, hasher, current, clock, errors, audit),
+                new AuthService(Context, hasher, tokens, current, clock, errors, audit));
         }
 
         // A user that acts as the caller (Admin or Store Owner) without going through the API.
@@ -388,4 +391,63 @@ public class StaffDatabaseTests
 
         Assert.False(await env.Validator.IsActiveAsync(gone.Id, Token));
     }
-}
+
+    [RealDbFact]
+    public async Task Every_staff_write_is_audited_with_the_actor_and_never_with_a_password()
+    {
+        await using var session = await RealDb.Session.StartAsync();
+        await using var env = await PrepareAsync(session);
+        var admin = await env.NewActorAsync(RoleCode.Admin);
+        var staff = env.StaffAs(admin.Id, "ADMIN");
+        var created = await staff.CreateAsync(NewStaff("SALES_STAFF", email: $"{Guid.NewGuid():N}@example.test"), Token);
+
+        await staff.UpdateAsync(created.Id, new UpdateStaffRequest("Tên mới", RandomPhone(), null, "E-9", null), Token);
+        await staff.LockAsync(created.Id, Token);
+        await staff.UnlockAsync(created.Id, Token);
+        await staff.ResetPasswordAsync(created.Id, new ResetStaffPasswordRequest("SecretNew#123"), Token);
+        await env.AuthAs(created.Id, "SALES_STAFF").ChangePasswordAsync(
+            new ChangePasswordRequest("SecretNew#123", "AnotherSecret#456"), Token);
+        await staff.RemoveAsync(created.Id, Token);
+
+        var logs = await env.Context.AuditLogs.AsNoTracking().Where(a => a.EntityId == created.Id).OrderBy(a => a.OccurredAt).ToListAsync(Token);
+
+        Assert.Equal(
+            ["STAFF_CREATED", "STAFF_UPDATED", "STAFF_LOCKED", "STAFF_UNLOCKED", "STAFF_PASSWORD_RESET", "STAFF_REMOVED"],
+            logs.Where(a => a.EntityType == "STAFF").Select(a => a.Action));
+        Assert.All(logs.Where(a => a.EntityType == "STAFF"), a =>
+        {
+            Assert.Equal(admin.Id, a.ActorUserId);
+            Assert.Equal(env.StoreId, a.StoreId);
+        });
+        var changed = Assert.Single(logs, a => a.Action == "PASSWORD_CHANGED");
+        Assert.Equal(("USER", created.Id), (changed.EntityType, changed.ActorUserId));
+        Assert.Null(changed.NewValues);
+        var updated = logs.Single(a => a.Action == "STAFF_UPDATED");
+        string FullName(string? json) => System.Text.Json.JsonDocument.Parse(json!).RootElement.GetProperty("fullName").GetString()!;
+        Assert.Equal("Tên mới", FullName(updated.NewValues));
+        Assert.NotEqual("Tên mới", FullName(updated.OldValues));
+        var removed = System.Text.Json.JsonDocument.Parse(logs.Single(a => a.Action == "STAFF_REMOVED").NewValues!).RootElement;
+        Assert.Equal(("LEFT", "LOCKED"), (removed.GetProperty("memberStatus").GetString(), removed.GetProperty("userStatus").GetString()));
+        Assert.All(logs, a =>
+        {
+            Assert.DoesNotContain("password", $"{a.OldValues}{a.NewValues}{a.Reason}", StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("SecretNew", $"{a.OldValues}{a.NewValues}{a.Reason}");
+            Assert.DoesNotContain("hash", $"{a.OldValues}{a.NewValues}{a.Reason}", StringComparison.OrdinalIgnoreCase);
+        });
+    }
+
+    [RealDbFact]
+    public async Task A_refused_staff_action_leaves_no_audit_row()
+    {
+        await using var session = await RealDb.Session.StartAsync();
+        await using var env = await PrepareAsync(session);
+        var owner = await env.NewActorAsync(RoleCode.StoreOwner);
+        var otherOwner = await env.NewActorAsync(RoleCode.StoreOwner);
+        var before = await env.Context.AuditLogs.CountAsync(a => a.EntityId == otherOwner.Id, Token);
+
+        // A Store Owner may not manage Store Owners (including themselves): refused before anything changes.
+        await Assert.ThrowsAsync<ForbiddenException>(() => env.StaffAs(owner.Id, "STORE_OWNER").LockAsync(otherOwner.Id, Token));
+        await Assert.ThrowsAsync<ForbiddenException>(() => env.StaffAs(owner.Id, "STORE_OWNER").RemoveAsync(owner.Id, Token));
+
+        Assert.Equal(before, await env.Context.AuditLogs.CountAsync(a => a.EntityId == otherOwner.Id || a.EntityId == owner.Id, Token));
+    }}

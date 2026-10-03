@@ -1,3 +1,4 @@
+using AgriSage.Application.Common;
 using System.Security.Claims;
 using AgriSage.Application.Common.Exceptions;
 using AgriSage.Application.Features.Auth.Dtos.Requests;
@@ -54,7 +55,7 @@ public class AuthDatabaseTests
         var current = new RealDb.MutableUser { UserId = currentUserId };
         var errors = new NpgsqlErrorClassifier();
 
-        return (new AuthService(context, hasher, tokens, current, clock, errors),
+        return (new AuthService(context, hasher, tokens, current, clock, errors, new AuditTrail(context, current, clock)),
             new AdminBootstrapService(context, hasher, errors));
     }
 

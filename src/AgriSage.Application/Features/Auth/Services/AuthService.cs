@@ -18,7 +18,8 @@ public sealed class AuthService(
     IAccessTokenService accessTokens,
     ICurrentUserService currentUser,
     IDateTimeProvider clock,
-    IDatabaseErrorClassifier databaseErrors) : IAuthService
+    IDatabaseErrorClassifier databaseErrors,
+    AuditTrail audit) : IAuthService
 {
     public async Task<AuthResponse> RegisterFarmerAsync(RegisterFarmerRequest request, CancellationToken cancellationToken)
     {
@@ -125,6 +126,7 @@ public sealed class AuthService(
         }
 
         user.ChangePasswordHash(passwordHasher.Hash(request.NewPassword));
+        audit.Record("PASSWORD_CHANGED", "USER", user.Id, storeId: null); // never the password or its hash
         await context.SaveChangesAsync(cancellationToken);
     }
 

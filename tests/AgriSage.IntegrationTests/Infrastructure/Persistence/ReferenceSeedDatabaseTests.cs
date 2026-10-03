@@ -27,6 +27,7 @@ public class ReferenceSeedDatabaseTests
         // Accounts exist now (the first Admin); the seed must not add or change any.
         var usersBefore = await context.Users.CountAsync(Token);
         var membersBefore = await context.StoreMembers.CountAsync(Token);
+        var businessBefore = await BusinessRowsAsync(context);
         var result = await Seeder(context, store).SeedAsync(Token);
         var after = await CountsAsync(context);
         Assert.Equal(new DatabaseSeeder.Result(5, 9, 5, 1), after);
@@ -60,10 +61,8 @@ public class ReferenceSeedDatabaseTests
         Assert.Null(storedStore.TaxCode);
         Assert.Equal(usersBefore, await context.Users.CountAsync(Token));
         Assert.Equal(membersBefore, await context.StoreMembers.CountAsync(Token));
-        Assert.Equal(0, await context.Products.CountAsync(Token));
-        Assert.Equal(0, await context.Orders.CountAsync(Token));
-        Assert.Equal(0, await context.StockMovements.CountAsync(Token));
-        Assert.Equal(0, await context.DebtTransactions.CountAsync(Token));
+        // The seed adds no business data; rows that already exist (manual testing on the shared database) are not its concern.
+        Assert.Equal(businessBefore, await BusinessRowsAsync(context));
     }
 
     [RealDbFact]
@@ -222,6 +221,13 @@ public class ReferenceSeedDatabaseTests
             Email = store.Email, TaxCode = store.TaxCode
         };
     }
+
+    private static async Task<(int Products, int Orders, int StockMovements, int DebtTransactions)> BusinessRowsAsync(
+        AgriSageDbContext context) => (
+        await context.Products.CountAsync(Token),
+        await context.Orders.CountAsync(Token),
+        await context.StockMovements.CountAsync(Token),
+        await context.DebtTransactions.CountAsync(Token));
 
     private static async Task<DatabaseSeeder.Result> CountsAsync(AgriSageDbContext context) => new(
         await context.Roles.IgnoreQueryFilters().CountAsync(Token),

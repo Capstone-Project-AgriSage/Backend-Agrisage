@@ -16,13 +16,17 @@ namespace AgriSage.Application.Features.Staff.Services;
 
 // Staff = users with a staff role who are members of the single active store. A create writes the User and the
 // StoreMember in one SaveChanges (one transaction). Rules: StaffPolicy; the caller's role comes from the JWT.
+// Every write is audited (audit_logs, entity STAFF) in the same save; passwords and hashes are never audited.
 public sealed class StaffService(
     IAgriSageDbContext context,
     IPasswordHashService passwordHasher,
     ICurrentUserService currentUser,
     IDateTimeProvider clock,
-    IDatabaseErrorClassifier databaseErrors) : IStaffService
+    IDatabaseErrorClassifier databaseErrors,
+    AuditTrail audit) : IStaffService
 {
+    private const string EntityType = "STAFF";
+
     private sealed record Actor(Guid Id, RoleCode Role);
 
     private sealed record StaffRow(
@@ -59,6 +63,7 @@ public sealed class StaffService(
         var member = new StoreMember(storeId, user.Id, Clean(request.EmployeeCode), request.JoinedAt);
         context.Users.Add(user);
         context.StoreMembers.Add(member);
+        audit.Record("STAFF_CREATED", EntityType, user.Id, storeId, newValues: Snapshot(user, role.Code, member));
         await SaveAsync(cancellationToken);
 
         return ToResponse(user, role.Code, member);
@@ -119,10 +124,12 @@ public sealed class StaffService(
         var user = member.User;
         var (phone, email) = Contact(request.PhoneNumber, request.Email);
         await EnsureContactIsFreeAsync(phone, email, user.Id, cancellationToken);
+        var before = Snapshot(user, user.Role.Code, member);
 
         user.UpdateProfile(request.FullName.Trim(), user.AvatarUrl);
         user.UpdateContact(email, phone);
         member.UpdateEmployment(Clean(request.EmployeeCode), request.JoinedAt);
+        audit.Record("STAFF_UPDATED", EntityType, user.Id, member.StoreId, before, Snapshot(user, user.Role.Code, member));
         await SaveAsync(cancellationToken);
 
         return ToResponse(user, user.Role.Code, member);
@@ -134,6 +141,7 @@ public sealed class StaffService(
         EnsureNotSelf(member, "lock");
 
         member.User.ChangeStatus(UserStatus.Locked);
+        Record("STAFF_LOCKED", member);
         await context.SaveChangesAsync(cancellationToken);
     }
 
@@ -147,6 +155,7 @@ public sealed class StaffService(
             member.Activate();
         }
 
+        Record("STAFF_UNLOCKED", member);
         await context.SaveChangesAsync(cancellationToken);
     }
 
@@ -159,6 +168,7 @@ public sealed class StaffService(
         }
 
         member.User.ChangePasswordHash(passwordHasher.Hash(request.NewPassword));
+        Record("STAFF_PASSWORD_RESET", member);
         await context.SaveChangesAsync(cancellationToken);
     }
 
@@ -173,8 +183,30 @@ public sealed class StaffService(
         }
 
         member.User.ChangeStatus(UserStatus.Locked);
+        Record("STAFF_REMOVED", member);
         await context.SaveChangesAsync(cancellationToken);
     }
+
+    // Status changes: the resulting user/member statuses only (no contact data, never a password or hash).
+    private void Record(string action, StoreMember member) => audit.Record(
+        action, EntityType, member.UserId, member.StoreId,
+        newValues: new
+        {
+            Role = RoleCodeFormat.ToText(member.User.Role.Code),
+            UserStatus = member.User.Status.ToString().ToUpperInvariant(),
+            MemberStatus = member.Status.ToString().ToUpperInvariant(),
+            member.LeftAt
+        });
+
+    private static object Snapshot(User user, RoleCode role, StoreMember member) => new
+    {
+        Role = RoleCodeFormat.ToText(role),
+        user.FullName,
+        user.PhoneNumber,
+        user.Email,
+        member.EmployeeCode,
+        member.JoinedAt
+    };
 
     private Actor GetActor()
     {

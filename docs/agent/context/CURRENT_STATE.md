@@ -217,6 +217,7 @@ setup documentation
   (registered for `IPriceResolver`; `TemporaryPriceResolver` deleted), catalog prices (`PublicPackaging.Price`,
   `PublicProductListItem.FromPrice`), shared `Application/Common/AuditTrail` and `Common/Validators/MoneyRules`
   (`MustBeMoney`, moved from GoodsReceipts). Domain: `PriceListItem.Reinstate`. No schema change, no migration.
+- Done (branch `feature/staff-audit`) — Staff audit: `StaffService` (create, update, lock, unlock, reset password, remove) and `AuthService.ChangePasswordAsync` write `audit_logs` through `AuditTrail` (no passwords or hashes). Seed test no longer requires an empty `products` table (compares before/after). No schema change, no migration.
 
 ## Not Yet Implied by Foundation Completion
 
