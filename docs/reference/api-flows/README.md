@@ -256,7 +256,7 @@ first. Implementations never call `SaveChangesAsync` or open a transaction (§3.
 | Interface | Folder | Owner task | Used by | Temporary behaviour until then |
 |---|---|---|---|---|
 | `IPriceResolver` | `Features/Pricing` | F1.1 | F1.2, F1.7, F2.2, F2.3 | **real implementation done** (`PriceResolver`) |
-| `IOrderPrepaymentLedger` | `Features/Payments` | F1.3 | F3.3, F3.4 | FULL_PAYMENT order = fully paid (total), CREDIT order = 0 |
+| `IOrderPrepaymentLedger` | `Features/Payments` | F1.3 | F3.3, F3.4 | **real implementation done** (`OrderPrepaymentLedger`) |
 | `IOrderPaymentCancellation` | `Features/Payments` | F1.6 | F1.5 (cancel-remaining), F1.6, F2.3 (Farmer cancel) | returns an empty list |
 | `IOrderSettlementGuard` | `Features/Credit` | F3.3 | F1.4 (confirm), F1.6 (cancel), F1.7 | accepts FULL_PAYMENT without the payment check, refuses CREDIT (422) |
 | `ICreditReservationAdjuster` | `Features/Credit` | F3.3 | F1.3 (`PaymentAllocator`), F2.4 | does nothing |
@@ -407,7 +407,7 @@ public interface IDebtReturnPosting
 |---|---|---|---|
 | `AuditTrail` (`Application/Common`, done) | F1.1 | every flow that must write `audit_logs` (price lists, overrides, store-managed accounts, credit limits, debt actions…) | `Record(action, entityType, entityId, storeId, oldValues?, newValues?, reason?)` adds one row (camelCase JSON, actor = current user) to the caller's unit of work and never saves; never pass secrets |
 | `OrderBuilder` (`Application/Features/Orders`, done) | F1.2 | F2.3 (checkout), F1.7 | `BuildAsync(OrderDraft)` builds a PENDING_CONFIRMATION order with price and customer snapshots from a customer + lines; validates sellable products/sale packagings and price overrides |
-| `PaymentAllocator` | F1.3 | F2.4 (webhook/sync), F1.7 | a payment just became PAID: ORDER → one ORDER allocation to `payments.order_id` + `ICreditReservationAdjuster` for a confirmed CREDIT order; DEBT → `IDebtRepaymentPosting` |
+| `PaymentAllocator` (`Application/Features/Payments`, done) | F1.3 | F2.4 (webhook/sync), F1.7 | `AllocateAsync(payment, order?, debtAllocations?, actorId)`; a payment just became PAID: ORDER → one ORDER allocation to `payments.order_id` + `ICreditReservationAdjuster` for a confirmed CREDIT order; DEBT → `IDebtRepaymentPosting` |
 | `OrderConfirmer` core | F1.4 | F1.7 | settlement guard → FEFO/explicit lots → `InventoryLot.Reserve` → reservation → `order.Confirm` |
 | `FulfillmentPostingService` | F1.5 | F2.6, F1.7 | FLOW_1 §7 |
 | `OrderCanceller` | F1.6 | F2.3 (Farmer cancel, after the ownership check) | FLOW_1 §8: cancel + reservation release + `IOrderSettlementGuard.ReleaseAsync` + `IOrderPaymentCancellation` |

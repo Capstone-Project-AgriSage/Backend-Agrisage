@@ -59,7 +59,7 @@ public sealed class CreateCounterOrderRequestValidator : AbstractValidator<Creat
         RuleForEach(r => r.Items).SetValidator(new OrderItemRequestValidator()).When(r => r.Items is not null);
         RuleFor(r => r.DeliveryAddress!).SetValidator(new DeliveryAddressRequestValidator()).When(r => r.DeliveryAddress is not null);
 
-        RuleFor(r => r.FarmerProfileId).NotEmpty()
+        RuleFor(r => r.FarmerProfileId).Must(id => id is { } value && value != Guid.Empty)
             .When(r => EnumText.TryParse<CustomerType>(r.CustomerType, out var type) && type == CustomerType.Registered)
             .WithMessage("A REGISTERED order needs a farmerProfileId.");
         RuleFor(r => r).Must(r => (r.AddressId is null) != (r.DeliveryAddress is null))

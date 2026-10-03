@@ -219,6 +219,7 @@ setup documentation
   (`MustBeMoney`, moved from GoodsReceipts). Domain: `PriceListItem.Reinstate`. No schema change, no migration.
 - Done (branch `feature/staff-audit`) — Staff audit: `StaffService` (create, update, lock, unlock, reset password, remove) and `AuthService.ChangePasswordAsync` write `audit_logs` through `AuditTrail` (no passwords or hashes). Seed test no longer requires an empty `products` table (compares before/after). No schema change, no migration.
 - Done (branch `feature/f1-2-counter-orders`, task F1.2) — Staff counter orders: 9 routes of FLOW_1 §4 (`Api/Features/Orders/OrdersController`, `Application/Features/Orders`: `OrderService`, `OrderBuilder` shared step, `OrderQueries`, validators). Walk-in name optional ("Khách lẻ"); price override audited (`PRICE_OVERRIDE`); lines added later use the order's own price list. Domain: `Order.ChangeNote`. No schema change, no migration.
+- Done (branch `feature/f1-3-cash-payments`, task F1.3) — Cash payments: 7 routes of FLOW_1 §5 (`Api/Features/Payments/PaymentsController` and `MePaymentsController`, `Application/Features/Payments`: `PaymentService`, `MyPaymentService`, `PaymentQueries`, `PaymentAllocator` shared step, real `OrderPrepaymentLedger` replacing `TemporaryOrderPrepaymentLedger`). `IRowLockService` gained `LockOrderAsync` and `LockPaymentAsync`; `ApiRoles.Farmer`; shared `RefundResponse`. DEBT_REPAYMENT still refused until F3.5. No schema change, no migration.
 
 ## Not Yet Implied by Foundation Completion
 

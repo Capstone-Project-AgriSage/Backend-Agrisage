@@ -56,6 +56,11 @@ public static class DependencyInjection
         services.AddScoped<OrderQueries>();
         services.AddScoped<IOrderService, OrderService>();
 
+        services.AddScoped<PaymentAllocator>();
+        services.AddScoped<PaymentQueries>();
+        services.AddScoped<IPaymentService, PaymentService>();
+        services.AddScoped<IMyPaymentService, MyPaymentService>();
+
         // Cross-flow interfaces (docs/reference/api-flows/README.md §4). Each line is replaced by its owner task with
         // the real implementation; the Temporary* class is then deleted (Common/Placeholders).
         services.AddScoped<IPriceResolver, PriceResolver>();                                      // F1.1 (real)
@@ -64,7 +69,7 @@ public static class DependencyInjection
         services.AddScoped<IFulfillmentFinancialPosting, TemporaryFulfillmentFinancialPosting>(); // F3.4
         services.AddScoped<IDebtRepaymentPosting, TemporaryDebtRepaymentPosting>();               // F3.5
         services.AddScoped<IDebtReturnPosting, TemporaryDebtReturnPosting>();                     // F3.5
-        services.AddScoped<IOrderPrepaymentLedger, TemporaryOrderPrepaymentLedger>();             // F1.3
+        services.AddScoped<IOrderPrepaymentLedger, OrderPrepaymentLedger>();                      // F1.3 (real)
         services.AddScoped<IOrderPaymentCancellation, TemporaryOrderPaymentCancellation>();       // F1.6
 
         // Further feature application services are registered here by later tasks.

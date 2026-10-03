@@ -12,4 +12,7 @@ public static class ApiRoles
 
     // Read internal data: every staff role.
     public const string Read = "ADMIN,STORE_OWNER,SALES_STAFF,DELIVERY_STAFF";
+
+    // Registered customers, for their own data under /api/me/....
+    public const string Farmer = "FARMER";
 }

@@ -10,4 +10,12 @@ public sealed class RowLockService(AgriSageDbContext context) : IRowLockService
     public async Task LockGoodsReceiptAsync(Guid goodsReceiptId, CancellationToken cancellationToken) =>
         await context.Database.ExecuteSqlInterpolatedAsync(
             $"SELECT 1 FROM goods_receipts WHERE id = {goodsReceiptId} FOR UPDATE", cancellationToken);
+
+    public async Task LockOrderAsync(Guid orderId, CancellationToken cancellationToken) =>
+        await context.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT 1 FROM orders WHERE id = {orderId} FOR UPDATE", cancellationToken);
+
+    public async Task LockPaymentAsync(Guid paymentId, CancellationToken cancellationToken) =>
+        await context.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT 1 FROM payments WHERE id = {paymentId} FOR UPDATE", cancellationToken);
 }

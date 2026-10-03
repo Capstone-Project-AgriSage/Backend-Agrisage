@@ -186,7 +186,7 @@ and F1.7.
 
 ---
 
-## 5. F1.3 — Cash payments and payment queries
+## 5. F1.3 — Cash payments and payment queries — done
 
 | Method | Route | Roles | Body | Response |
 |---|---|---|---|---|
@@ -224,7 +224,16 @@ transaction.
   explicit allocations must sum to `amount`. The whole amount is allocated (no floating cash). Until F3.5 is merged
   the temporary implementation refuses DEBT_REPAYMENT (422).
 - Allocations are only created on PAID payments (design §35.7); the context binds the allocation type.
-- payOS payments (F2.4) appear in the same lists and summaries.
+- payOS payments (F2.4) appear in the same lists and summaries. `paymentMethod` text is `CASH` / `PAYOS` and
+  `confirmationSource` `STAFF` / `PAYOS_WEBHOOK` (`PaymentText`, not `EnumText`, which would split `PAY_OS`).
+- `POST /api/payments/{id}/cancel`: only PENDING (a PAID or already closed payment → 422); a payOS payment → 422 "cancel
+  through payOS" until F2.4 replaces it. The row is locked first (`IRowLockService.LockPaymentAsync`); audit
+  `PAYMENT_CANCELLED` keeps the reason. Receiving cash audits `PAYMENT_RECEIVED`. The order is locked
+  (`LockOrderAsync`) before the remaining amount is checked.
+- `/api/me/...`: the Farmer is the signed-in user's profile; a user without one → 403; another Farmer's payment or order →
+  404. Payer name = the paying Farmer, else the order's customer (walk-in).
+- `PaymentQueries` (`FindFarmerProfileIdAsync`, `GetAsync`, `ListAsync`, `GetOrderSummaryAsync`) and the shared
+  `RefundResponse` (`Application/Features/Returns/RefundResponse.cs`, built by `RefundResponse.From`) are reused by L2/L3/L4.
 
 `PaymentListRequest` (query): `paymentContext`, `paymentMethod`, `status`, `orderId`, `farmerProfileId`,
 `fromDate`, `toDate`, `search` (payment number), paging.
@@ -238,6 +247,14 @@ managed by F4.5).
 - `GetAvailableAsync` = Σ (allocated − prepayment consumed) of those allocations.
 - `ConsumeAsync(orderId, max)` consumes oldest allocations first (rule 25) via `Payment.ConsumePrepayment`,
   returns the consumed amount.
+- It reads the order's payments from the database **and** the ones still unsaved in the same unit of work
+  (`DbSet.Local`), with status and allocations taken from the tracked objects, so F1.7 sees the payment it just added.
+
+**`PaymentAllocator`** (shared step, README §4.9, `Application/Features/Payments`): `AllocateAsync(payment, order?, debtAllocations?,
+actorId)` for a payment that just became PAID. ORDER_PAYMENT → one ORDER allocation of the whole payment to its order (the
+domain refuses another order), plus `ICreditReservationAdjuster` when the order is a CONFIRMED / PREPARING / READY /
+PARTIALLY_FULFILLED CREDIT order. DEBT_REPAYMENT → `IDebtRepaymentPosting.ApplyAsync`, and any amount left unallocated → 422.
+A payment that is not PAID → 422.
 - All three also count allocations added earlier in the same unit of work (README §3.2).
 
 **`PaymentAllocator`** (shared step, README §4.9): `AllocateAsync(Payment paidPayment, IReadOnlyList<RequestedDebtAllocation>? requested, Guid? actorId, ct)`;
