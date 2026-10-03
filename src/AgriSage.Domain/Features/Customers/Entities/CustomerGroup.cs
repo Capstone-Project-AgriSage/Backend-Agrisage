@@ -1,4 +1,5 @@
 using AgriSage.Domain.Common;
+using AgriSage.Domain.Common.Exceptions;
 
 namespace AgriSage.Domain.Features.Customers.Entities;
 
@@ -31,6 +32,11 @@ public sealed class CustomerGroup : SoftDeletableEntity
 
     public bool IsActive { get; private set; }
 
+    // Credit tier of the group's customers (database design §35.20): default tier of their new credit profiles and,
+    // through the tier, their debt term. NULL = the group suggests no tier. "ACTIVE tier of the same Store" is an
+    // Application check (cross-aggregate).
+    public Guid? DefaultCreditTierId { get; private set; }
+
     public void Update(string name, string? description, int priority)
     {
         Name = Guard.NotNullOrWhiteSpace(name);
@@ -45,4 +51,9 @@ public sealed class CustomerGroup : SoftDeletableEntity
     public void Activate() => IsActive = true;
 
     public void Deactivate() => IsActive = false;
+
+    public void SetDefaultCreditTier(Guid? creditTierId) =>
+        DefaultCreditTierId = creditTierId == Guid.Empty
+            ? throw new DomainException("A default credit tier id cannot be empty; use null to remove the tier.")
+            : creditTierId;
 }

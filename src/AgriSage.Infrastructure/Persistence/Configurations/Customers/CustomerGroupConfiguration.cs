@@ -1,3 +1,4 @@
+using AgriSage.Domain.Features.Credit.Entities;
 using AgriSage.Domain.Features.Customers.Entities;
 using AgriSage.Domain.Features.Stores.Entities;
 using AgriSage.Infrastructure.Persistence.Configurations.Common;
@@ -21,6 +22,7 @@ internal sealed class CustomerGroupConfiguration : EntityConfiguration<CustomerG
         builder.Property(group => group.IsActive).HasDbDefault(true);
 
         builder.HasReference<CustomerGroup, Store>(group => group.StoreId);
+        builder.HasReference<CustomerGroup, CreditTier>(group => group.DefaultCreditTierId); // §35.20
 
         builder.HasIndex(group => new { group.StoreId, group.Code }).IsUnique();
 

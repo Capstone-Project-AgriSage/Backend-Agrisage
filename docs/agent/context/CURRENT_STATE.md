@@ -197,8 +197,13 @@ setup documentation
   kept, 19 routes added (quick counter sale, stock summary/alerts/expire-due, Excel receipt import, stock card,
   Farmer delivery tracking, group credit tier, Farmer allocation preview, sales/delivery/debt/inventory reports).
   DI tags and interface comments now name the owner tasks (F1.1, F1.3, F1.6, F3.3–F3.5). Design §35.20 (debt term by
-  customer type) written; its migration `CustomerGroupDefaultCreditTier` is task F0.2 (not created yet). No code
-  behaviour change.
+  customer type) written; its migration `CustomerGroupDefaultCreditTier` is task F0.2. No code behaviour change.
+- Done (branch `feature/customer-group-credit-tier`, task F0.2) — migration
+  `20261003085951_CustomerGroupDefaultCreditTier`: `customer_groups.default_credit_tier_id` uuid NULL, index, FK
+  `credit_tiers` NO ACTION (design §35.20; still 67 tables). Domain `CustomerGroup.DefaultCreditTierId` +
+  `SetDefaultCreditTier`; migration review test, reviewed migration list, rolled-back real-DB tests (FK, no physical
+  delete of a used tier). **Not applied to `agrisage-dev` yet** (needs the lead's approval); the real-DB tests of
+  this migration fail until it is applied.
 
 ## Not Yet Implied by Foundation Completion
 
