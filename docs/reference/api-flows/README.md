@@ -409,7 +409,7 @@ public interface IDebtReturnPosting
 | `OrderBuilder` (`Application/Features/Orders`, done) | F1.2 | F2.3 (checkout), F1.7 | `BuildAsync(OrderDraft)` builds a PENDING_CONFIRMATION order with price and customer snapshots from a customer + lines; validates sellable products/sale packagings and price overrides |
 | `PaymentAllocator` (`Application/Features/Payments`, done) | F1.3 | F2.4 (webhook/sync), F1.7 | `AllocateAsync(payment, order?, debtAllocations?, actorId)`; a payment just became PAID: ORDER → one ORDER allocation to `payments.order_id` + `ICreditReservationAdjuster` for a confirmed CREDIT order; DEBT → `IDebtRepaymentPosting` |
 | `OrderConfirmer` core (`Application/Features/Orders`, done) | F1.4 | F1.7 | settlement guard → FEFO/explicit lots → `InventoryLot.Reserve` → reservation → `order.Confirm` |
-| `FulfillmentPostingService` | F1.5 | F2.6, F1.7 | FLOW_1 §7 |
+| `FulfillmentPostingService` (`Application/Features/Orders`, done) | F1.5 | F2.6, F1.7 | `PostAsync(order, lines, source, deliveryId?, attemptId?, actorId, at)`; FLOW_1 §7 |
 | `OrderCanceller` | F1.6 | F2.3 (Farmer cancel, after the ownership check) | FLOW_1 §8: cancel + reservation release + `IOrderSettlementGuard.ReleaseAsync` + `IOrderPaymentCancellation` |
 
 Owners publish these first (milestones M1/M2 of §6) so the other flows build on real code.

@@ -6,7 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace AgriSage.IntegrationTests.Api;
 
-// Order confirmation endpoints (F1.4) without a database: roles and Swagger.
+// Order confirmation, pickup and cancel-remaining endpoints (F1.4, F1.5) without a database: roles, validation and Swagger.
 public class OrderConfirmationHttpTests : IClassFixture<StaffHttpTests.StaffApiFactory>
 {
     private readonly StaffHttpTests.StaffApiFactory _factory;
@@ -41,7 +41,9 @@ public class OrderConfirmationHttpTests : IClassFixture<StaffHttpTests.StaffApiF
         { "POST", $"/api/orders/{Id}/confirm" },
         { "POST", $"/api/orders/{Id}/start-preparing" },
         { "POST", $"/api/orders/{Id}/mark-ready" },
-        { "GET", $"/api/orders/{Id}/reservation" }
+        { "GET", $"/api/orders/{Id}/reservation" },
+        { "POST", $"/api/orders/{Id}/pickup" },
+        { "POST", $"/api/orders/{Id}/items/{Id}/cancel-remaining" }
     };
 
     [Theory]
@@ -69,6 +71,18 @@ public class OrderConfirmationHttpTests : IClassFixture<StaffHttpTests.StaffApiF
     }
 
     [Fact]
+    public async Task Staff_reach_validation_of_pickup_and_cancel_remaining()
+    {
+        using var client = ClientFor("SALES_STAFF");
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync($"/api/orders/{Id}/pickup", new { items = Array.Empty<object>() }, Token)).StatusCode);
+        Assert.Equal(
+            HttpStatusCode.BadRequest,
+            (await client.PostAsJsonAsync($"/api/orders/{Id}/pickup", new { items = new[] { new { orderItemId = Guid.NewGuid(), lots = new[] { new { inventoryLotId = Guid.NewGuid(), baseQuantity = 0 } } } } }, Token)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync($"/api/orders/{Id}/items/{Id}/cancel-remaining", new { reason = "" }, Token)).StatusCode);
+    }
+
+    [Fact]
     public async Task Swagger_lists_the_confirmation_endpoints()
     {
         using var client = ClientFor(null);
@@ -78,7 +92,8 @@ public class OrderConfirmationHttpTests : IClassFixture<StaffHttpTests.StaffApiF
         foreach (var path in new[]
                  {
                      "/api/orders/{id}/fefo-suggestions", "/api/orders/{id}/confirm", "/api/orders/{id}/start-preparing",
-                     "/api/orders/{id}/mark-ready", "/api/orders/{id}/reservation"
+                     "/api/orders/{id}/mark-ready", "/api/orders/{id}/reservation", "/api/orders/{id}/pickup",
+                     "/api/orders/{id}/items/{itemId}/cancel-remaining"
                  })
         {
             Assert.True(paths.TryGetProperty(path, out _), path);

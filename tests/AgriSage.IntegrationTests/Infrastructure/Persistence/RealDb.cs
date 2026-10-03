@@ -31,6 +31,11 @@ public sealed class RealDbFactAttribute : FactAttribute
 
 internal static class RealDb
 {
+    // These tests switch off the store's ACTIVE walk-in price lists (inside their rolled-back transaction) to start from a
+    // known state. That locks the same rows, so the classes that do it run one after the other (and use fewer of the
+    // pooler's connections); without it they would wait for each other whenever agrisage-dev has an active list.
+    public const string WalkInPriceListCollection = "RealDb walk-in price lists";
+
     public static bool Enabled => Environment.GetEnvironmentVariable("AGRISAGE_DB_TESTS") == "1";
 
     public static string SkipReason => "Real PostgreSQL tests; set AGRISAGE_DB_TESTS=1 (and Database:Password) to run.";

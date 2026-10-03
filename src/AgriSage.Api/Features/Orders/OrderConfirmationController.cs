@@ -32,4 +32,16 @@ public sealed class OrderConfirmationController(IOrderConfirmationService servic
     [HttpGet("reservation")]
     public async Task<ActionResult<ReservationResponse>> GetReservation(Guid id, CancellationToken cancellationToken) =>
         await service.GetReservationAsync(id, cancellationToken);
+
+    // Staff send the lots they actually handed over; stock leaves, the reservation is consumed, debt is posted by F3.4.
+    [HttpPost("pickup")]
+    public async Task<ActionResult<OrderResponse>> Pickup(
+        Guid id, PickupRequest request, [FromServices] IOrderPickupService pickup, CancellationToken cancellationToken) =>
+        await pickup.PickupAsync(id, request, cancellationToken);
+
+    // Drops what is left of one line and releases its reservation; may end the order (PARTIALLY_CANCELLED).
+    [HttpPost("items/{itemId:guid}/cancel-remaining")]
+    public async Task<ActionResult<OrderResponse>> CancelRemaining(
+        Guid id, Guid itemId, CancelRemainingRequest request, [FromServices] IOrderPickupService pickup, CancellationToken cancellationToken) =>
+        await pickup.CancelRemainingAsync(id, itemId, request, cancellationToken);
 }

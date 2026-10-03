@@ -57,6 +57,8 @@ public static class DependencyInjection
         services.AddScoped<IOrderService, OrderService>();
         services.AddScoped<OrderConfirmer>();
         services.AddScoped<IOrderConfirmationService, OrderConfirmationService>();
+        services.AddScoped<FulfillmentPostingService>();
+        services.AddScoped<IOrderPickupService, OrderPickupService>();
 
         services.AddScoped<PaymentAllocator>();
         services.AddScoped<PaymentQueries>();

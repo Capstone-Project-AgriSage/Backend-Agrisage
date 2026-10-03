@@ -22,6 +22,7 @@ namespace AgriSage.IntegrationTests.Infrastructure.Pricing;
 // REAL PostgreSQL (opt-in AGRISAGE_DB_TESTS=1): price lists, price resolution and catalog prices (F1.1), always
 // rolled back. Existing active walk-in lists and default groups are switched off inside the transaction first, so
 // the results do not depend on data already in agrisage-dev.
+[Collection(RealDb.WalkInPriceListCollection)]
 public class PricingDatabaseTests
 {
     private static CancellationToken Token => TestContext.Current.CancellationToken;

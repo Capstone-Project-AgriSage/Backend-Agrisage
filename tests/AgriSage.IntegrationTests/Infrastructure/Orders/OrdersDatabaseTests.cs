@@ -25,6 +25,7 @@ namespace AgriSage.IntegrationTests.Infrastructure.Orders;
 // Active walk-in lists and default groups already in agrisage-dev are switched off inside the transaction first.
 // Two people editing one order at once cannot be reproduced here (the test data is never committed); the version
 // check itself is covered by the shared concurrency tests.
+[Collection(RealDb.WalkInPriceListCollection)]
 public class OrdersDatabaseTests
 {
     private static CancellationToken Token => TestContext.Current.CancellationToken;

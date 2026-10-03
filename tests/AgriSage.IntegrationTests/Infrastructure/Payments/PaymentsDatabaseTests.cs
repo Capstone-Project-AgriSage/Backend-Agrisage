@@ -28,6 +28,7 @@ namespace AgriSage.IntegrationTests.Infrastructure.Payments;
 // the PaymentAllocator step (F1.3), always rolled back. Active walk-in lists already in agrisage-dev are switched off
 // inside the transaction first. The row lock runs for real inside the test transaction; two simultaneous payments
 // cannot be reproduced here because the test data is never committed.
+[Collection(RealDb.WalkInPriceListCollection)]
 public class PaymentsDatabaseTests
 {
     private static CancellationToken Token => TestContext.Current.CancellationToken;

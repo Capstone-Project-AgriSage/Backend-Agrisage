@@ -342,7 +342,7 @@ Reservation status is derived (§35.3), never set by a request.
 
 ---
 
-## 7. F1.5 — Fulfillment posting and Pickup (`Operate`)
+## 7. F1.5 — Fulfillment posting and Pickup (`Operate`) — done
 
 | Method | Route | Body | Response |
 |---|---|---|---|
@@ -379,6 +379,24 @@ lock lot balances in id order → reject expired/blocked/quarantined lots → SA
 with cost snapshot (weighted average cost) → decrease on hand and reserved → consume reservation items →
 `order.RecordFulfillment` → `IFulfillmentFinancialPosting.PostAsync` (README §4.6) → post the movement. The caller
 saves once and commits.
+
+Built as `FulfillmentPostingService.PostAsync(order, lines, source, deliveryId?, attemptId?, actorId, at)` in
+`Application/Features/Orders` (`FulfillmentLine(orderItemId, lotId, baseQuantity)`; returns the movement and the
+`FulfilledLine`s). Rules settled while building:
+- All checks run before anything changes: status, lines of the same (item, lot) are added together, per item the sum ≤
+  remaining base quantity and every lot quantity is a whole number of packages, the order has an open reservation, every
+  lot exists, belongs to the item's product and `IsEligibleForSale(today)`. Problems come back as one 422 with `errors`
+  keyed `items[i]` (index in the order's response order).
+- A lot that holds the item's reservation is issued with `IssueReserved` and the reservation item is consumed. Another
+  lot is issued with `IssueUnreserved` (so stock reserved for other orders cannot be taken) and the same quantity of the
+  item's reservation is released in other lots (lots not picked in this call first). Picks that hold their own reservation
+  are processed first so one pick never releases what another still needs. A lot used both ways gets two movement items.
+- `FulfilledValue = round2(base quantity × unit price ÷ conversion)` per order item, summed over its lots.
+- When the order ends (COMPLETED, CANCELLED, PARTIALLY_CANCELLED) any reservation still open is released.
+- The note of a pickup is kept in the `ORDER_PICKED_UP` audit row (`reason`). Cancel-remaining audits
+  `ORDER_ITEM_REMAINING_CANCELLED` with the reason, releases the reservation of that line (no stock movement), and when the
+  order ends calls `IOrderSettlementGuard.ReleaseAsync` and, for CANCELLED / PARTIALLY_CANCELLED,
+  `IOrderPaymentCancellation` (empty until F1.6). Both routes lock the order first.
 
 ---
 

@@ -25,6 +25,7 @@ namespace AgriSage.IntegrationTests.Infrastructure.Orders;
 // reservation reads (F1.4), always rolled back. Active walk-in lists already in agrisage-dev are switched off inside the
 // transaction first. The lot row locks run for real inside the test transaction; two staff confirming orders that share
 // a lot at the same moment cannot be reproduced here because the test data is never committed.
+[Collection(RealDb.WalkInPriceListCollection)]
 public class OrderConfirmationDatabaseTests
 {
     private static CancellationToken Token => TestContext.Current.CancellationToken;
