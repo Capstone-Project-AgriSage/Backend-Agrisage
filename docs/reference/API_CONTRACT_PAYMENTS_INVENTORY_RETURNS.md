@@ -1,6 +1,6 @@
 # API Contract — Payments, payOS, Stocktake/Adjustments and Returns (Group C)
 
-Version 1.5 — 2026-10-03 (all decisions C-D1..C-D9 settled; C-D6 exact stale detection). Scope: tasks C1–C5 and the interfaces group C provides to groups A and B.
+Version 1.6 — 2026-10-03 (all decisions settled; interfaces and temporary implementations in the code). Scope: tasks C1–C5 and the interfaces group C provides to groups A and B.
 
 Sources: `DATABASE_DESIGN.md` §28–29, §36–37, §52–54, §7.5, §XVI-D, §XXII, §35.7–35.11; `BUSINESS_RULES.md`
 rules 10, 25–27, 30–33, 52–58. When this file and the design disagree, the design wins and this file is
@@ -125,7 +125,7 @@ public interface IOrderPaymentCancellation
 }
 
 public sealed record CancellationRefundInfo(
-    Guid RefundId, string RefundNumber, Guid PaymentId, string RefundMethod, decimal Amount);
+    Guid RefundId, string RefundNumber, Guid PaymentId, RefundMethod RefundMethod, decimal Amount);
 ```
 
 Refunds of a cancelled order (Manage; staff pay back outside the system, no automatic payOS refund):
@@ -401,6 +401,10 @@ externalReference?, note? }`.
 ---
 
 ## 8. Interfaces
+
+All interfaces below and their temporary implementations are already in the code on `main` (`Features/Payments`,
+`Features/Credit`, `Features/Debt`; `Common/Placeholders`) — see `API_CONTRACT_SALES.md` §9 for the replacement
+procedure. C1 replaces `TemporaryOrderPrepaymentLedger` and `TemporaryOrderPaymentCancellation`.
 
 Provided by C (real implementations):
 

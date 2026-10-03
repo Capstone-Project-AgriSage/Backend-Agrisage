@@ -1,6 +1,6 @@
 # API Contract — Customers, Pricing, Credit and Debt (Group B)
 
-Version 1.1 — 2026-10-03 (all decisions B-D1..B-D6 settled; store-managed Farmer accounts). Scope: tasks B1–B5 and the real implementations of the interfaces that group A
+Version 1.2 — 2026-10-03 (all decisions settled; interfaces in the code; B3 price lists first). Scope: tasks B1–B5 and the real implementations of the interfaces that group A
 uses (`API_CONTRACT_SALES.md` §9) plus the interfaces group C (payments, returns) needs from B.
 
 Sources: `DATABASE_DESIGN.md` §3–4, §7–8, §18–20, §44–51, §XVI, §XIX, §35.6–35.7; `BUSINESS_RULES.md`
@@ -28,11 +28,13 @@ Same as `API_CONTRACT_SALES.md` §1 (routes, JSON, enum strings, money with ≤2
 |---|---|---|---|
 | B1 | Farmer profile, addresses, staff customer views, store-managed Farmer accounts | — | addresses for A2 (decision D1 of group A) |
 | B2 | Customer groups and assignment | B1 | — |
-| B3 | Price lists, group ↔ price list, public catalog price | B2 | real `IPriceResolver` for A1/A2 |
+| B3 | Price lists, group ↔ price list, public catalog price | — for price lists; B2 for group links | real `IPriceResolver` for A1/A2 |
 | B4 | Credit tiers, credit profiles, exposure | B1 | real `IOrderSettlementGuard`, `ICreditReservationAdjuster` |
 | B5 | Debt ledger, debt actions | B4 | real `IFulfillmentFinancialPosting`, `IDebtRepaymentPosting`, `IDebtReturnPosting` |
 
-B3 should be merged as early as possible: A1/A2 run on a temporary price resolver until then.
+Recommended order: **B3 price lists + walk-in default + real `IPriceResolver` first** (no dependency: with no group
+assignments every Farmer falls back to the walk-in list, B-D2/B-D3), then B1, B2, the B3 group links, B4, B5.
+Until the first part of B3 is merged, `TemporaryPriceResolver` refuses ordering (422).
 
 ---
 
@@ -402,9 +404,13 @@ public interface IOrderPrepaymentLedger
 }
 ```
 
-Temporary implementation until C delivers (B registers it, removed in A7): `GetPaidAmountAsync` =
-order total for FULL_PAYMENT and 0 for CREDIT; `ConsumeAsync` = 0. It is a development stand-in only and is
-never enabled outside tests/dev.
+Temporary implementation (`TemporaryOrderPrepaymentLedger`, already registered; removed by C1): a FULL_PAYMENT
+order counts as fully paid (`GetPaidAmountAsync` / `GetAvailableAsync` = order total, `ConsumeAsync` = the
+requested amount) and a CREDIT order has no prepayment (0). Development and tests only.
+
+All interfaces of this file and their temporary implementations are already in the code on `main`
+(`Features/Pricing`, `Features/Credit`, `Features/Debt`, `Features/Payments`; `Common/Placeholders`) — see
+`API_CONTRACT_SALES.md` §9 for the replacement procedure.
 
 All B interface implementations work inside the caller's transaction and never call `SaveChangesAsync`.
 

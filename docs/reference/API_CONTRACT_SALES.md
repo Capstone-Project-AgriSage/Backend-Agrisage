@@ -1,6 +1,6 @@
 # API Contract — Sales, Order Fulfillment and Delivery (Group A)
 
-Version 1.3 — 2026-10-02 (decisions D1–D10 settled; §9.4 returns cancelled-order refunds). Scope: tasks A1–A6 (cart, orders, confirmation and stock reservation, pickup,
+Version 1.4 — 2026-10-03 (decisions D1–D10 settled; §9 interfaces and temporary implementations are in the code). Scope: tasks A1–A6 (cart, orders, confirmation and stock reservation, pickup,
 delivery notes, delivery attempts and incidents) and the cross-module interfaces that group A uses from
 groups B (customers, pricing, credit, debt) and C (payments).
 
@@ -565,11 +565,16 @@ A customer refusing goods **before** handover is an incident (`CUSTOMER_REFUSED`
 
 ---
 
-## 9. Cross-module interfaces (Application, `Common/Interfaces` or the owning feature)
+## 9. Cross-module interfaces
 
-Group A codes against these interfaces and registers a **temporary implementation** until the owner
-delivers the real one. The owner may add members but must not change these signatures without updating
-this file.
+**Already in the code on `main`** (do not create them again): the interfaces live in the owning feature
+folder of `AgriSage.Application` — `Features/Pricing/IPriceResolver.cs`, `Features/Credit/` (`IOrderSettlementGuard`,
+`ICreditReservationAdjuster`), `Features/Debt/` (`IFulfillmentFinancialPosting`, `IDebtRepaymentPosting`,
+`IDebtReturnPosting`), `Features/Payments/` (`IOrderPrepaymentLedger`, `IOrderPaymentCancellation`). Their
+temporary implementations are `Common/Placeholders/Temporary*.cs`, registered in `Application/DependencyInjection.cs`
+(one line each, tagged with the owner task). Consumers just inject the interface. The owner task replaces its
+registration line with the real implementation and deletes the `Temporary*` file. Signatures change only with a
+PR on this file first.
 
 ### 9.1 `IPriceResolver` — owner B (Pricing)
 
@@ -580,17 +585,19 @@ public interface IPriceResolver
     // or the walk-in default list when farmerProfileId is null.
     Task<PriceContext> GetContextAsync(Guid? farmerProfileId, DateTimeOffset at, CancellationToken cancellationToken);
 
-    // Selling price per (storeProductId, productPackagingId) in that list; a missing pair = no price.
-    Task<IReadOnlyDictionary<(Guid StoreProductId, Guid PackagingId), decimal>> GetPricesAsync(
-        Guid priceListId, IReadOnlyCollection<(Guid StoreProductId, Guid PackagingId)> lines,
-        CancellationToken cancellationToken);
+    // Selling price per (store product, packaging) in that list; a missing pair = no price.
+    Task<IReadOnlyDictionary<PriceLine, decimal>> GetPricesAsync(
+        Guid priceListId, IReadOnlyCollection<PriceLine> lines, CancellationToken cancellationToken);
 }
 
 public sealed record PriceContext(Guid? CustomerGroupId, Guid PriceListId);
+
+public readonly record struct PriceLine(Guid StoreProductId, Guid ProductPackagingId);
 ```
 
-Temporary implementation (A): a fixed price per packaging from configuration or a test fake. No price →
-the line cannot be ordered (422).
+Temporary implementation (`TemporaryPriceResolver`): refuses with 422 "pricing is not available yet" — no
+invented prices. A1/A2 tests register their own fake resolver; manual end-to-end ordering works once B3 is merged
+(B3's price-list part is scheduled first for that reason).
 
 ### 9.2 `IOrderSettlementGuard` — owner B (Credit); reads payments through C's `IOrderPrepaymentLedger`
 
@@ -611,7 +618,8 @@ public interface IOrderSettlementGuard
 public sealed record SettlementResult(int? CreditTermDays);
 ```
 
-Temporary implementation (A): accept FULL_PAYMENT, refuse CREDIT with 422 "credit is not available yet".
+Temporary implementation (`TemporaryOrderSettlementGuard`): accepts FULL_PAYMENT without the payment check of
+D3, refuses CREDIT with 422 "credit sales are not available yet".
 
 ### 9.3 `IFulfillmentFinancialPosting` — owner B (Debt); consumes prepayment through C's `IOrderPrepaymentLedger`
 
@@ -625,27 +633,32 @@ public interface IFulfillmentFinancialPosting
     Task PostAsync(FulfillmentPostingContext context, CancellationToken cancellationToken);
 }
 
+public enum FulfillmentSource { Pickup, Delivery }
+
 public sealed record FulfillmentPostingContext(
     Order Order,
     IReadOnlyList<FulfilledLine> Lines,
-    string SourceType,            // "DELIVERY" | "PICKUP"
-    Guid? DeliveryAttemptId,
+    FulfillmentSource Source,
+    Guid? DeliveryId,             // DELIVERY only (debt_entries.delivery_id)
+    Guid? DeliveryAttemptId,      // DELIVERY only
     Guid StockMovementId,
     Guid ActorId,
     DateTimeOffset FulfilledAt);
 
+// FulfilledValue = round2(fulfilled base quantity × unit price ÷ conversion), per line, computed by the caller.
 public sealed record FulfilledLine(Guid OrderItemId, long FulfilledBaseQuantity, decimal FulfilledValue);
 ```
 
-Temporary implementation (A): does nothing (FULL_PAYMENT orders only, while 9.2 refuses CREDIT). It must
-not be left registered once B/C deliver the real one (task A7).
+Temporary implementation (`TemporaryFulfillmentFinancialPosting`): does nothing for FULL_PAYMENT orders and
+throws for a CREDIT order (which the temporary guard never lets through). Removed by B5 (checked in A7).
 
 ### 9.4 `IOrderPaymentCancellation` — owner C (Payments)
 
 Defined in `API_CONTRACT_PAYMENTS_INVENTORY_RETURNS.md` §3.2. Called by order cancellation (A2) to reverse
 the unconsumed order payments and request one PENDING refund per payment (design §35.18); returns those
 refunds so the response can tell staff what to hand back. Called after `Cancel` and after a cancel-remaining
-(A4) that leaves the order PARTIALLY_CANCELLED. Temporary implementation (A): returns an empty list.
+(A4) that leaves the order PARTIALLY_CANCELLED. Temporary implementation (`TemporaryOrderPaymentCancellation`):
+returns an empty list.
 
 `relatedStockMovementId` in `ResolveIncidentRequest` (A6) must be an ADJUSTMENT movement created through
 C's `POST /api/inventory/adjustments` (decision D5).
