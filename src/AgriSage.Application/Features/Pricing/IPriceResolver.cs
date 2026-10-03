@@ -1,6 +1,7 @@
 namespace AgriSage.Application.Features.Pricing;
 
-// Cross-module interface (API_CONTRACT_SALES.md §9.1). Owner: group B (task B3). Used by carts and orders (A1, A2).
+// Cross-flow interface (docs/reference/api-flows/README.md §4.1). Owner: task F1.1. Used by orders and carts
+// (F1.2, F1.7, F2.2, F2.3).
 // Runs inside the caller's transaction and never saves.
 public interface IPriceResolver
 {

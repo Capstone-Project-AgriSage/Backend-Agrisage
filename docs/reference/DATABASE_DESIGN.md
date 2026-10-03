@@ -391,6 +391,8 @@ priority            integer NOT NULL DEFAULT 0
 is_default          boolean NOT NULL DEFAULT false
 is_active           boolean NOT NULL DEFAULT true
 
+default_credit_tier_id uuid NULL FK credit_tiers.id   -- §35.20 (migration CustomerGroupDefaultCreditTier)
+
 created_at          timestamptz NOT NULL
 updated_at          timestamptz NOT NULL
 deleted_at          timestamptz NULL
@@ -405,6 +407,9 @@ REGULAR
 LOYAL
 VIP
 ```
+
+`default_credit_tier_id` gives the debt term of the group's customers (the tier's
+`default_payment_term_days`) and the default tier of their new credit profiles (§35.20).
 
 Constraint:
 
@@ -6441,6 +6446,36 @@ Every enum-backed varchar column also has an IN (...) CHECK of its
 documented values (§0.5).
 ```
 
+## 35.20 Debt term by customer type (tables 7, 44, 45, 46) — migration CustomerGroupDefaultCreditTier
+
+```text
+Approved by the team on 2026-10-03 after the mentor review ("credit tiers by customer group";
+the debt term depends on the customer type, not on crop seasons). Table count stays 67.
+
+customer_groups.default_credit_tier_id  uuid NULL FK credit_tiers.id (NO ACTION), indexed.
+  The tier must be ACTIVE and of the same Store (Application check). NULL = the group
+  suggests no tier. A tier that is the default of a group cannot be deactivated (422).
+
+Tier of a new Farmer Credit Profile:
+  tier given by staff
+  → else the default tier of the Farmer's current Customer Group
+  → else the default tier of the Store's default group (Farmer without assignment, B-D2)
+  → else refused (422). credit_limit defaults to that tier's default_credit_limit.
+
+Customer Group change (new assignment) of a Farmer who has a Credit Profile:
+  when the new group has a default tier different from the profile's tier, the same
+  transaction moves the profile to that tier through FarmerCreditProfile.ChangeCreditLimit
+  (credit_limit unchanged; credit_limit_histories row with old/new tier; audit_logs row).
+  A new group without a default tier leaves the profile unchanged.
+
+Changing a group's default tier does not change existing profiles (§44: the profile is
+authoritative); it applies at the next group change or explicit tier/limit change.
+
+The debt term is unchanged: tier.default_payment_term_days, snapshotted on the order at
+confirmation (orders.credit_term_days_snapshot); due date = fulfillment day + that term.
+Confirmed orders are never affected by later tier or group changes.
+```
+
 ## 35.19 Stocktake snapshot time and stale lines (table 29) — migration StocktakeItemSnapshotTime
 
 ```text
@@ -6469,7 +6504,7 @@ Lots), and posts the adjustments. Stocktake.RefreshItem re-snapshots one stale l
 ## 35.18 Payment target and cancelled-order refunds (tables 36, 54) — migration PaymentOrderLinkAndOrderRefunds
 
 ```text
-Approved by the team on 2026-10-02 (decisions C-D1 / C-D2 in API_CONTRACT_PAYMENTS_INVENTORY_RETURNS.md).
+Approved by the team on 2026-10-02 (decisions C-D1 / C-D2, now recorded in docs/reference/api-flows/).
 This is the first schema change after InitialCreate; the table count stays 67.
 
 payments.order_id  uuid NULL FK orders.id (NO ACTION), indexed.

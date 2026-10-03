@@ -44,16 +44,16 @@ public static class DependencyInjection
         services.AddScoped<IGoodsReceiptService, GoodsReceiptService>();
         services.AddScoped<IInventoryService, InventoryService>();
 
-        // Cross-module interfaces (API_CONTRACT_*.md). Each line is replaced by its owner task with the real
-        // implementation; the Temporary* class is then deleted (Common/Placeholders).
-        services.AddScoped<IPriceResolver, TemporaryPriceResolver>();                             // B3
-        services.AddScoped<IOrderSettlementGuard, TemporaryOrderSettlementGuard>();               // B4
-        services.AddScoped<ICreditReservationAdjuster, TemporaryCreditReservationAdjuster>();     // B4
-        services.AddScoped<IFulfillmentFinancialPosting, TemporaryFulfillmentFinancialPosting>(); // B5
-        services.AddScoped<IDebtRepaymentPosting, TemporaryDebtRepaymentPosting>();               // B5
-        services.AddScoped<IDebtReturnPosting, TemporaryDebtReturnPosting>();                     // B5
-        services.AddScoped<IOrderPrepaymentLedger, TemporaryOrderPrepaymentLedger>();             // C1
-        services.AddScoped<IOrderPaymentCancellation, TemporaryOrderPaymentCancellation>();       // C1
+        // Cross-flow interfaces (docs/reference/api-flows/README.md §4). Each line is replaced by its owner task with
+        // the real implementation; the Temporary* class is then deleted (Common/Placeholders).
+        services.AddScoped<IPriceResolver, TemporaryPriceResolver>();                             // F1.1
+        services.AddScoped<IOrderSettlementGuard, TemporaryOrderSettlementGuard>();               // F3.3
+        services.AddScoped<ICreditReservationAdjuster, TemporaryCreditReservationAdjuster>();     // F3.3
+        services.AddScoped<IFulfillmentFinancialPosting, TemporaryFulfillmentFinancialPosting>(); // F3.4
+        services.AddScoped<IDebtRepaymentPosting, TemporaryDebtRepaymentPosting>();               // F3.5
+        services.AddScoped<IDebtReturnPosting, TemporaryDebtReturnPosting>();                     // F3.5
+        services.AddScoped<IOrderPrepaymentLedger, TemporaryOrderPrepaymentLedger>();             // F1.3
+        services.AddScoped<IOrderPaymentCancellation, TemporaryOrderPaymentCancellation>();       // F1.6
 
         // Further feature application services are registered here by later tasks.
 

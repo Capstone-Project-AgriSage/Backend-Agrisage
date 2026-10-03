@@ -1,6 +1,6 @@
 namespace AgriSage.Application.Features.Credit;
 
-// Cross-module interface (API_CONTRACT_CUSTOMERS_CREDIT.md §6.4). Owner: group B (task B4). Used by payments (C1, C3).
+// Cross-flow interface (docs/reference/api-flows/README.md §4.5). Owner: task F3.3. Used by payments (F1.3, F2.4).
 // Runs inside the caller's transaction and never saves.
 public interface ICreditReservationAdjuster
 {

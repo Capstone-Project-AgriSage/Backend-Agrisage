@@ -2,7 +2,7 @@ using AgriSage.Domain.Features.Payments.Entities;
 
 namespace AgriSage.Application.Features.Debt;
 
-// Cross-module interface (API_CONTRACT_CUSTOMERS_CREDIT.md §7.2). Owner: group B (task B5). Used by payments (C1, C3).
+// Cross-flow interface (docs/reference/api-flows/README.md §4.7). Owner: task F3.5. Used by payments (F1.3, F2.4).
 // Runs inside the caller's transaction and never saves.
 public interface IDebtRepaymentPosting
 {

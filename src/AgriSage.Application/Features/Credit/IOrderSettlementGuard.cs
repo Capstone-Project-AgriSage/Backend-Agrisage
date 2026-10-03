@@ -2,8 +2,8 @@ using AgriSage.Domain.Features.Orders.Entities;
 
 namespace AgriSage.Application.Features.Credit;
 
-// Cross-module interface (API_CONTRACT_SALES.md §9.2, API_CONTRACT_CUSTOMERS_CREDIT.md §6.3). Owner: group B (task B4).
-// Used by order confirmation and cancellation (A3, A2). Runs inside the caller's transaction and never saves.
+// Cross-flow interface (docs/reference/api-flows/README.md §4.4). Owner: task F3.3.
+// Used by order confirmation and cancellation (F1.4, F1.6, F1.7). Runs inside the caller's transaction and never saves.
 public interface IOrderSettlementGuard
 {
     // Before any stock is reserved. FULL_PAYMENT: PAID order payments must cover the total (decision D3).

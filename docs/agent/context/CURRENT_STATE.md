@@ -5,7 +5,10 @@
 
 ## Current Phase
 
-`BE Foundation & Database Initialization`
+`Business APIs — split by flow` (foundation below is done). Four people, one end-to-end flow each
+(`docs/reference/api-flows/`): L1 counter sale (lead), L2 online order & delivery, L3 credit & debt,
+L4 inventory & returns. Order of work and milestones M1/M2: `api-flows/README.md` §6. Before a task, read the
+README and only your flow file's task section; reuse other flows' shared steps and interfaces.
 
 ## Foundation Epic Target
 
@@ -189,6 +192,13 @@ setup documentation
   `Application/Features/{Pricing,Credit,Debt,Payments}`, their `Common/Placeholders/Temporary*` implementations
   registered in `Application/DependencyInjection.cs` (one line per interface, tagged with the owner task),
   `DocumentNumbers` prefixes OD/DL/PM/ST/RT/RF/DE + generic `NextAsync`.
+- Done (branch `docs/api-flows`, task F0.1) — Work re-split by flow after the mentor review: the three module
+  contracts were replaced by `docs/reference/api-flows/` (README + FLOW_1..FLOW_4); all 150 routes and every DTO
+  kept, 19 routes added (quick counter sale, stock summary/alerts/expire-due, Excel receipt import, stock card,
+  Farmer delivery tracking, group credit tier, Farmer allocation preview, sales/delivery/debt/inventory reports).
+  DI tags and interface comments now name the owner tasks (F1.1, F1.3, F1.6, F3.3–F3.5). Design §35.20 (debt term by
+  customer type) written; its migration `CustomerGroupDefaultCreditTier` is task F0.2 (not created yet). No code
+  behaviour change.
 
 ## Not Yet Implied by Foundation Completion
 

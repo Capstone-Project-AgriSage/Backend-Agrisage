@@ -6,9 +6,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AgriSage.Application.Common.Placeholders;
 
-// TEMPORARY until task C1 registers the real IOrderPrepaymentLedger (then delete this file and its registration).
-// Pretends a FULL_PAYMENT order is fully paid and a CREDIT order has no prepayment, so B4/B5 can be built and tested
-// before payments exist. Never enable it outside development and tests once C1 is merged.
+// TEMPORARY until task F1.3 registers the real IOrderPrepaymentLedger (then delete this file and its registration).
+// Pretends a FULL_PAYMENT order is fully paid and a CREDIT order has no prepayment, so F3.3/F3.4 can be built and tested
+// before payments exist. Never enable it outside development and tests once F1.3 is merged.
 public sealed class TemporaryOrderPrepaymentLedger(IAgriSageDbContext context) : IOrderPrepaymentLedger
 {
     public async Task<decimal> GetPaidAmountAsync(Guid orderId, CancellationToken cancellationToken)

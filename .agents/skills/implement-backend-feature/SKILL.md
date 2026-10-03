@@ -13,10 +13,13 @@ Use when asked to implement a backend feature, endpoint, service, or Jira task.
 2. Inspect existing feature files and call sites before editing. The reference implementation to copy is
    the Suppliers / GoodsReceipts / Inventory features (Application service + validators + contracts,
    controller, `GoodsReceiptConfirmer` for a transaction owner) and their unit, HTTP and real-DB tests.
-3. Read `AGENTS.md`, then the section of your task in the matching `docs/reference/API_CONTRACT_*.md`:
-   use its routes, DTO names/fields, roles and error codes exactly; implement cross-module interfaces with
-   the signatures given there (and their temporary implementation until the owner delivers the real one).
-   If the contract is wrong or incomplete, stop and propose a change to the contract file first.
+3. Read `AGENTS.md`, then `docs/reference/api-flows/README.md` (conventions, cross-flow interfaces, shared
+   steps, folder ownership) and the section of your task (F1.1..F4.6) in your flow file `FLOW_1..FLOW_4`:
+   use its routes, DTO names/fields, roles and error codes exactly; implement cross-flow interfaces with
+   the signatures given there (and their temporary implementation until the owner delivers the real one);
+   reuse the shared steps of other flows instead of re-implementing them, and never save or commit inside a
+   step. Stay in your flow's folders; shared files are append-only.
+   If the contract is wrong or incomplete, stop and propose a change to the flow file first.
 4. Load only relevant context:
    - architecture placement → `docs/agent/context/BACKEND_MAP.md`
    - business behavior → `docs/agent/context/BUSINESS_RULES.md`

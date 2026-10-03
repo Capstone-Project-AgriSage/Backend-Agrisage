@@ -25,7 +25,7 @@ Use this summary for navigation. For exact schema implications, open the relevan
 20. Delivery incidents record exact affected lot/quantity/reason/resolution.
 21. Successful delivery requires at least one proof image.
 22. Store Owner/Sales Staff can change credit limit; keep history and audit.
-23. Credit Tier may default payment terms; confirmed Credit Order snapshots term days.
+23. Credit Tier may default payment terms; confirmed Credit Order snapshots term days. The debt term follows the customer type: a Customer Group may carry a default Credit Tier, a new Credit Profile takes its tier from the group, and a group change moves the profile to the new group's tier (limit unchanged, history kept; design §35.20). No crop-season terms.
 24. No interest/penalty in MVP; overdue status/day count/alerts/reports only.
 25. Upfront prepayment is consumed against successful fulfillment chronologically.
 26. Payment↔Debt is many-to-many through `payment_allocations`.

@@ -1,6 +1,6 @@
 namespace AgriSage.Application.Features.Debt;
 
-// Cross-module interface (API_CONTRACT_CUSTOMERS_CREDIT.md §7.3). Owner: group B (task B5). Used by returns (C4).
+// Cross-flow interface (docs/reference/api-flows/README.md §4.8). Owner: task F3.5. Used by returns (F4.4).
 // Runs inside the caller's transaction and never saves.
 public interface IDebtReturnPosting
 {

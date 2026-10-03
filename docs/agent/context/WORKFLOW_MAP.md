@@ -32,6 +32,20 @@ Farmer/Walk-in
 ```
 
 Walk-in cannot use CREDIT.
+Credit term = tier of the Farmer's credit profile; the tier follows the Customer Group (design §35.20).
+
+## Quick Counter Sale
+
+```text
+Counter customer (walk-in or registered)
+→ preview: prices + FEFO lots (nothing saved)
+→ staff confirm the actual lots
+→ one transaction: Order → cash Payment PAID + ORDER allocation
+  → confirm (reserve given lots) → SALE Stock Movement → Order COMPLETED
+```
+
+Transaction owner: `POST /api/counter-sales` (F1.7); it reuses the single-step shared steps, which never save
+or commit (`docs/reference/api-flows/README.md` §3.2).
 
 ## Delivery Fulfillment
 

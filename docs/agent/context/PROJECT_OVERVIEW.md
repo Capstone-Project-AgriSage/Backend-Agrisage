@@ -42,10 +42,10 @@ The `stores` table remains in the schema and Store ID is never hard-coded.
 
 ## Current Delivery Phase
 
-Current backend phase:
-`BE Foundation & Database Initialization`.
+Current backend phase: `Business APIs — split by flow` (see `CURRENT_STATE.md` and
+`docs/reference/api-flows/`). The foundation phase below is complete.
 
-Expected result of this phase:
+Result of the foundation phase:
 - four-layer solution;
 - common foundations;
 - 67 Domain entities;

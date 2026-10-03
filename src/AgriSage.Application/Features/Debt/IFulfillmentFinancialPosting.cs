@@ -2,8 +2,8 @@ using AgriSage.Domain.Features.Orders.Entities;
 
 namespace AgriSage.Application.Features.Debt;
 
-// Cross-module interface (API_CONTRACT_SALES.md §9.3, API_CONTRACT_CUSTOMERS_CREDIT.md §7.1). Owner: group B (task B5).
-// Used by pickup and delivery fulfillment (A4, A6) inside their transaction, after the stock is posted; never saves.
+// Cross-flow interface (docs/reference/api-flows/README.md §4.6). Owner: task F3.4.
+// Used by pickup and delivery fulfillment (F1.5, F2.6) inside their transaction, after the stock is posted; never saves.
 public interface IFulfillmentFinancialPosting
 {
     // Applies available order prepayment (oldest first), consumes the credit reservation for the unpaid part and
