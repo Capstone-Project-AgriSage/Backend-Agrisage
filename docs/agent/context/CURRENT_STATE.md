@@ -202,8 +202,9 @@ setup documentation
   `20261003085951_CustomerGroupDefaultCreditTier`: `customer_groups.default_credit_tier_id` uuid NULL, index, FK
   `credit_tiers` NO ACTION (design §35.20; still 67 tables). Domain `CustomerGroup.DefaultCreditTierId` +
   `SetDefaultCreditTier`; migration review test, reviewed migration list, rolled-back real-DB tests (FK, no physical
-  delete of a used tier). **Not applied to `agrisage-dev` yet** (needs the lead's approval); the real-DB tests of
-  this migration fail until it is applied.
+  delete of a used tier). **Applied to `agrisage-dev`** (lead-approved, 2026-10-03); read-only check: column uuid
+  NULL, FK NO ACTION, index present, still 67 tables, 0 rows in `customer_groups` / `credit_tiers`. Verified: build
+  0 warnings; 432 unit + 427 integration passed with `AGRISAGE_DB_TESTS=1` (2 skipped = real Supabase Storage).
 
 ## Not Yet Implied by Foundation Completion
 
