@@ -185,7 +185,10 @@ setup documentation
 - Done (branch `feature/stocktake-snapshot-time`) — C-D6 exact stale detection: migration
   `20261003001732_StocktakeItemSnapshotTime` (`stocktake_items.snapshot_at`), `Stocktake.AddItem` takes the
   snapshot time, `Stocktake.RefreshItem` re-snapshots one stale line; design §35.19; migration review tests.
-- Done — Cross-module skeleton: the 8 interfaces of the API contracts in `Application/Features/{Pricing,Credit,Debt,Payments}`,  their `Common/Placeholders/Temporary*` implementations registered in `Application/DependencyInjection.cs` (one line  per interface, tagged with the owner task), `DocumentNumbers` prefixes OD/DL/PM/ST/RT/RF/DE + generic `NextAsync`.
+- Done — Cross-module skeleton: the 8 interfaces of the API contracts in
+  `Application/Features/{Pricing,Credit,Debt,Payments}`, their `Common/Placeholders/Temporary*` implementations
+  registered in `Application/DependencyInjection.cs` (one line per interface, tagged with the owner task),
+  `DocumentNumbers` prefixes OD/DL/PM/ST/RT/RF/DE + generic `NextAsync`.
 
 ## Not Yet Implied by Foundation Completion
 
