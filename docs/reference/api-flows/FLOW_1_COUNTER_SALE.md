@@ -273,7 +273,11 @@ used by the cash endpoint, the payOS webhook and sync (F2.4) and F1.7.
 | GET | `/api/orders/{id}/reservation` | — | `200 ReservationResponse` |
 
 `confirm` — one transaction owned by `OrderConfirmer`:
-1. Lock the order; must be `PENDING_CONFIRMATION` with ≥1 line.
+1. Lock the order; must be `PENDING_CONFIRMATION` with ≥1 line. Every line is checked **again**: the store product
+   still sellable and active, the product ACTIVE, the packaging ACTIVE and a sale unit (the same rule as when the order
+   was built, `OrderBuilder.GetSellabilityProblem`). A line that was switched off meanwhile → 422 with `errors` per line,
+   nothing reserved; staff remove the line or cancel the order. The price stays the snapshot taken at creation. Once
+   confirmed an order is a commitment and is not checked again (pickup and delivery go ahead).
 2. `IOrderSettlementGuard.EnsureCanConfirmAsync` (README §4.4): payment / credit check, credit reservation and the
    credit term for CREDIT orders. A failure → 422 and nothing is saved.
 3. FEFO allocation per line over eligible lots (decision D6: ACTIVE, not expired, available > 0; earliest expiry
@@ -387,9 +391,12 @@ Built as `FulfillmentPostingService.PostAsync(order, lines, source, deliveryId?,
   remaining base quantity and every lot quantity is a whole number of packages, the order has an open reservation, every
   lot exists, belongs to the item's product and `IsEligibleForSale(today)`. Problems come back as one 422 with `errors`
   keyed `items[i]` (index in the order's response order).
-- A lot that holds the item's reservation is issued with `IssueReserved` and the reservation item is consumed. Another
-  lot is issued with `IssueUnreserved` (so stock reserved for other orders cannot be taken) and the same quantity of the
-  item's reservation is released in other lots (lots not picked in this call first). Picks that hold their own reservation
+- A lot that holds the item's reservation is issued with `IssueReserved` and the reservation item is consumed. For
+  another lot the reservation **moves**: the quantity is reserved there (`InventoryLot.Reserve`, so it must be free —
+  stock reserved for other orders cannot be taken), the same quantity of the item's reservation is released in other lots
+  (lots not picked in this call first), and the new line is consumed (`InventoryReservation.ReserveMore` adds the line or
+  grows the one of that lot; there is one line per item and lot). So the reservation ends CONSUMED (database design §35.3:
+  RELEASED means nothing was ever consumed) and the released lines show where the stock was held before. Picks that hold their own reservation
   are processed first so one pick never releases what another still needs. A lot used both ways gets two movement items.
 - `FulfilledValue = round2(base quantity × unit price ÷ conversion)` per order item, summed over its lots.
 - When the order ends (COMPLETED, CANCELLED, PARTIALLY_CANCELLED) any reservation still open is released.

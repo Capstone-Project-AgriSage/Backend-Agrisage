@@ -250,6 +250,25 @@ public sealed class OrderBuilder(
         return (null, Texts.Clean(draft.CustomerName) ?? WalkInDefaultName, phone);
     }
 
+    // Whether a store product and packaging can be ordered now. Used when the order is built and again when it is
+    // confirmed (a product can be switched off in between).
+    public static string? GetSellabilityProblem(StoreProduct storeProduct, ProductPackaging? packaging)
+    {
+        if (!storeProduct.IsSellable || !storeProduct.IsActive || storeProduct.Product.Status != ProductStatus.Active)
+        {
+            return "The product is not for sale.";
+        }
+
+        if (packaging is null || packaging.ProductId != storeProduct.ProductId)
+        {
+            return "The packaging does not belong to this product.";
+        }
+
+        return packaging.Status != PackagingStatus.Active || !packaging.IsSaleUnit
+            ? "Only ACTIVE sale packagings can be ordered."
+            : null;
+    }
+
     private static string? Check(
         OrderItemRequest line,
         Dictionary<Guid, StoreProduct> storeProducts,
@@ -267,19 +286,10 @@ public sealed class OrderBuilder(
             return "The store product does not exist in this store.";
         }
 
-        if (!storeProduct.IsSellable || !storeProduct.IsActive || storeProduct.Product.Status != ProductStatus.Active)
+        packagings.TryGetValue(line.ProductPackagingId, out packaging);
+        if (GetSellabilityProblem(storeProduct, packaging) is { } problem)
         {
-            return "The product is not for sale.";
-        }
-
-        if (!packagings.TryGetValue(line.ProductPackagingId, out packaging) || packaging.ProductId != storeProduct.ProductId)
-        {
-            return "The packaging does not belong to this product.";
-        }
-
-        if (packaging.Status != PackagingStatus.Active || !packaging.IsSaleUnit)
-        {
-            return "Only ACTIVE sale packagings can be ordered.";
+            return problem;
         }
 
         return suggested.TryGetValue(new PriceLine(line.StoreProductId, line.ProductPackagingId), out price)

@@ -21,8 +21,9 @@ public sealed record FulfillmentPostingResult(StockMovement Movement, IReadOnlyL
 //   check lines → lock the lot balances (id order) → reject unsellable lots → SALE movement, one item per issue with the
 //   cost snapshot (weighted average) → decrease on hand and reserved → consume (or move) the reservation →
 //   order.RecordFulfillment → IFulfillmentFinancialPosting → post the movement.
-// A reserved lot is issued from its reservation. Another lot is issued as unreserved stock and the same quantity of the
-// item's reservation is released elsewhere, so the lot's reserved quantity stays what the open orders still hold.
+// A reserved lot is issued from its reservation. For another lot the reservation moves there first (reserve in that lot,
+// release the same quantity elsewhere) and is consumed there, so the reservation ends CONSUMED and the reserved
+// quantities of the lots stay what the open orders still hold.
 public sealed class FulfillmentPostingService(
     IAgriSageDbContext context,
     IRowLockService locks,
@@ -120,26 +121,33 @@ public sealed class FulfillmentPostingService(
                 continue;
             }
 
-            // Another lot than the reserved one: unreserved stock leaves, the line's reservation moves out of the way.
-            movement.AddItem(lot.Id, lot.IssueUnreserved(rest));
+            // Not (all) from the reserved lot: the reservation moves to the lot handed over (reserve there, which needs
+            // the stock free; release the same quantity of the line's reservation elsewhere) and is consumed there.
+            // So the reservation ends CONSUMED, not RELEASED, and no other order's reservation is ever touched.
+            lot.Reserve(rest, today);
+            var target = reservation.ReserveMore(pick.OrderItemId, pick.InventoryLotId, rest);
+            var toRelease = rest;
             foreach (var other in held.Where(i => i.InventoryLotId != pick.InventoryLotId && i.RemainingQuantity > 0)
                          .OrderBy(i => pickedLotIds.Contains(i.InventoryLotId) ? 1 : 0).ThenBy(i => i.Id))
             {
-                if (rest == 0)
+                if (toRelease == 0)
                 {
                     break;
                 }
 
-                var release = Math.Min(rest, other.RemainingQuantity);
+                var release = Math.Min(toRelease, other.RemainingQuantity);
                 lots[other.InventoryLotId].ReleaseReservation(release);
                 reservation.Release(other.Id, release, actorId, at, "Another lot was handed over instead.");
-                rest -= release;
+                toRelease -= release;
             }
 
-            if (rest > 0)
+            if (toRelease > 0)
             {
                 throw new BusinessRuleException("The stock reserved for a line is smaller than the quantity handed over.");
             }
+
+            reservation.Consume(target.Id, rest);
+            movement.AddItem(lot.Id, lot.IssueReserved(rest, today));
         }
 
         var fulfilled = new List<FulfilledLine>();

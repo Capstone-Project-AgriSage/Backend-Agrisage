@@ -61,6 +61,24 @@ public sealed class InventoryReservation : SoftDeletableEntity
         return item;
     }
 
+    // Reserves more for an order item in a lot: grows its line there, or adds the line (one line per order item and lot).
+    // Used when the lot actually handed over is not the one reserved: the reservation moves to that lot, then is consumed.
+    public InventoryReservationItem ReserveMore(Guid orderItemId, Guid inventoryLotId, long baseQuantity)
+    {
+        EnsureOpen();
+
+        var existing = ActiveItems.FirstOrDefault(i => i.OrderItemId == orderItemId && i.InventoryLotId == inventoryLotId);
+        if (existing is null)
+        {
+            return AddItem(orderItemId, inventoryLotId, baseQuantity);
+        }
+
+        existing.IncreaseReserved(baseQuantity);
+        RefreshStatus();
+
+        return existing;
+    }
+
     public void Consume(Guid itemId, long quantity)
     {
         EnsureOpen();

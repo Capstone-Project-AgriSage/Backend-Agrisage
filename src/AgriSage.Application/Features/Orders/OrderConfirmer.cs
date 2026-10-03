@@ -52,7 +52,9 @@ public sealed class OrderConfirmer(
             throw new BusinessRuleException($"Order '{order.OrderNumber}' already has an open stock reservation.");
         }
 
-        // Payment / credit first: a refusal here reserves nothing.
+        await EnsureLinesAreStillSellableAsync(items, cancellationToken);
+
+        // Payment / credit next: a refusal here reserves nothing.
         var settlement = await settlementGuard.EnsureCanConfirmAsync(order, actorId, cancellationToken);
 
         var lotIds = chosenLots is null
@@ -120,6 +122,42 @@ public sealed class OrderConfirmer(
             });
 
         return reservation;
+    }
+
+    // The lines were checked when the order was built; the product or packaging may have been switched off since. The
+    // price stays the snapshot taken then. After confirmation the order is a commitment and is not checked again.
+    private async Task EnsureLinesAreStillSellableAsync(List<OrderItem> items, CancellationToken cancellationToken)
+    {
+        var storeProductIds = items.Select(i => i.StoreProductId).Distinct().ToList();
+        var packagingIds = items.Select(i => i.ProductPackagingId).Distinct().ToList();
+        var storeProducts = await context.StoreProducts.AsNoTracking().Include(sp => sp.Product)
+            .Where(sp => storeProductIds.Contains(sp.Id))
+            .ToDictionaryAsync(sp => sp.Id, cancellationToken);
+        var packagings = await context.ProductPackagings.AsNoTracking()
+            .Where(p => packagingIds.Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id, cancellationToken);
+
+        var errors = new Dictionary<string, string[]>();
+        for (var index = 0; index < items.Count; index++)
+        {
+            var item = items[index];
+            var problem = !storeProducts.TryGetValue(item.StoreProductId, out var storeProduct)
+                ? "The product no longer exists in the store."
+                : !packagings.TryGetValue(item.ProductPackagingId, out var packaging)
+                    ? "The packaging no longer exists."
+                    : OrderBuilder.GetSellabilityProblem(storeProduct, packaging);
+
+            if (problem is not null)
+            {
+                errors[$"items[{index}]"] = [$"{item.ProductSkuSnapshot}: {problem}"];
+            }
+        }
+
+        if (errors.Count > 0)
+        {
+            throw new BusinessRuleException(
+                $"{errors.Count} line(s) can no longer be sold; remove them or cancel the order. Nothing was reserved.", errors);
+        }
     }
 
     private async Task<List<Guid>> EligibleLotIdsAsync(List<OrderItem> items, DateOnly today, CancellationToken cancellationToken)

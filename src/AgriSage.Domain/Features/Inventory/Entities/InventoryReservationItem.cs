@@ -37,6 +37,8 @@ public sealed class InventoryReservationItem : SoftDeletableChildEntity
 
     public long RemainingQuantity => BaseQuantityReserved - BaseQuantityConsumed - BaseQuantityReleased;
 
+    internal void IncreaseReserved(long quantity) => BaseQuantityReserved += Guard.Positive(quantity);
+
     internal void Consume(long quantity)
     {
         EnsureWithinRemaining(quantity);

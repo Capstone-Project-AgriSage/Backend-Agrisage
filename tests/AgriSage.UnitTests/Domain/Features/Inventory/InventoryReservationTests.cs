@@ -108,4 +108,26 @@ public class InventoryReservationTests
 
         Assert.Throws<DomainException>(() => reservation.AddItem(orderItemId, lotId, 5));
     }
+
+    [Fact]
+    public void Reserving_more_adds_a_line_or_grows_the_one_of_that_lot_and_needs_an_open_reservation()
+    {
+        var (reservation, item) = CreateReservation(10);
+        var orderItem = item.OrderItemId;
+        var otherLot = Guid.NewGuid();
+
+        var added = reservation.ReserveMore(orderItem, otherLot, 4);
+        Assert.NotEqual(item.Id, added.Id);
+        Assert.Equal((2, 14L), (reservation.Items.Count, reservation.RemainingQuantity));
+
+        var grown = reservation.ReserveMore(orderItem, otherLot, 6);
+        Assert.Equal((added.Id, 10L, 2, 20L), (grown.Id, grown.BaseQuantityReserved, reservation.Items.Count, reservation.RemainingQuantity));
+
+        // Moving a reservation: reserve in the new lot, release the old line, consume the new one.
+        reservation.Release(item.Id, 10, StaffId, Now);
+        reservation.Consume(added.Id, 10);
+        Assert.Equal((InventoryReservationStatus.Consumed, 0L), (reservation.Status, reservation.RemainingQuantity));
+        Assert.Throws<DomainException>(() => reservation.ReserveMore(orderItem, otherLot, 1));
+        Assert.Throws<DomainException>(() => CreateReservation().Reservation.ReserveMore(Guid.NewGuid(), Guid.NewGuid(), 0));
+    }
 }

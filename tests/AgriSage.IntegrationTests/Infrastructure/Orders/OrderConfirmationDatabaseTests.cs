@@ -12,6 +12,7 @@ using AgriSage.Domain.Features.Inventory.Entities;
 using AgriSage.Domain.Features.Inventory.Enums;
 using AgriSage.Domain.Features.Pricing.Enums;
 using AgriSage.Domain.Features.Products.Entities;
+using AgriSage.Domain.Features.Products.Enums;
 using AgriSage.Domain.Features.Stores.Entities;
 using AgriSage.Domain.Features.Stores.Enums;
 using AgriSage.Infrastructure.Persistence;
@@ -329,6 +330,54 @@ public class OrderConfirmationDatabaseTests
         await Assert.ThrowsAsync<BusinessRuleException>(() => env.Confirmation.ConfirmAsync(again.Id, Token));
         Assert.Equal((100L, 10L), await BalanceAsync(env, lot.Id));
         Assert.Single(await env.Context.InventoryReservations.AsNoTracking().Where(r => r.OrderId == again.Id).ToListAsync(Token));
+    }
+
+    [RealDbFact]
+    public async Task A_line_switched_off_after_the_order_was_made_blocks_confirmation_but_not_a_confirmed_order()
+    {
+        await using var session = await RealDb.Session.StartAsync();
+        await using var env = await PrepareAsync(session);
+        var sku = await NewSkuAsync(env);
+        var lot = await NewLotAsync(env, sku, "L1", 100, Today.AddDays(30));
+        var order = await NewOrderAsync(env, (sku, 10));
+        var storeProduct = await env.Context.StoreProducts.Include(sp => sp.Product).SingleAsync(sp => sp.Id == sku.StoreProductId, Token);
+        var packaging = await env.Context.ProductPackagings.SingleAsync(p => p.Id == sku.BottleId, Token);
+
+        async Task AssertRefusedAsync(string expected)
+        {
+            await env.Context.SaveChangesAsync(Token);
+            var refused = await Assert.ThrowsAsync<BusinessRuleException>(() => env.Confirmation.ConfirmAsync(order.Id, Token));
+            Assert.Contains(expected, refused.Errors!["items[0]"].Single());
+            Assert.Contains("no longer be sold", refused.Message);
+            Assert.Equal((100L, 0L), await BalanceAsync(env, lot.Id));
+            Assert.Equal("PENDING_CONFIRMATION", (await env.Orders.GetAsync(order.Id, Token)).Status);
+        }
+
+        storeProduct.MarkNotSellable();
+        await AssertRefusedAsync(sku.Code);
+        storeProduct.MarkSellable();
+
+        storeProduct.Deactivate();
+        await AssertRefusedAsync("not for sale");
+        storeProduct.Activate();
+
+        storeProduct.Product.ChangeStatus(ProductStatus.Discontinued);
+        await AssertRefusedAsync("not for sale");
+        storeProduct.Product.ChangeStatus(ProductStatus.Active);
+
+        packaging.ChangeStatus(PackagingStatus.Inactive);
+        await AssertRefusedAsync("ACTIVE sale packagings");
+        packaging.ChangeStatus(PackagingStatus.Active);
+
+        // Switched back on, the same order confirms; its price is still the one taken when it was made.
+        await env.Context.SaveChangesAsync(Token);
+        var confirmed = await env.Confirmation.ConfirmAsync(order.Id, Token);
+        Assert.Equal(("CONFIRMED", 100_000m), (confirmed.Status, confirmed.TotalAmount));
+
+        // A confirmed order is a commitment: switching the product off now does not stop its pickup.
+        storeProduct.MarkNotSellable();
+        await env.Context.SaveChangesAsync(Token);
+        Assert.Equal("READY_FOR_FULFILLMENT", (await env.Confirmation.MarkReadyAsync(order.Id, Token)).Status);
     }
 
     // ----- Preparing / ready -----

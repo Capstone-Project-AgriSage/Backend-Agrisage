@@ -278,7 +278,7 @@ public class OrderPickupDatabaseTests
     }
 
     [RealDbFact]
-    public async Task Another_lot_than_the_reserved_one_is_issued_and_the_reservation_moves_out_of_the_way()
+    public async Task Another_lot_than_the_reserved_one_takes_over_the_reservation_and_it_ends_consumed()
     {
         await using var session = await RealDb.Session.StartAsync();
         await using var env = await PrepareAsync(session);
@@ -289,21 +289,59 @@ public class OrderPickupDatabaseTests
         var itemId = order.Items.Single().Id;
         Assert.Equal((100L, 100L), await BalanceAsync(env, reserved.Id));
 
-        // 60 come from the other lot: its stock is unreserved, the same 60 of the reservation are released.
+        // 60 come from the other lot: the reservation moves there (60 released in the reserved lot, 60 reserved and
+        // consumed in the other one), and the stock leaves the other lot.
         var first = await env.Pickup.PickupAsync(order.Id, Take(itemId, (other.Id, 60)), Token);
 
         Assert.Equal("PARTIALLY_FULFILLED", first.Status);
         Assert.Equal((100L, 40L), await BalanceAsync(env, reserved.Id));
         Assert.Equal((40L, 0L), await BalanceAsync(env, other.Id));
         var reservation = await env.Confirmation.GetReservationAsync(order.Id, Token);
-        var line = Assert.Single(reservation.Items);
-        Assert.Equal((100L, 0L, 60L, 40L), (line.ReservedBaseQuantity, line.ConsumedBaseQuantity, line.ReleasedBaseQuantity, line.RemainingBaseQuantity));
+        Assert.Equal("PARTIALLY_CONSUMED", reservation.Status);
+        var reservedLine = reservation.Items.Single(i => i.InventoryLotId == reserved.Id);
+        var otherLine = reservation.Items.Single(i => i.InventoryLotId == other.Id);
+        Assert.Equal((100L, 0L, 60L, 40L), (reservedLine.ReservedBaseQuantity, reservedLine.ConsumedBaseQuantity, reservedLine.ReleasedBaseQuantity, reservedLine.RemainingBaseQuantity));
+        Assert.Equal((60L, 60L, 0L, 0L), (otherLine.ReservedBaseQuantity, otherLine.ConsumedBaseQuantity, otherLine.ReleasedBaseQuantity, otherLine.RemainingBaseQuantity));
 
-        var second = await env.Pickup.PickupAsync(order.Id, Take(itemId, (reserved.Id, 40)), Token);
+        // Another 20 from the other lot again: its line there grows (one line per item and lot).
+        await env.Pickup.PickupAsync(order.Id, Take(itemId, (other.Id, 20)), Token);
+        var grown = (await env.Confirmation.GetReservationAsync(order.Id, Token)).Items.Single(i => i.InventoryLotId == other.Id);
+        Assert.Equal((80L, 80L), (grown.ReservedBaseQuantity, grown.ConsumedBaseQuantity));
+        Assert.Equal((100L, 20L), await BalanceAsync(env, reserved.Id));
 
-        Assert.Equal("COMPLETED", second.Status);
-        Assert.Equal((60L, 0L), await BalanceAsync(env, reserved.Id));
+        var last = await env.Pickup.PickupAsync(order.Id, Take(itemId, (reserved.Id, 20)), Token);
+
+        Assert.Equal("COMPLETED", last.Status);
+        Assert.Equal((80L, 0L), await BalanceAsync(env, reserved.Id));
+        Assert.Equal((20L, 0L), await BalanceAsync(env, other.Id));
         Assert.Equal("CONSUMED", (await env.Confirmation.GetReservationAsync(order.Id, Token)).Status);
+    }
+
+    [RealDbFact]
+    public async Task An_order_handed_over_entirely_from_other_lots_still_ends_consumed()
+    {
+        await using var session = await RealDb.Session.StartAsync();
+        await using var env = await PrepareAsync(session);
+        var sku = await NewSkuAsync(env);
+        var reserved = await NewLotAsync(env, sku, "L-RESERVED", 100, Today.AddDays(30));
+        var other = await NewLotAsync(env, sku, "L-OTHER", 100, Today.AddDays(60));
+        var order = await ConfirmedOrderAsync(env, sku, 100);
+
+        var done = await env.Pickup.PickupAsync(order.Id, Take(order.Items.Single().Id, (other.Id, 100)), Token);
+
+        Assert.Equal("COMPLETED", done.Status);
+        Assert.Equal((100L, 0L), await BalanceAsync(env, reserved.Id));
+        Assert.Equal((0L, 0L), await BalanceAsync(env, other.Id));
+        var reservation = await env.Confirmation.GetReservationAsync(order.Id, Token);
+        Assert.Equal("CONSUMED", reservation.Status);
+        Assert.Equal((100L, 0L, 100L, 0L), (
+            reservation.Items.Single(i => i.InventoryLotId == reserved.Id).ReservedBaseQuantity,
+            reservation.Items.Single(i => i.InventoryLotId == reserved.Id).ConsumedBaseQuantity,
+            reservation.Items.Single(i => i.InventoryLotId == reserved.Id).ReleasedBaseQuantity,
+            reservation.Items.Single(i => i.InventoryLotId == reserved.Id).RemainingBaseQuantity));
+        Assert.Equal(100L, reservation.Items.Single(i => i.InventoryLotId == other.Id).ConsumedBaseQuantity);
+        var movement = await env.Context.StockMovements.AsNoTracking().Include(m => m.Items).SingleAsync(m => m.OrderId == order.Id, Token);
+        Assert.Equal((-100L, 5_000m), (Assert.Single(movement.Items).QuantityDeltaBase, movement.Items.Single().UnitCostSnapshot));
     }
 
     [RealDbFact]
