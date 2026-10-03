@@ -5,6 +5,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- The per-developer secrets file and the template are never copied to the build output or the publish folder. -->
+    <Content Remove="appsettings.Local.json" />
+    <Content Remove="appsettings.Local.example.json" />
+    <None Include="appsettings.Local.example.json" CopyToOutputDirectory="Never" CopyToPublishDirectory="Never" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\AgriSage.Application\AgriSage.Application.csproj" />
     <ProjectReference Include="..\AgriSage.Infrastructure\AgriSage.Infrastructure.csproj" />
   </ItemGroup>

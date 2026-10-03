@@ -32,6 +32,19 @@ NuGet versions are managed centrally in `Directory.Packages.props`; `PackageRefe
 | `Jwt:SigningKey` (≥ 32 chars) | Yes — app fails on start without it | `dotnet user-secrets set "Jwt:SigningKey" "<key>" --project src/AgriSage.Api` | `Jwt__SigningKey` |
 | `Database:Password` | Yes, to reach the database | `dotnet user-secrets set "Database:Password" "<password>" --project src/AgriSage.Api` | `Database__Password` |
 
+#### Alternative in Development: a local settings file
+
+Instead of the commands above you can keep the same secrets in one file that is yours alone:
+
+```bash
+copy src\AgriSage.Api\appsettings.Local.example.json src\AgriSage.Api\appsettings.Local.json   # then fill in the values
+```
+
+`appsettings.Local.json` is **gitignored**, excluded from the build output and publish folder, and read only when
+`ASPNETCORE_ENVIRONMENT=Development`; there it overrides User Secrets and environment variables. It uses the same keys
+(`Database:Password`, `Jwt:SigningKey`, `Storage:SecretKey`). Never copy these values into a committed `appsettings*.json`,
+a chat, or an AI agent prompt; servers use environment variables only.
+
 ### Database (Supabase PostgreSQL)
 
 The non-secret connection settings are committed per environment in the `Database` section

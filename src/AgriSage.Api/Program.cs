@@ -12,6 +12,9 @@ if (commands.Count > 0)
     MaintenanceCommands.SuppressProviderLogging(builder);
 }
 
+// Optional per-developer settings file (gitignored, never published): see appsettings.Local.example.json.
+builder.AddLocalSettingsFile();
+
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 
