@@ -1,6 +1,6 @@
 # API Contract — Customers, Pricing, Credit and Debt (Group B)
 
-Version 1.0 — 2026-10-02. Scope: tasks B1–B5 and the real implementations of the interfaces that group A
+Version 1.1 — 2026-10-03 (all decisions B-D1..B-D6 settled; store-managed Farmer accounts). Scope: tasks B1–B5 and the real implementations of the interfaces that group A
 uses (`API_CONTRACT_SALES.md` §9) plus the interfaces group C (payments, returns) needs from B.
 
 Sources: `DATABASE_DESIGN.md` §3–4, §7–8, §18–20, §44–51, §XVI, §XIX, §35.6–35.7; `BUSINESS_RULES.md`
@@ -26,7 +26,7 @@ Same as `API_CONTRACT_SALES.md` §1 (routes, JSON, enum strings, money with ≤2
 
 | Task | Content | Depends on | Delivers to others |
 |---|---|---|---|
-| B1 | Farmer profile, addresses, staff customer views | — | addresses for A2 (decision D1 of group A) |
+| B1 | Farmer profile, addresses, staff customer views, store-managed Farmer accounts | — | addresses for A2 (decision D1 of group A) |
 | B2 | Customer groups and assignment | B1 | — |
 | B3 | Price lists, group ↔ price list, public catalog price | B2 | real `IPriceResolver` for A1/A2 |
 | B4 | Credit tiers, credit profiles, exposure | B1 | real `IOrderSettlementGuard`, `ICreditReservationAdjuster` |
@@ -80,6 +80,7 @@ Rules:
 
 | Method | Route | Roles | Body | Response |
 |---|---|---|---|---|
+| POST | `/api/customers` | Operate | `CreateCustomerRequest` | `201 CustomerResponse` |
 | GET | `/api/customers` | Operate | query: `search` (name, phone, email), `customerGroupId`, `hasOutstandingDebt`, `page`, `pageSize` | `200 PagedResult<CustomerListItem>` |
 | GET | `/api/customers/{farmerProfileId}` | Operate | — | `200 CustomerResponse` |
 | PUT | `/api/customers/{farmerProfileId}` | Operate | `{ dateOfBirth?, gender?, notes? }` | `200 CustomerResponse` |
@@ -91,7 +92,35 @@ customerGroup {id, code, name}, creditStatus (null if no profile), creditLimit, 
 `CustomerResponse` = `FarmerProfileResponse` + `notes`, `accountStatus`, `addresses[]`,
 `credit` (the B4 summary or `null`), `debt` (the B5 account summary or `null`).
 
-Staff do **not** create Farmer accounts in this contract (decision B-D1).
+**Store-managed Farmer account (decision B-D1)** — for farmers who cannot register in the app themselves
+but must be REGISTERED customers (customer group prices, credit, debt):
+
+`CreateCustomerRequest`:
+
+```json
+{
+  "fullName": "string, required, ≤150",
+  "phoneNumber": "string, required (normalized like registration)",
+  "email": "string ≤255 | null",
+  "dateOfBirth": "date | null",
+  "gender": "MALE | FEMALE | OTHER | null",
+  "notes": "string ≤1000 | null",
+  "customerGroupId": "uuid | null",
+  "address": "AddressRequest | null"
+}
+```
+
+- One transaction: `User` (role FARMER, status ACTIVE, `phone_verified = false`) + `FarmerProfile`
+  (+ group assignment when `customerGroupId` is given, + first address when `address` is given).
+- The phone number is required (the farmer's identifier at the counter); phone / email already used → 409,
+  exactly like self-registration (same normalization, same unique indexes).
+- **No usable password:** `password_hash` is the hash of a random 32-byte secret that is never stored in
+  clear, shown or logged. Nobody — staff included — can sign in to this account yet; the counter flows use
+  the `farmerProfileId`.
+- The farmer takes over the account later by verifying the phone number and setting a password, through the
+  OTP / forgot-password flow that is still waiting for the mentor's decision on Auth. Until that flow exists,
+  self-registering with the same phone answers 409 ("this phone already has a store account, ask the store").
+- The action is written to `audit_logs` (actor, new user id; never the secret).
 
 ---
 
@@ -387,7 +416,7 @@ Each task: unit, offline HTTP (401/403 per role, 400), rolled-back real PostgreS
 
 | Task | Must prove |
 |---|---|
-| B1 | one default address, Farmer isolation (404 on others' ids), 10-address limit |
+| B1 | one default address, Farmer isolation (404 on others' ids), 10-address limit; staff-created Farmer: user + profile in one transaction, duplicate phone 409, the account cannot sign in (no known password), no secret in logs or responses |
 | B2 | one default group, assignment history (only one current), default-group fallback |
 | B3 | resolution order (group list → walk-in default → none), validity windows, one walk-in default, item upsert, snapshot unaffected by later price edits |
 | B4 | available credit formula with debt + reservations; two concurrent credit confirmations cannot exceed the limit; limit history + audit |
@@ -395,13 +424,15 @@ Each task: unit, offline HTTP (401/403 per role, 400), rolled-back real PostgreS
 
 ---
 
-## 10. Decisions (proposed defaults — applied unless the team objects before B starts)
+## 10. Decisions
+
+All decisions of group B are settled by the team (2026-10-03); none is pending.
 
 | # | Decision |
 |---|---|
-| B-D1 | Staff cannot create Farmer accounts yet (Farmers self-register; unregistered buyers are WALK_IN). Revisit with the Auth decisions pending with the mentor |
-| B-D2 | A Farmer without a group assignment belongs to the store's default group; no assignment row is created at registration |
-| B-D3 | A group without an applicable price list falls back to the walk-in default list |
+| B-D1 | Staff (Admin, Store Owner, Sales) create **store-managed Farmer accounts** with `POST /api/customers` (§3.2): phone required, no usable password, nobody can sign in until the farmer verifies the phone and sets a password through the future OTP / forgot-password flow (Auth decision still with the mentor). Farmers can still self-register; unregistered buyers stay WALK_IN |
+| B-D2 | A Farmer without a group assignment belongs to the store's default group; no assignment row is created at registration (a staff-created customer gets a row only when `customerGroupId` is given) |
+| B-D3 | A group without an applicable price list uses the walk-in default list. There is no per-product fallback: one order snapshots one price list, so a group's list must price every sellable packaging; a missing pair = the line cannot be ordered (422). The price-list screen should show sellable packagings without a price |
 | B-D4 | A credit profile requires a credit tier; the payment term of a credit order = tier `defaultPaymentTermDays`, snapshotted at confirmation |
-| B-D5 | Roles: groups, price lists, credit tiers, credit status changes, debt ADJUST/CANCEL/manual entries = Manage; customer views, group assignment, credit limit (rule 22), DISPUTE/KEEP/CHANGE_DUE_DATE = Operate; Farmer only `/api/me/...` |
+| B-D5 | Roles: groups, price lists, credit tiers, credit status changes (activate/suspend/block), debt ADJUST/CANCEL/manual entries = Manage; customer create/view/edit, group assignment, credit profile creation and limit changes (rule 22), DISPUTE/KEEP/CHANGE_DUE_DATE = Operate; Farmers only `/api/me/...` |
 | B-D6 | Debt repayment money enters only through C's payment API; B never creates payments, only allocates them (`IDebtRepaymentPosting`) |

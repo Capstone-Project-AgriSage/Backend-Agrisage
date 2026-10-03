@@ -276,7 +276,9 @@ name or phone), `page`, `pageSize`. Sorted newest first.
 `UpdateOrderRequest`: `{ addressId?, deliveryAddress?, note? }` — only while `PENDING_CONFIRMATION`.
 
 Rules:
-- REGISTERED: `farmerProfileId` required; name/phone are taken from the Farmer (client values ignored).
+- REGISTERED: `farmerProfileId` required; name/phone are taken from the Farmer (client values ignored). A
+  farmer without an account who needs group prices or credit is first created with B's `POST /api/customers`
+  (store-managed account, decision B-D1).
 - WALK_IN: `farmerProfileId` must be null, `customerName` required, `settlementType` must be FULL_PAYMENT
   (CREDIT → 422); price list = the walk-in default price list.
 - CREDIT: REGISTERED only; the ACTIVE credit profile is checked at confirmation (A3), not here.
