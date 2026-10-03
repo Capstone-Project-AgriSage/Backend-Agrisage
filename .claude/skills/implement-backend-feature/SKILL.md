@@ -10,8 +10,13 @@ Use when asked to implement a backend feature, endpoint, service, or Jira task.
 ## Procedure
 
 1. Read the task/acceptance criteria.
-2. Inspect existing feature files and call sites before editing.
-3. Read `AGENTS.md`.
+2. Inspect existing feature files and call sites before editing. The reference implementation to copy is
+   the Suppliers / GoodsReceipts / Inventory features (Application service + validators + contracts,
+   controller, `GoodsReceiptConfirmer` for a transaction owner) and their unit, HTTP and real-DB tests.
+3. Read `AGENTS.md`, then the section of your task in the matching `docs/reference/API_CONTRACT_*.md`:
+   use its routes, DTO names/fields, roles and error codes exactly; implement cross-module interfaces with
+   the signatures given there (and their temporary implementation until the owner delivers the real one).
+   If the contract is wrong or incomplete, stop and propose a change to the contract file first.
 4. Load only relevant context:
    - architecture placement → `docs/agent/context/BACKEND_MAP.md`
    - business behavior → `docs/agent/context/BUSINESS_RULES.md`

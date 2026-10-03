@@ -13,7 +13,7 @@ Keep this file high-signal; it is a map, not the project encyclopedia.
 - Web: React. Mobile: Flutter.
 - AI: Python + FastAPI + PyTorch.
 - Payment: payOS.
-- Current phase: **BE Foundation & Database Initialization**.
+- Current phase: **Business APIs** — groups A (sales/delivery), B (customers/credit/debt) and C (payments/stock/returns) in parallel; details in `docs/agent/context/CURRENT_STATE.md`.
 - DB baseline: **67 tables**.
 - One active operational Store; never hard-code Store ID.
 
@@ -23,6 +23,7 @@ Use this precedence:
 2. `docs/reference/DATABASE_DESIGN.md`.
 3. `docs/reference/BACKEND_ARCHITECTURE.md`.
 4. `docs/reference/BACKEND_CODING_RULES.md`.
+4b. `docs/reference/API_CONTRACT_*.md` — routes, DTOs, roles, error codes and cross-module interfaces of the business APIs (the design wins on conflict; change a contract by PR on the file first).
 5. Accepted existing code/tests.
 6. `docs/agent/context/*` summaries.
 
@@ -124,6 +125,8 @@ DATABASE_DESIGN.md
 
 After `InitialMigration`, migrations are schema source of truth.
 Do not manually evolve schema in DBeaver.
+One migration at a time across the team (announce it to the lead first); every new migration is added to the
+reviewed list in `InitialCreateMigrationTests` and gets its own review test.
 For DB work, open only exact relevant sections of the full design.
 
 ## Non-Negotiable Invariants
@@ -214,6 +217,9 @@ Tables/schema map  → DATABASE_MAP.md
 Cross-module flow  → WORKFLOW_MAP.md
 Frozen decisions   → DECISIONS.md
 Current phase      → CURRENT_STATE.md
+API routes/DTOs    → docs/reference/API_CONTRACT_SALES.md (A), API_CONTRACT_CUSTOMERS_CREDIT.md (B),
+                     API_CONTRACT_PAYMENTS_INVENTORY_RETURNS.md (C) — read only your task's section
+Code pattern       → Suppliers / GoodsReceipts / Inventory features and their tests (reference feature)
 Exact details      → docs/reference/*
 ```
 
