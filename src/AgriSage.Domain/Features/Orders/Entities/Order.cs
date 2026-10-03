@@ -202,6 +202,12 @@ public sealed class Order : SoftDeletableEntity, IHasConcurrencyVersion
         SourceAddressId = sourceAddressId;
     }
 
+    public void ChangeNote(string? note)
+    {
+        EnsurePending();
+        Note = note;
+    }
+
     public void Confirm(Guid confirmedBy, DateTimeOffset confirmedAt, int? creditTermDays = null)
     {
         EnsurePending();

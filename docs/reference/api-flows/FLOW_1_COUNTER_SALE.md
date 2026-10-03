@@ -102,7 +102,7 @@ step, by reading the group tables directly (L3 only builds the screens that fill
 
 ---
 
-## 4. F1.2 — Staff counter orders (`Operate`)
+## 4. F1.2 — Staff counter orders (`Operate`) — done
 
 | Method | Route | Body | Response |
 |---|---|---|---|
@@ -150,11 +150,13 @@ Rules:
 - REGISTERED: `farmerProfileId` required; name/phone are taken from the Farmer (client values ignored). A
   farmer without an account who needs group prices or credit is first created with L2's `POST /api/customers`
   (store-managed account, decision B-D1).
-- WALK_IN: `farmerProfileId` must be null, `customerName` required, `settlementType` must be FULL_PAYMENT
-  (CREDIT → 422); price list = the walk-in default price list.
+- WALK_IN: `farmerProfileId` must be null, `customerName` is optional (blank → "Khách lẻ"), `customerPhone` optional
+  (normalized, 422 when not a Vietnamese mobile number), `settlementType` must be FULL_PAYMENT (CREDIT → 422); price list
+  = the walk-in default price list.
 - CREDIT: REGISTERED only; the ACTIVE credit profile is checked at confirmation (F1.4), not here.
 - DELIVERY needs exactly one of `addressId` (one of the Farmer's addresses, copied as a snapshot) or
-  `deliveryAddress` (decision D1: `addressId` works once F2.1 is merged).
+  `deliveryAddress` (400 when both or none; a walk-in order or another user's address → 422). PICKUP must carry neither
+  (400). The typed recipient phone is normalized.
 - Snapshot at creation: customer group, price list, customer name and phone, address, and per line SKU, name,
   packaging name, conversion, suggested price.
 - Only sellable store products of ACTIVE products and ACTIVE **sale** packagings (`isSaleUnit`), else 422; a line
@@ -162,11 +164,25 @@ Rules:
 - Price override (decision D4): `unitPrice` different from the suggested price requires `overrideReason`; the
   server stores the suggested price, actor and reason. `unitPrice` without a different value is ignored.
 - Items, header and prices change only while `PENDING_CONFIRMATION` (→ 422 otherwise).
+- The same (store product, packaging) pair may appear once: twice in the create request → 400; `POST .../items` for a pair
+  already on the order → 422 (change that line's quantity). Quantity 1..100 000 000, at most 100 lines per order.
+- A line added later is priced by the order's own price list (the snapshot), not by whatever list applies today.
+- `PUT .../items/{itemId}/price` always needs `reason`; a `unitPrice` equal to the suggested price restores it (no
+  override). `PUT /api/orders/{id}`: `note` null = unchanged, blank = cleared; `addressId`/`deliveryAddress` only on a
+  DELIVERY order (422 on PICKUP), at most one of them (400).
+- Audit (`audit_logs`, entity `ORDER`): `PRICE_OVERRIDE` (suggested vs new price, reason), `PRICE_OVERRIDE_REMOVED`,
+  `ORDER_UPDATED`, `ORDER_ITEM_QUANTITY_CHANGED`, `ORDER_ITEM_REMOVED`.
+- List: `fromDate`/`toDate` are Vietnam calendar days on `createdAt`; `search` matches order number, customer name or
+  phone; unknown enum text → 400.
 
-**`OrderBuilder`** (shared step, README §4.9): input = customer (Farmer id or walk-in name/phone), source,
+**`OrderBuilder`** (shared step, README §4.9, `Application/Features/Orders`): `BuildAsync(OrderDraft)` — input = customer (Farmer id or walk-in name/phone), source,
 settlement, fulfillment, address snapshot, lines (+ optional overrides, staff only); output = a tracked
-`PENDING_CONFIRMATION` `Order` with its number and snapshots. Used by `POST /api/orders`, F2.3 checkout (source
-FARMER_WEB / FARMER_MOBILE, no overrides) and F1.7.
+`PENDING_CONFIRMATION` `Order` with its number and snapshots, **not yet added to the context** (the caller adds it, then
+calls `RecordPriceOverrides(order)` so the audit rows join the same save). `OrderDraft.AllowPriceOverride` is true only
+for staff. Reusable pieces: `ResolveLinesAsync` (catalog checks + prices of a given list, `errors` per line as
+`items[i]`), `ResolveDeliveryAddressAsync`, `OrderBuilder.AddLine`. `OrderQueries.GetAsync` / `ToResponse` build the
+shared `OrderResponse`. Used by `POST /api/orders`, F2.3 checkout (source FARMER_WEB / FARMER_MOBILE, no overrides)
+and F1.7.
 
 ---
 

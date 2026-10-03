@@ -9,6 +9,7 @@ using AgriSage.Application.Features.GoodsReceipts;
 using AgriSage.Application.Features.GoodsReceipts.Import;
 using AgriSage.Application.Features.Inventory;
 using AgriSage.Application.Features.Payments;
+using AgriSage.Application.Features.Orders;
 using AgriSage.Application.Features.Pricing;
 using AgriSage.Application.Features.Suppliers;
 using AgriSage.Application.Features.Products.Interfaces;
@@ -50,6 +51,10 @@ public static class DependencyInjection
 
         services.AddScoped<AuditTrail>();
         services.AddScoped<IPriceListService, PriceListService>();
+
+        services.AddScoped<OrderBuilder>();
+        services.AddScoped<OrderQueries>();
+        services.AddScoped<IOrderService, OrderService>();
 
         // Cross-flow interfaces (docs/reference/api-flows/README.md §4). Each line is replaced by its owner task with
         // the real implementation; the Temporary* class is then deleted (Common/Placeholders).

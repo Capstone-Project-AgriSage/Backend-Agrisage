@@ -406,7 +406,7 @@ public interface IDebtReturnPosting
 | Step | Owner | Reused by | Contract |
 |---|---|---|---|
 | `AuditTrail` (`Application/Common`, done) | F1.1 | every flow that must write `audit_logs` (price lists, overrides, store-managed accounts, credit limits, debt actions…) | `Record(action, entityType, entityId, storeId, oldValues?, newValues?, reason?)` adds one row (camelCase JSON, actor = current user) to the caller's unit of work and never saves; never pass secrets |
-| `OrderBuilder` | F1.2 | F2.3 (checkout), F1.7 | builds a PENDING_CONFIRMATION order with price and customer snapshots from a customer + lines; validates sellable products/sale packagings and price overrides |
+| `OrderBuilder` (`Application/Features/Orders`, done) | F1.2 | F2.3 (checkout), F1.7 | `BuildAsync(OrderDraft)` builds a PENDING_CONFIRMATION order with price and customer snapshots from a customer + lines; validates sellable products/sale packagings and price overrides |
 | `PaymentAllocator` | F1.3 | F2.4 (webhook/sync), F1.7 | a payment just became PAID: ORDER → one ORDER allocation to `payments.order_id` + `ICreditReservationAdjuster` for a confirmed CREDIT order; DEBT → `IDebtRepaymentPosting` |
 | `OrderConfirmer` core | F1.4 | F1.7 | settlement guard → FEFO/explicit lots → `InventoryLot.Reserve` → reservation → `order.Confirm` |
 | `FulfillmentPostingService` | F1.5 | F2.6, F1.7 | FLOW_1 §7 |
