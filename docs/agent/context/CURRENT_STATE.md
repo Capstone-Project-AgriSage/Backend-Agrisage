@@ -212,6 +212,11 @@ setup documentation
   0.105.1, MIT, approved; no known vulnerabilities). `ReceiptItemRules.Check` now names the field of a violation;
   `GoodsReceiptService` creates drafts with a source type/file name and loads all lines in two queries;
   `BusinessRuleException` can carry `errors` (422 problem details `errors`). No schema change, no migration.
+- Done (branch `feature/f1-1-price-lists`, task F1.1) — Price lists: 10 routes of FLOW_1 §3
+  (`Api/Features/Pricing/PriceListsController`, `Application/Features/Pricing/PriceListService`), real `PriceResolver`
+  (registered for `IPriceResolver`; `TemporaryPriceResolver` deleted), catalog prices (`PublicPackaging.Price`,
+  `PublicProductListItem.FromPrice`), shared `Application/Common/AuditTrail` and `Common/Validators/MoneyRules`
+  (`MustBeMoney`, moved from GoodsReceipts). Domain: `PriceListItem.Reinstate`. No schema change, no migration.
 
 ## Not Yet Implied by Foundation Completion
 

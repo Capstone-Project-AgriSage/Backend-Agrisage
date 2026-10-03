@@ -11,6 +11,7 @@ using AgriSage.Domain.Features.Products.Entities;
 using AgriSage.Domain.Features.Stores.Entities;
 using AgriSage.Domain.Features.Stores.Enums;
 using AgriSage.Infrastructure.Persistence;
+using AgriSage.Infrastructure.Services;
 using AgriSage.IntegrationTests.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -34,7 +35,7 @@ public class CatalogDatabaseTests
             Ingredients = new ActiveIngredientService(context);
             Products = new ProductService(context, errors);
             StoreProducts = new StoreProductService(context, errors);
-            Catalog = new CatalogService(context);
+            Catalog = new CatalogService(context, new DateTimeProvider());
         }
 
         public AgriSageDbContext Context { get; }

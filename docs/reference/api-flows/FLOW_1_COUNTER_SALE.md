@@ -43,16 +43,16 @@ Milestone **M1** = F1.1–F1.3 merged; **M2** = F1.4–F1.5 merged (README §6).
 
 ---
 
-## 3. F1.1 — Price lists (Read: `Operate`, write: `Manage`)
+## 3. F1.1 — Price lists (Read: `Operate`, write: `Manage`) — done
 
 | Method | Route | Roles | Body | Response |
 |---|---|---|---|---|
 | GET | `/api/price-lists` | Operate | query: `status`, `isWalkInDefault`, `search`, `page`, `pageSize` | `200 PagedResult<PriceListResponse>` |
 | GET | `/api/price-lists/{id}` | Operate | — | `200 PriceListResponse` |
 | POST | `/api/price-lists` | Manage | `PriceListRequest` | `201 PriceListResponse` (DRAFT) |
-| PUT | `/api/price-lists/{id}` | Manage | `PriceListRequest` without `code` | `200 PriceListResponse` |
-| POST | `/api/price-lists/{id}/activate` | Manage | — | `200` |
-| POST | `/api/price-lists/{id}/deactivate` | Manage | — | `200` |
+| PUT | `/api/price-lists/{id}` | Manage | `UpdatePriceListRequest` (= `PriceListRequest` without `code`) | `200 PriceListResponse` |
+| POST | `/api/price-lists/{id}/activate` | Manage | — | `200 PriceListResponse` |
+| POST | `/api/price-lists/{id}/deactivate` | Manage | — | `200 PriceListResponse` |
 | DELETE | `/api/price-lists/{id}` | Manage | — | `204` |
 | GET | `/api/price-lists/{id}/items` | Operate | query: `search`, `page`, `pageSize` | `200 PagedResult<PriceListItemResponse>` |
 | PUT | `/api/price-lists/{id}/items` | Manage | `{ items: [ { storeProductId, productPackagingId, sellingPrice } ] }` | `200 { created, updated }` |
@@ -70,18 +70,27 @@ itemCount, groups [{id, code, name}], createdAt`.
 sellingPrice`.
 
 Rules:
-- `code` unique per store (409). `effectiveTo` > `effectiveFrom` when given.
+- `code` unique per store, ignoring case (409), immutable. There is no unique index on it, so the check is done by
+  the Application (decision Q3 of the FLOW_1 plan). `effectiveTo` > `effectiveFrom` when given.
 - Items: only ACTIVE **sale** packagings of the given store product; `sellingPrice` ≥ 0, ≤ 2 decimals;
-  one row per (store product, packaging) — the bulk PUT upserts; at most 500 lines per call.
+  one row per (store product, packaging) — the bulk PUT upserts; at most 500 lines per call; a pair repeated in
+  one call → 400. Lines that cannot be priced → 422 with `errors: { "items[3]": [reason] }` and nothing is saved.
+  Pricing a removed pair again revives its row (`PriceListItem.Reinstate`; the unique index counts deleted rows).
+  `created` counts new and revived lines, `updated` the lines whose price changed.
   Prices in VND should be whole numbers: payOS accepts only whole VND (decision C-D9), so a fractional total must
   be settled partly in cash. The UI should warn on a fractional price; the API still accepts up to 2 decimals.
 - Items may change while the list is ACTIVE; this affects carts and **new** orders only (order lines keep
-  their snapshot). Each change is audited.
-- At most one ACTIVE walk-in default list at any time (activating a second one → 422).
+  their snapshot). Every write is audited in `audit_logs` (entity `PRICE_LIST`; actions `PRICE_LIST_CREATED`,
+  `_UPDATED`, `_ACTIVATED`, `_DEACTIVATED`, `_DELETED`, `PRICE_LIST_ITEMS_CHANGED` with old/new prices,
+  `PRICE_LIST_ITEM_REMOVED`).
+- At most one ACTIVE walk-in default list at any time (activating a second one, or flagging an ACTIVE list as
+  walk-in default while another one is ACTIVE → 422; the partial unique index answers a race with 409).
 - DELETE only DRAFT lists never linked to a group and never used by an order (`price_list_id_snapshot`);
   otherwise 409 → deactivate.
-- Public catalog (existing `GET /api/catalog/products` and `/products/{id}`): each sale packaging gets a
-  new field `price` from the ACTIVE walk-in default list (`null` if none). Adding a field is non-breaking.
+- `groups` in `PriceListResponse` = groups linked now or from a future date (links not ended).
+- Public catalog (existing `GET /api/catalog/products` and `/products/{id}`), from the ACTIVE walk-in default list
+  valid now (`null` if none): each packaging of the detail gets `price` (sale packagings only), each list row gets
+  `fromPrice` (lowest price among its ACTIVE sale packagings). Adding fields is non-breaking.
 
 **Price resolution** (real `IPriceResolver`, README §4.1) — F1.1 implements all five steps, including the group
 step, by reading the group tables directly (L3 only builds the screens that fill them):

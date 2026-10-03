@@ -4,6 +4,7 @@ using AgriSage.Application.Common.Interfaces;
 using AgriSage.Application.Common.Models;
 using AgriSage.Application.Features.Products.Dtos.Requests;
 using AgriSage.Application.Features.Products.Dtos.Responses;
+using AgriSage.Application.Features.Pricing;
 using AgriSage.Application.Features.Products.Interfaces;
 using AgriSage.Domain.Features.Products.Entities;
 using AgriSage.Domain.Features.Products.Enums;
@@ -12,7 +13,8 @@ using Microsoft.EntityFrameworkCore;
 namespace AgriSage.Application.Features.Products.Services;
 
 // Public catalog: only the store's ACTIVE and sellable products of ACTIVE products; nothing internal is exposed.
-public sealed class CatalogService(IAgriSageDbContext context) : ICatalogService
+// Prices come from the ACTIVE walk-in default price list valid now (FLOW_1 §3).
+public sealed class CatalogService(IAgriSageDbContext context, IDateTimeProvider clock) : ICatalogService
 {
     public async Task<IReadOnlyList<CategoryTreeNode>> GetCategoriesAsync(CancellationToken cancellationToken)
     {
@@ -36,7 +38,9 @@ public sealed class CatalogService(IAgriSageDbContext context) : ICatalogService
         CatalogProductListRequest request,
         CancellationToken cancellationToken)
     {
-        var query = Sellable(await ActiveStore.GetIdAsync(context, cancellationToken));
+        var storeId = await ActiveStore.GetIdAsync(context, cancellationToken);
+        var priceListId = await PriceResolver.WalkInDefaultIdAsync(context, storeId, clock.UtcNow, cancellationToken);
+        var query = Sellable(storeId);
 
         if (request.CategoryId is not null)
         {
@@ -62,7 +66,13 @@ public sealed class CatalogService(IAgriSageDbContext context) : ICatalogService
             .Skip(request.Skip).Take(request.PageSize)
             .Select(sp => new PublicProductListItem(
                 sp.Id, sp.Product.Sku, sp.Product.Name, sp.Product.ImageUrl, sp.Product.CategoryId, sp.Product.Category.Name,
-                sp.Product.Brand != null ? sp.Product.Brand.Name : null))
+                sp.Product.Brand != null ? sp.Product.Brand.Name : null,
+                context.PriceListItems
+                    .Where(i => i.PriceListId == priceListId && i.StoreProductId == sp.Id)
+                    .Join(
+                        context.ProductPackagings.Where(p => p.Status == PackagingStatus.Active && p.IsSaleUnit),
+                        i => i.ProductPackagingId, p => p.Id, (i, p) => (decimal?)i.SellingPrice)
+                    .Min()))
             .ToListAsync(cancellationToken);
 
         return new PagedResult<PublicProductListItem>(items, request.Page, request.PageSize, total);
@@ -70,7 +80,9 @@ public sealed class CatalogService(IAgriSageDbContext context) : ICatalogService
 
     public async Task<PublicProductResponse> GetProductAsync(Guid storeProductId, CancellationToken cancellationToken)
     {
-        var storeProduct = await Sellable(await ActiveStore.GetIdAsync(context, cancellationToken))
+        var storeId = await ActiveStore.GetIdAsync(context, cancellationToken);
+        var priceListId = await PriceResolver.WalkInDefaultIdAsync(context, storeId, clock.UtcNow, cancellationToken);
+        var storeProduct = await Sellable(storeId)
             .Include(sp => sp.Product).ThenInclude(p => p.Category)
             .Include(sp => sp.Product).ThenInclude(p => p.Brand)
             .FirstOrDefaultAsync(sp => sp.Id == storeProductId, cancellationToken)
@@ -83,7 +95,13 @@ public sealed class CatalogService(IAgriSageDbContext context) : ICatalogService
             .Where(p => p.ProductId == product.Id && p.Status == PackagingStatus.Active && (p.IsSaleUnit || p.IsBaseUnit))
             .OrderByDescending(p => p.IsBaseUnit).ThenBy(p => p.ConversionToBase).ThenBy(p => p.Id)
             .Select(p => new PublicPackaging(
-                p.Id, p.Unit.Name, p.Unit.Symbol, p.PackagingName, p.ConversionToBase, p.IsBaseUnit, p.Barcode))
+                p.Id, p.Unit.Name, p.Unit.Symbol, p.PackagingName, p.ConversionToBase, p.IsBaseUnit, p.Barcode,
+                p.IsSaleUnit
+                    ? context.PriceListItems
+                        .Where(i => i.PriceListId == priceListId && i.StoreProductId == storeProduct.Id && i.ProductPackagingId == p.Id)
+                        .Select(i => (decimal?)i.SellingPrice)
+                        .FirstOrDefault()
+                    : null))
             .ToListAsync(cancellationToken);
 
         var ingredients = await context.ProductActiveIngredients.AsNoTracking()

@@ -61,6 +61,24 @@ public class PricingTests
     }
 
     [Fact]
+    public void A_removed_price_list_item_is_reinstated_with_its_new_price()
+    {
+        var (product, _, box) = CreateProductWithPackagings();
+        var item = new PriceListItem(Guid.NewGuid(), CreateStoreProduct(product), box, 100m);
+
+        Assert.Throws<DomainException>(() => item.Reinstate(120m));
+        item.MarkDeleted(Guid.NewGuid(), EffectiveFrom);
+        Assert.Throws<DomainException>(() => item.Reinstate(1.234m));
+        Assert.True(item.IsDeleted);
+
+        item.Reinstate(120m);
+
+        Assert.False(item.IsDeleted);
+        Assert.Null(item.DeletedBy);
+        Assert.Equal(120m, item.SellingPrice);
+    }
+
+    [Fact]
     public void Price_list_item_packaging_must_belong_to_store_product()
     {
         var (product, _, _) = CreateProductWithPackagings("SKU-A");

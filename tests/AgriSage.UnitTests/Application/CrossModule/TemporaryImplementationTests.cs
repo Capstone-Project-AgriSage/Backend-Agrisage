@@ -2,7 +2,6 @@ using AgriSage.Application.Common;
 using AgriSage.Application.Common.Exceptions;
 using AgriSage.Application.Common.Placeholders;
 using AgriSage.Application.Features.Debt;
-using AgriSage.Application.Features.Pricing;
 using AgriSage.Domain.Features.Orders.Enums;
 using AgriSage.Domain.Features.Payments.Entities;
 using AgriSage.Domain.Features.Payments.Enums;
@@ -14,16 +13,6 @@ namespace AgriSage.UnitTests.Application.CrossModule;
 public class TemporaryImplementationTests
 {
     private static CancellationToken Token => TestContext.Current.CancellationToken;
-
-    [Fact]
-    public async Task Pricing_is_refused_until_price_lists_exist()
-    {
-        var resolver = new TemporaryPriceResolver();
-
-        await Assert.ThrowsAsync<BusinessRuleException>(() => resolver.GetContextAsync(null, Now, Token));
-        await Assert.ThrowsAsync<BusinessRuleException>(() =>
-            resolver.GetPricesAsync(Guid.NewGuid(), [new PriceLine(Guid.NewGuid(), Guid.NewGuid())], Token));
-    }
 
     [Fact]
     public async Task Full_payment_orders_pass_the_settlement_guard_and_credit_orders_are_refused()
