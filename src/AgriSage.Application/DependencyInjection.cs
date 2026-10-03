@@ -59,6 +59,8 @@ public static class DependencyInjection
         services.AddScoped<IOrderConfirmationService, OrderConfirmationService>();
         services.AddScoped<FulfillmentPostingService>();
         services.AddScoped<IOrderPickupService, OrderPickupService>();
+        services.AddScoped<OrderCanceller>();
+        services.AddScoped<IOrderCancellationService, OrderCancellationService>();
 
         services.AddScoped<PaymentAllocator>();
         services.AddScoped<PaymentQueries>();
@@ -74,7 +76,7 @@ public static class DependencyInjection
         services.AddScoped<IDebtRepaymentPosting, TemporaryDebtRepaymentPosting>();               // F3.5
         services.AddScoped<IDebtReturnPosting, TemporaryDebtReturnPosting>();                     // F3.5
         services.AddScoped<IOrderPrepaymentLedger, OrderPrepaymentLedger>();                      // F1.3 (real)
-        services.AddScoped<IOrderPaymentCancellation, TemporaryOrderPaymentCancellation>();       // F1.6
+        services.AddScoped<IOrderPaymentCancellation, OrderPaymentCancellation>();                // F1.6 (real)
 
         // Further feature application services are registered here by later tasks.
 

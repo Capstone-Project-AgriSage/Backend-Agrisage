@@ -257,7 +257,7 @@ first. Implementations never call `SaveChangesAsync` or open a transaction (§3.
 |---|---|---|---|---|
 | `IPriceResolver` | `Features/Pricing` | F1.1 | F1.2, F1.7, F2.2, F2.3 | **real implementation done** (`PriceResolver`) |
 | `IOrderPrepaymentLedger` | `Features/Payments` | F1.3 | F3.3, F3.4 | **real implementation done** (`OrderPrepaymentLedger`) |
-| `IOrderPaymentCancellation` | `Features/Payments` | F1.6 | F1.5 (cancel-remaining), F1.6, F2.3 (Farmer cancel) | returns an empty list |
+| `IOrderPaymentCancellation` | `Features/Payments` | F1.6 | F1.5 (cancel-remaining), F1.6, F2.3 (Farmer cancel) | **real implementation done** (`OrderPaymentCancellation`); a PENDING payOS payment is refused until F2.4 cancels the link through the gateway there |
 | `IOrderSettlementGuard` | `Features/Credit` | F3.3 | F1.4 (confirm), F1.6 (cancel), F1.7 | accepts FULL_PAYMENT without the payment check, refuses CREDIT (422) |
 | `ICreditReservationAdjuster` | `Features/Credit` | F3.3 | F1.3 (`PaymentAllocator`), F2.4 | does nothing |
 | `IFulfillmentFinancialPosting` | `Features/Debt` | F3.4 | F1.5 (`FulfillmentPostingService`, also used by F2.6) | nothing for FULL_PAYMENT, throws for CREDIT |
@@ -410,7 +410,7 @@ public interface IDebtReturnPosting
 | `PaymentAllocator` (`Application/Features/Payments`, done) | F1.3 | F2.4 (webhook/sync), F1.7 | `AllocateAsync(payment, order?, debtAllocations?, actorId)`; a payment just became PAID: ORDER → one ORDER allocation to `payments.order_id` + `ICreditReservationAdjuster` for a confirmed CREDIT order; DEBT → `IDebtRepaymentPosting` |
 | `OrderConfirmer` core (`Application/Features/Orders`, done) | F1.4 | F1.7 | settlement guard → FEFO/explicit lots → `InventoryLot.Reserve` → reservation → `order.Confirm` |
 | `FulfillmentPostingService` (`Application/Features/Orders`, done) | F1.5 | F2.6, F1.7 | `PostAsync(order, lines, source, deliveryId?, attemptId?, actorId, at)`; FLOW_1 §7 |
-| `OrderCanceller` | F1.6 | F2.3 (Farmer cancel, after the ownership check) | FLOW_1 §8: cancel + reservation release + `IOrderSettlementGuard.ReleaseAsync` + `IOrderPaymentCancellation` |
+| `OrderCanceller` (`Application/Features/Orders`, done) | F1.6 | F2.3 (Farmer cancel, after the ownership check; load the order with its items, lock it first) | FLOW_1 §8: cancel + reservation release + `IOrderSettlementGuard.ReleaseAsync` + `IOrderPaymentCancellation` |
 
 Owners publish these first (milestones M1/M2 of §6) so the other flows build on real code.
 

@@ -39,11 +39,10 @@ public class TemporaryImplementationTests
     }
 
     [Fact]
-    public async Task Payments_and_debts_that_do_not_exist_yet_change_nothing_or_are_refused()
+    public async Task Credit_and_debts_that_do_not_exist_yet_change_nothing_or_are_refused()
     {
         var payment = new Payment(Guid.NewGuid(), "PM-1", PaymentContext.DebtRepayment, PaymentMethod.Cash, 1m, Now);
 
-        Assert.Empty(await new TemporaryOrderPaymentCancellation().ReverseForCancelledOrderAsync(CreateOrder(), StaffId, "x", Token));
         await new TemporaryCreditReservationAdjuster().OnOrderPrepaymentAsync(Guid.NewGuid(), 1m, StaffId, Token);
         Assert.Equal(0m, await new TemporaryDebtReturnPosting().ApplyReturnAsync(Guid.NewGuid(), Guid.NewGuid(), 5m, StaffId, null, Token));
         await Assert.ThrowsAsync<BusinessRuleException>(() => new TemporaryDebtRepaymentPosting().ApplyAsync(payment, null, StaffId, Token));

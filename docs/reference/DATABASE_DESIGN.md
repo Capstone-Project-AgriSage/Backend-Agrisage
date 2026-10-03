@@ -6446,6 +6446,31 @@ Every enum-backed varchar column also has an IN (...) CHECK of its
 documented values (§0.5).
 ```
 
+## 35.21 Giving back the unconsumed part of an order prepayment (tables 36, 37, 54) — no schema change
+
+```text
+Decided 2026-10-04 (task F1.6). Resolves the overlap of §35.7 (an ORDER allocation whose
+prepayment_consumed_amount > 0 cannot be reversed) and §35.18 (a cancelled or partially
+cancelled Order refunds the money that was paid but will never be consumed).
+
+Payment.ReleaseUnconsumedPrepayment(allocation, amount): the allocation gives back `amount`
+of what it holds unconsumed (0 < amount <= allocated_amount - prepayment_consumed_amount).
+  - amount = the whole allocation (nothing consumed) -> ReverseAllocation (status REVERSED,
+    reversed_at/by/reason set);
+  - otherwise allocated_amount is lowered by `amount`; the allocation stays ACTIVE and its
+    reversed_* columns stay empty (the audit log keeps the detail). Consumed prepayment is
+    never touched, so consumed <= allocated still holds.
+The released money becomes the payment's unallocated amount; one PENDING cancelled-order
+refund per payment records what staff hand back.
+
+Refundable amount of the order = paid (sum of active ORDER allocations of PAID payments)
+  - max(prepayment consumed, value of what was fulfilled), never below 0, where the
+    fulfilled value = sum over order items of round2(fulfilled_base_quantity x unit_price /
+    conversion_to_base_snapshot). Consumption is posted with the debt (F3.4), so the
+    fulfilled value keeps the amount right before and after it exists (afterwards they
+    agree). The newest payments give back first. Idempotent: a second call finds nothing.
+```
+
 ## 35.20 Debt term by customer type (tables 7, 44, 45, 46) — migration CustomerGroupDefaultCreditTier
 
 ```text

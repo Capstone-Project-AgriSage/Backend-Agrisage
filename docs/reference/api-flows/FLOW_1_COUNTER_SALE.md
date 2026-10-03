@@ -407,24 +407,36 @@ Built as `FulfillmentPostingService.PostAsync(order, lines, source, deliveryId?,
 
 ---
 
-## 8. F1.6 — Order cancellation (`Operate`)
+## 8. F1.6 — Order cancellation (`Operate`) — done
 
 | Method | Route | Body | Response |
 |---|---|---|---|
 | POST | `/api/orders/{id}/cancel` | `{ reason }` (required, ≤1000) | `200 OrderCancellationResponse` |
 
-`OrderCancellationResponse` = `OrderResponse` + `refunds: [CancellationRefundInfo]` (what staff must hand back;
-the refunds are completed with F4.5's routes).
+`OrderCancellationResponse` = `{ order: OrderResponse, refunds: [ { refundId, refundNumber, paymentId, refundMethod,
+amount } ] }` (what staff must hand back; the refunds are completed with F4.5's routes).
 
 - Allowed before anything is fulfilled (`PENDING_CONFIRMATION`, `CONFIRMED`, `PREPARING`,
   `READY_FOR_FULFILLMENT`); after a partial fulfillment use cancel-remaining (§7) instead.
 - **`OrderCanceller`** (shared step; F2.3's Farmer cancel calls it after the ownership check), in one transaction:
   `order.Cancel` → release the inventory reservation → `IOrderSettlementGuard.ReleaseAsync` →
   `IOrderPaymentCancellation.ReverseForCancelledOrderAsync` (README §4.3).
-- Real `IOrderPaymentCancellation`: cancels PENDING payOS links through `IPaymentGateway.CancelPaymentLinkAsync`
-  (the method is added by F2.4; payOS payments cannot exist before it), reverses the unconsumed ORDER allocation
-  of each PAID payment and requests one PENDING refund per payment (`Order.RequestCancellationRefund`, CASH for
-  cash, BANK_TRANSFER for payOS).
+- Real `IOrderPaymentCancellation` (`OrderPaymentCancellation`, `Application/Features/Payments`): cancels PENDING cash
+  payments; a PENDING payOS payment → 422 "cancel the online payment first" until F2.4 replaces that refusal with
+  `IPaymentGateway.CancelPaymentLinkAsync` in this same file (the method is added by F2.4; payOS payments cannot exist
+  before it). Every PAID payment gives back its unconsumed ORDER prepayment (`Payment.ReleaseUnconsumedPrepayment`,
+  design §35.21) and one PENDING refund per payment is requested (`Order.RequestCancellationRefund`, CASH for cash,
+  BANK_TRANSFER for payOS, `RF-yyyyMMdd-NNNN` consecutive in the same save). Payments are locked in id order first.
+- **What is refundable** = paid − max(prepayment consumed, value of what was fulfilled), never below 0, where the fulfilled
+  value is Σ round2(fulfilled base quantity × unit price ÷ conversion). The fulfilled value is counted as well because the
+  consumption of prepayment is posted with the debt (F3.4); once that exists the two agree. Newest payments give back
+  first, so the oldest keep covering what was delivered; an allocation is reversed when everything in it goes back,
+  otherwise it shrinks to what stays (it keeps `ACTIVE`; the money given back becomes the payment's unallocated amount).
+  A repeated call finds nothing more to give back (idempotent).
+- `OrderCanceller.CancelAsync(order, actorId, at, reason)` (shared step, never saves; the caller locks the order and
+  loads its items) returns the requested refunds. The endpoint audits `ORDER_CANCELLED` (old/new status, refunds, reason);
+  payments audit `PAYMENT_CANCELLED` and `ORDER_PREPAYMENT_RELEASED`. A PARTIALLY_FULFILLED order → 422 (use cancel-remaining,
+  which now gives back the undelivered prepayment through the same code); a reservation is cancelled and its stock freed.
 
 ---
 

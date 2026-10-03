@@ -6,7 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace AgriSage.IntegrationTests.Api;
 
-// Order confirmation, pickup and cancel-remaining endpoints (F1.4, F1.5) without a database: roles, validation and Swagger.
+// Order confirmation, pickup, cancel-remaining and cancel endpoints (F1.4 to F1.6) without a database: roles, validation and Swagger.
 public class OrderConfirmationHttpTests : IClassFixture<StaffHttpTests.StaffApiFactory>
 {
     private readonly StaffHttpTests.StaffApiFactory _factory;
@@ -43,7 +43,8 @@ public class OrderConfirmationHttpTests : IClassFixture<StaffHttpTests.StaffApiF
         { "POST", $"/api/orders/{Id}/mark-ready" },
         { "GET", $"/api/orders/{Id}/reservation" },
         { "POST", $"/api/orders/{Id}/pickup" },
-        { "POST", $"/api/orders/{Id}/items/{Id}/cancel-remaining" }
+        { "POST", $"/api/orders/{Id}/items/{Id}/cancel-remaining" },
+        { "POST", $"/api/orders/{Id}/cancel" }
     };
 
     [Theory]
@@ -71,7 +72,7 @@ public class OrderConfirmationHttpTests : IClassFixture<StaffHttpTests.StaffApiF
     }
 
     [Fact]
-    public async Task Staff_reach_validation_of_pickup_and_cancel_remaining()
+    public async Task Staff_reach_validation_of_pickup_cancel_remaining_and_cancel()
     {
         using var client = ClientFor("SALES_STAFF");
 
@@ -80,6 +81,8 @@ public class OrderConfirmationHttpTests : IClassFixture<StaffHttpTests.StaffApiF
             HttpStatusCode.BadRequest,
             (await client.PostAsJsonAsync($"/api/orders/{Id}/pickup", new { items = new[] { new { orderItemId = Guid.NewGuid(), lots = new[] { new { inventoryLotId = Guid.NewGuid(), baseQuantity = 0 } } } } }, Token)).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync($"/api/orders/{Id}/items/{Id}/cancel-remaining", new { reason = "" }, Token)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync($"/api/orders/{Id}/cancel", new { reason = " " }, Token)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync($"/api/orders/{Id}/cancel", new { reason = new string('r', 1001) }, Token)).StatusCode);
     }
 
     [Fact]
@@ -93,7 +96,7 @@ public class OrderConfirmationHttpTests : IClassFixture<StaffHttpTests.StaffApiF
                  {
                      "/api/orders/{id}/fefo-suggestions", "/api/orders/{id}/confirm", "/api/orders/{id}/start-preparing",
                      "/api/orders/{id}/mark-ready", "/api/orders/{id}/reservation", "/api/orders/{id}/pickup",
-                     "/api/orders/{id}/items/{itemId}/cancel-remaining"
+                     "/api/orders/{id}/items/{itemId}/cancel-remaining", "/api/orders/{id}/cancel"
                  })
         {
             Assert.True(paths.TryGetProperty(path, out _), path);

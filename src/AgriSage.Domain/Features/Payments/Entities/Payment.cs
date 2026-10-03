@@ -208,6 +208,12 @@ public sealed class Payment : SoftDeletableEntity
     public void ConsumePrepayment(Guid allocationId, decimal amount) =>
         GetAllocation(allocationId).ConsumePrepayment(amount);
 
+    // Gives back `amount` of the unconsumed prepayment of an ORDER allocation (§35.21); the whole allocation when that is
+    // everything it holds and nothing was consumed. The caller requests the matching refund.
+    public void ReleaseUnconsumedPrepayment(
+        Guid allocationId, decimal amount, Guid releasedBy, DateTimeOffset releasedAt, string? reason = null) =>
+        GetAllocation(allocationId).ReleaseUnconsumed(amount, releasedBy, releasedAt, reason);
+
     public void ReverseAllocation(Guid allocationId, Guid reversedBy, DateTimeOffset reversedAt, string? reason = null) =>
         GetAllocation(allocationId).Reverse(reversedBy, reversedAt, reason);
 

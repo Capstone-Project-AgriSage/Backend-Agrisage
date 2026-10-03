@@ -2,6 +2,7 @@ using AgriSage.Application.Common;
 using AgriSage.Application.Common.Exceptions;
 using AgriSage.Application.Common.Placeholders;
 using AgriSage.Application.Features.Orders;
+using AgriSage.Application.Features.Payments;
 using AgriSage.Application.Features.Pricing;
 using AgriSage.Application.Features.Products.Dtos.Requests;
 using AgriSage.Application.Features.Products.Services;
@@ -54,7 +55,7 @@ public class OrderPickupDatabaseTests
                 context, locks, new OrderConfirmer(context, locks, new TemporaryOrderSettlementGuard(), user, clock, audit), queries, clock, errors, audit);
             Pickup = new OrderPickupService(
                 context, locks, new FulfillmentPostingService(context, locks, new TemporaryFulfillmentFinancialPosting()),
-                new TemporaryOrderSettlementGuard(), new TemporaryOrderPaymentCancellation(), queries, user, clock, audit);
+                new TemporaryOrderSettlementGuard(), new OrderPaymentCancellation(context, locks, clock, audit), queries, user, clock, audit);
         }
 
         public AgriSageDbContext Context { get; }

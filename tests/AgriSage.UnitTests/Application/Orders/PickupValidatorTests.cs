@@ -52,4 +52,15 @@ public class PickupValidatorTests
         Assert.False(validator.Validate(new CancelRemainingRequest("  ")).IsValid);
         Assert.False(validator.Validate(new CancelRemainingRequest(new string('r', 501))).IsValid);
     }
+
+    [Fact]
+    public void Cancelling_an_order_needs_a_reason()
+    {
+        var validator = new CancelOrderRequestValidator();
+
+        Assert.True(validator.Validate(new CancelOrderRequest("Khách đổi ý")).IsValid);
+        Assert.True(validator.Validate(new CancelOrderRequest(new string('r', 1000))).IsValid);
+        Assert.False(validator.Validate(new CancelOrderRequest("  ")).IsValid);
+        Assert.False(validator.Validate(new CancelOrderRequest(new string('r', 1001))).IsValid);
+    }
 }

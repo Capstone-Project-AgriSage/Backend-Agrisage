@@ -77,6 +77,32 @@ public sealed class PaymentAllocation : SoftDeletableChildEntity
         PrepaymentConsumedAmount += amount;
     }
 
+    // Part of the prepayment will never be consumed (the order, or its remainder, was cancelled): that part goes back
+    // and the allocation shrinks to what stays (design §35.21). Releasing everything that is left, with nothing
+    // consumed, is a plain reversal. Consumed prepayment is never touched.
+    internal void ReleaseUnconsumed(decimal amount, Guid releasedBy, DateTimeOffset releasedAt, string? reason)
+    {
+        if (AllocationType != PaymentAllocationType.Order || !IsActive)
+        {
+            throw new DomainException("Only an active ORDER allocation holds prepayment that can be released.");
+        }
+
+        Guard.PositiveMoney(amount);
+
+        if (amount > AvailablePrepayment)
+        {
+            throw new DomainException($"Cannot release {amount}; only {AvailablePrepayment} of the prepayment is unconsumed.");
+        }
+
+        if (amount == AllocatedAmount)
+        {
+            Reverse(releasedBy, releasedAt, reason);
+            return;
+        }
+
+        AllocatedAmount -= amount;
+    }
+
     internal void Reverse(Guid reversedBy, DateTimeOffset reversedAt, string? reason)
     {
         if (!IsActive)
