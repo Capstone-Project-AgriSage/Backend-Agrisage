@@ -2,18 +2,26 @@ using AgriSage.Domain.Common;
 
 namespace AgriSage.Domain.Features.Inventory.Entities;
 
-// One counted Lot in a Stocktake. Created and counted only through Stocktake.
+// One counted Lot in a Stocktake. Created, counted and refreshed only through Stocktake.
+// snapshot_at = when the system quantity was taken (database design §35.19): a line is stale when a stock movement
+// for its Lot was posted between the snapshot and the count.
 public sealed class StocktakeItem : SoftDeletableChildEntity
 {
     private StocktakeItem()
     {
     }
 
-    internal StocktakeItem(Guid stocktakeId, Guid inventoryLotId, long systemQuantitySnapshot, decimal? unitCostSnapshot)
+    internal StocktakeItem(
+        Guid stocktakeId,
+        Guid inventoryLotId,
+        long systemQuantitySnapshot,
+        DateTimeOffset snapshotAt,
+        decimal? unitCostSnapshot)
     {
         StocktakeId = stocktakeId;
         InventoryLotId = inventoryLotId;
         SystemQuantitySnapshot = Guard.NotNegative(systemQuantitySnapshot);
+        SnapshotAt = snapshotAt;
         UnitCostSnapshot = unitCostSnapshot is null ? null : Guard.UnitCost(unitCostSnapshot.Value);
     }
 
@@ -22,6 +30,8 @@ public sealed class StocktakeItem : SoftDeletableChildEntity
     public Guid InventoryLotId { get; private set; }
 
     public long SystemQuantitySnapshot { get; private set; }
+
+    public DateTimeOffset SnapshotAt { get; private set; }
 
     public long? CountedQuantity { get; private set; }
 
@@ -56,5 +66,20 @@ public sealed class StocktakeItem : SoftDeletableChildEntity
         CountedAt = countedAt;
         ReasonCode = reasonCode;
         Note = note;
+    }
+
+    // Takes a new snapshot of a stale line and clears its count, so only this Lot is counted again.
+    internal void Refresh(long systemQuantitySnapshot, decimal? unitCostSnapshot, DateTimeOffset snapshotAt)
+    {
+        SystemQuantitySnapshot = Guard.NotNegative(systemQuantitySnapshot);
+        UnitCostSnapshot = unitCostSnapshot is null ? null : Guard.UnitCost(unitCostSnapshot.Value);
+        SnapshotAt = snapshotAt;
+        CountedQuantity = null;
+        DifferenceQuantity = null;
+        DifferenceCostValue = null;
+        CountedBy = null;
+        CountedAt = null;
+        ReasonCode = null;
+        Note = null;
     }
 }

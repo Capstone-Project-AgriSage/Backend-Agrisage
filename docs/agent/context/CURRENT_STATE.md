@@ -182,6 +182,9 @@ setup documentation
   design §35.18), `Payment` requires/limits its order, `Order.RequestCancellationRefund` + complete/fail/cancel,
   EF mapping, migration review tests, rolled-back real-DB tests (run only after the migration is applied to
   `agrisage-dev`).
+- Done (branch `feature/stocktake-snapshot-time`) — C-D6 exact stale detection: migration
+  `20261003001732_StocktakeItemSnapshotTime` (`stocktake_items.snapshot_at`), `Stocktake.AddItem` takes the
+  snapshot time, `Stocktake.RefreshItem` re-snapshots one stale line; design §35.19; migration review tests.
 
 ## Not Yet Implied by Foundation Completion
 

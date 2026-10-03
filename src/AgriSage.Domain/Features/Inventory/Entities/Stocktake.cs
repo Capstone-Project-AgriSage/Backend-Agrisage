@@ -43,7 +43,12 @@ public sealed class Stocktake : SoftDeletableEntity
 
     public IReadOnlyCollection<StocktakeItem> Items => _items.AsReadOnly();
 
-    public StocktakeItem AddItem(Guid inventoryLotId, long systemQuantitySnapshot, decimal? unitCostSnapshot = null)
+    // snapshotAt: when systemQuantitySnapshot was read (after locking the Lot balance), database design §35.19.
+    public StocktakeItem AddItem(
+        Guid inventoryLotId,
+        long systemQuantitySnapshot,
+        DateTimeOffset snapshotAt,
+        decimal? unitCostSnapshot = null)
     {
         EnsureStatus(StocktakeStatus.Draft);
 
@@ -52,7 +57,7 @@ public sealed class Stocktake : SoftDeletableEntity
             throw new DomainException($"Stocktake '{StocktakeNumber}' already counts this inventory lot.");
         }
 
-        var item = new StocktakeItem(Id, inventoryLotId, systemQuantitySnapshot, unitCostSnapshot);
+        var item = new StocktakeItem(Id, inventoryLotId, systemQuantitySnapshot, snapshotAt, unitCostSnapshot);
         _items.Add(item);
 
         return item;
@@ -86,6 +91,18 @@ public sealed class Stocktake : SoftDeletableEntity
             ?? throw new DomainException($"Line '{itemId}' was not found on stocktake '{StocktakeNumber}'.");
 
         item.RecordCount(countedQuantity, countedBy, countedAt, reasonCode, note);
+    }
+
+    // A stale line (a movement for its Lot was posted between snapshot and count, decided by the use case) is
+    // snapshotted again and its count cleared, so staff count only that Lot again (database design §35.19).
+    public void RefreshItem(Guid itemId, long systemQuantitySnapshot, DateTimeOffset snapshotAt, decimal? unitCostSnapshot = null)
+    {
+        EnsureStatus(StocktakeStatus.InProgress);
+
+        var item = ActiveItems.SingleOrDefault(i => i.Id == itemId)
+            ?? throw new DomainException($"Line '{itemId}' was not found on stocktake '{StocktakeNumber}'.");
+
+        item.Refresh(systemQuantitySnapshot, unitCostSnapshot, snapshotAt);
     }
 
     // Every line must be counted; an uncounted line blocks completion (database design §35.8).

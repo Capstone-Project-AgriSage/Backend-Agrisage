@@ -1447,6 +1447,7 @@ stocktake_id                uuid NOT NULL FK stocktakes.id
 inventory_lot_id            uuid NOT NULL FK inventory_lots.id
 
 system_quantity_snapshot    bigint NOT NULL
+snapshot_at                 timestamptz NOT NULL         (§35.19)
 counted_quantity            bigint NULL
 difference_quantity         bigint NULL
 
@@ -6438,6 +6439,31 @@ Additional single-row DB rules (beyond the "Constraints" sections):
 - articles: PUBLISHED ⇒ published_at NOT NULL.
 Every enum-backed varchar column also has an IN (...) CHECK of its
 documented values (§0.5).
+```
+
+## 35.19 Stocktake snapshot time and stale lines (table 29) — migration StocktakeItemSnapshotTime
+
+```text
+Approved by the team on 2026-10-03 (decision C-D6). Table count stays 67.
+
+stocktake_items.snapshot_at timestamptz NOT NULL = when system_quantity_snapshot (and
+unit_cost_snapshot) was read. The use case locks the Lot balance (SELECT ... FOR SHARE)
+before reading it, then takes snapshot_at. Existing rows were back-filled from created_at.
+
+A line is STALE when a POSTED stock movement item exists for its Lot with
+  stock_movements.posted_at > snapshot_at - 5 minutes
+  AND stock_movements.posted_at <= counted_at
+(5 minutes covers a movement whose posted_at was taken just before the snapshot but
+committed after it; the margin can only cause an extra recount, never a missed one).
+This also detects movements that cancel each other out (-1 then +1).
+
+A movement posted after the count does not make the line stale: it changes physical stock
+and system stock alike, so counted - snapshot is still the right adjustment on the current
+quantity on hand.
+
+Completion locks the Lot balances, refuses any stale or uncounted line (422, listing the
+Lots), and posts the adjustments. Stocktake.RefreshItem re-snapshots one stale line
+(new quantity, unit cost, snapshot_at) and clears its count; only that Lot is recounted.
 ```
 
 ## 35.18 Payment target and cancelled-order refunds (tables 36, 54) — migration PaymentOrderLinkAndOrderRefunds

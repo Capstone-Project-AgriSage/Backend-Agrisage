@@ -1,6 +1,6 @@
 # API Contract — Payments, payOS, Stocktake/Adjustments and Returns (Group C)
 
-Version 1.4 — 2026-10-02 (all decisions C-D1..C-D9 settled). Scope: tasks C1–C5 and the interfaces group C provides to groups A and B.
+Version 1.5 — 2026-10-03 (all decisions C-D1..C-D9 settled; C-D6 exact stale detection). Scope: tasks C1–C5 and the interfaces group C provides to groups A and B.
 
 Sources: `DATABASE_DESIGN.md` §28–29, §36–37, §52–54, §7.5, §XVI-D, §XXII, §35.7–35.11; `BUSINESS_RULES.md`
 rules 10, 25–27, 30–33, 52–58. When this file and the design disagree, the design wins and this file is
@@ -176,13 +176,14 @@ Rules:
   completion otherwise).
 - `reasonCode`: `DAMAGED | EXPIRED | LOST | STOCKTAKE_DIFFERENCE | MANUAL_CORRECTION | OTHER`; required when
   the difference ≠ 0.
-- **Stale line (decision C-D6):** a line whose lot's current `quantity_on_hand` ≠ its
-  `system_quantity_snapshot` (the lot was sold, received or adjusted after the snapshot). `GET` marks such
-  lines `isStale: true`. `refresh-stale` re-snapshots only those lines (current on hand and average cost) and
-  clears their count, so staff recount just those lots — never the whole stocktake. C2 adds the Domain method
-  (`Stocktake.RefreshItem`, IN_PROGRESS only) with unit tests. Known limit: movements that cancel each other
-  out (e.g. −1 then +1) leave on hand equal to the snapshot and are not detected; counting while the store is
-  not selling avoids it.
+- **Stale line (decision C-D6, design §35.19):** a POSTED stock movement for the line's lot has
+  `posted_at` in (`snapshot_at` − 5 minutes, `counted_at`]. This also catches movements that cancel each
+  other out; a movement after the count does not make the line stale. `GET` marks such lines
+  `isStale: true`. `refresh-stale` re-snapshots only those lines (lock the balance `FOR SHARE`, read on hand
+  and average cost, then `snapshot_at`) through `Stocktake.RefreshItem` (Domain, done) and clears their
+  count, so staff recount just those lots — never the whole stocktake.
+- Creating a stocktake takes each line's snapshot the same way (lock, read, `snapshot_at`) and passes it to
+  `Stocktake.AddItem(lotId, quantity, snapshotAt, unitCost)`.
 - Complete (one transaction): every line counted (§35.8); lock lot balances; refuse (422, listing the lots) if
   any line is stale; one ADJUSTMENT_IN movement (`ReceiveStock` at the snapshot/entered cost) and one
   ADJUSTMENT_OUT movement (`IssueUnreserved` at average cost), both linked by `stocktake_id`; a decrease below
@@ -448,4 +449,4 @@ All decisions of group C are settled by the team (2026-10-02); none is pending.
 | C-D3 | Refund proof images (return refunds and cancelled-order refunds) use the delivery photo upload `POST /api/files/delivery-proofs`. A photo referenced by `delivery_attempts.proof_image_url`, `delivery_incidents.evidence_image_url` or `refunds.proof_file_url` can no longer be deleted through `DELETE /api/files/delivery-proofs` (422); A6 adds the check for attempts/incidents, C5 extends it to refunds |
 | C-D4 | No overpayment: an order payment ≤ order total − already paid; a debt repayment ≤ current debt balance and is fully allocated. At the counter staff record only the amount due and give change physically |
 | C-D5 | Roles: cash payments, payment queries, stocktake create/count/refresh, return request/receive/inspect = Operate; stocktake completion, manual stock adjustments, return approve/reject/complete-inspection and every refund (return or cancelled order) = Manage; Farmers pay, request returns and cancel only their own. Unlike goods receipt confirmation (open to Sales), stocktake completion and manual adjustments stay with Admin/Store Owner because they can **decrease** stock — the person who counts is not the person who approves |
-| C-D6 | A stale stocktake line (current on hand ≠ snapshot) blocks completion; `POST /api/stocktakes/{id}/refresh-stale` re-snapshots only the stale lines and clears their counts for a recount (§4.1). Counting while the store is not selling is recommended |
+| C-D6 | **Schema change (migration `StocktakeItemSnapshotTime`, design §35.19):** each stocktake line stores `snapshot_at`; a line is stale when a movement for its lot was posted between the snapshot (minus 5 minutes) and the count, which also catches offsetting movements. A stale line blocks completion; `POST /api/stocktakes/{id}/refresh-stale` re-snapshots only the stale lines and clears their counts for a recount (§4.1) |
