@@ -19,7 +19,16 @@ public sealed class GoodsReceiptService(
 {
     private static readonly TimeSpan ClockTolerance = TimeSpan.FromMinutes(5);
 
-    public async Task<GoodsReceiptResponse> CreateAsync(CreateGoodsReceiptRequest request, CancellationToken cancellationToken)
+    public Task<GoodsReceiptResponse> CreateAsync(CreateGoodsReceiptRequest request, CancellationToken cancellationToken) =>
+        CreateAsync(request, GoodsReceiptSourceType.Manual, null, cancellationToken);
+
+    // Also used by the Excel import (EXCEL_TEMPLATE + the uploaded file name). Store products and packagings of the
+    // lines are loaded in two queries, so a 500-line file does not cost 1,000 round trips.
+    internal async Task<GoodsReceiptResponse> CreateAsync(
+        CreateGoodsReceiptRequest request,
+        GoodsReceiptSourceType sourceType,
+        string? sourceFileName,
+        CancellationToken cancellationToken)
     {
         var actorId = ActorId();
         var storeId = await ActiveStore.GetIdAsync(context, cancellationToken);
@@ -32,14 +41,29 @@ public sealed class GoodsReceiptService(
 
         var number = await DocumentNumbers.NextReceiptNumberAsync(context, storeId, today, cancellationToken);
         var receipt = new GoodsReceipt(
-            storeId, request.SupplierId, number, receivedAt, actorId, GoodsReceiptSourceType.Manual,
+            storeId, request.SupplierId, number, receivedAt, actorId, sourceType,
+            sourceFileName: sourceFileName,
             supplierInvoiceNumber: Texts.Clean(request.SupplierInvoiceNumber),
             supplierInvoiceDate: request.SupplierInvoiceDate,
             note: Texts.Clean(request.Note));
 
-        foreach (var item in request.Items ?? [])
+        var items = request.Items ?? [];
+        var storeProductIds = items.Select(i => i.StoreProductId).Distinct().ToList();
+        var packagingIds = items.Select(i => i.ProductPackagingId).Distinct().ToList();
+        var storeProducts = await context.StoreProducts.Include(sp => sp.Product)
+            .Where(sp => sp.StoreId == storeId && storeProductIds.Contains(sp.Id))
+            .ToDictionaryAsync(sp => sp.Id, cancellationToken);
+        var packagings = await context.ProductPackagings
+            .Where(p => packagingIds.Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id, cancellationToken);
+
+        foreach (var item in items)
         {
-            await AddItemAsync(receipt, storeId, item, today, cancellationToken);
+            var storeProduct = storeProducts.GetValueOrDefault(item.StoreProductId)
+                ?? throw new NotFoundException("Store product", item.StoreProductId);
+            var packaging = packagings.GetValueOrDefault(item.ProductPackagingId)
+                ?? throw new NotFoundException("Product packaging", item.ProductPackagingId);
+            AddCheckedItem(receipt, storeProduct, packaging, item, today);
         }
 
         context.GoodsReceipts.Add(receipt);
@@ -235,6 +259,16 @@ public sealed class GoodsReceiptService(
             .FirstOrDefaultAsync(p => p.Id == request.ProductPackagingId, cancellationToken)
             ?? throw new NotFoundException("Product packaging", request.ProductPackagingId);
 
+        AddCheckedItem(receipt, storeProduct, packaging, request, today);
+    }
+
+    private static void AddCheckedItem(
+        GoodsReceipt receipt,
+        AgriSage.Domain.Features.Products.Entities.StoreProduct storeProduct,
+        AgriSage.Domain.Features.Products.Entities.ProductPackaging packaging,
+        GoodsReceiptItemRequest request,
+        DateOnly today)
+    {
         Check(storeProduct.Product, packaging, request.SupplierLotNumber, request.ManufacturingDate, request.ExpiryDate, today);
         receipt.AddItem(
             storeProduct, packaging, request.ReceivedQuantity, request.PurchaseUnitCost, Texts.Clean(request.SupplierLotNumber),
@@ -253,7 +287,7 @@ public sealed class GoodsReceiptService(
         }
     }
 
-    private async Task EnsureSupplierUsableAsync(Guid storeId, Guid supplierId, CancellationToken cancellationToken)
+    internal async Task EnsureSupplierUsableAsync(Guid storeId, Guid supplierId, CancellationToken cancellationToken)
     {
         var supplier = await context.Suppliers.AsNoTracking()
             .FirstOrDefaultAsync(s => s.Id == supplierId && s.StoreId == storeId, cancellationToken)
@@ -265,7 +299,7 @@ public sealed class GoodsReceiptService(
         }
     }
 
-    private static void EnsureNotFuture(DateTimeOffset receivedAt, DateTimeOffset now)
+    internal static void EnsureNotFuture(DateTimeOffset receivedAt, DateTimeOffset now)
     {
         if (receivedAt > now + ClockTolerance)
         {

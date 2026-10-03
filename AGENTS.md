@@ -177,6 +177,7 @@ No independent nested transactions or midway saves inside one atomic operation.
 payOS          → IPaymentGateway
 FastAPI AI     → IAiDiagnosisClient
 Object Storage → IFileStorageService
+Excel (.xlsx)  → IReceiptSpreadsheet (ClosedXML)
 Clock          → IDateTimeProvider
 Current user   → ICurrentUserService
 ```

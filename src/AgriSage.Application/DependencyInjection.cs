@@ -5,6 +5,7 @@ using AgriSage.Application.Features.Credit;
 using AgriSage.Application.Features.Debt;
 using AgriSage.Application.Features.Files;
 using AgriSage.Application.Features.GoodsReceipts;
+using AgriSage.Application.Features.GoodsReceipts.Import;
 using AgriSage.Application.Features.Inventory;
 using AgriSage.Application.Features.Payments;
 using AgriSage.Application.Features.Pricing;
@@ -41,7 +42,9 @@ public static class DependencyInjection
 
         services.AddScoped<ISupplierService, SupplierService>();
         services.AddScoped<GoodsReceiptConfirmer>();
-        services.AddScoped<IGoodsReceiptService, GoodsReceiptService>();
+        services.AddScoped<GoodsReceiptService>();
+        services.AddScoped<IGoodsReceiptService>(provider => provider.GetRequiredService<GoodsReceiptService>());
+        services.AddScoped<IGoodsReceiptImportService, GoodsReceiptImportService>();
         services.AddScoped<IInventoryService, InventoryService>();
 
         // Cross-flow interfaces (docs/reference/api-flows/README.md §4). Each line is replaced by its owner task with

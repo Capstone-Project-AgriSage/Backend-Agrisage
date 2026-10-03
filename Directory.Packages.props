@@ -16,6 +16,11 @@
     <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.2.3" />
   </ItemGroup>
 
+  <ItemGroup Label="Infrastructure">
+    <!-- Goods receipt Excel import/template (F4.3, decision F-D7, MIT). Used only in Infrastructure/Spreadsheets. -->
+    <PackageVersion Include="ClosedXML" Version="0.105.1" />
+  </ItemGroup>
+
   <ItemGroup Label="Application">
     <PackageVersion Include="FluentValidation.DependencyInjectionExtensions" Version="12.1.1" />
   </ItemGroup>

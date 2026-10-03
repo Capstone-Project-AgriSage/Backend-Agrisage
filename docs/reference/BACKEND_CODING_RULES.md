@@ -389,6 +389,7 @@ PaymentService(IPaymentGateway paymentGateway)
 payOS → IPaymentGateway
 Python FastAPI → IAiDiagnosisClient
 Object Storage → IFileStorageService
+Excel (.xlsx) → IReceiptSpreadsheet
 Clock → IDateTimeProvider
 ```
 

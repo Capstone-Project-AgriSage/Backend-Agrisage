@@ -205,6 +205,13 @@ setup documentation
   delete of a used tier). **Applied to `agrisage-dev`** (lead-approved, 2026-10-03); read-only check: column uuid
   NULL, FK NO ACTION, index present, still 67 tables, 0 rows in `customer_groups` / `credit_tiers`. Verified: build
   0 warnings; 432 unit + 427 integration passed with `AGRISAGE_DB_TESTS=1` (2 skipped = real Supabase Storage).
+- Done (branch `feature/f4-3-receipt-import`, task F4.3, by the lead) — Goods receipt Excel import:
+  `GET /api/goods-receipts/import-template`, `POST /api/goods-receipts/import/preview`, `POST /api/goods-receipts/import`
+  (FLOW_4 §5). Application `Features/GoodsReceipts/Import` (`IReceiptSpreadsheet`, `GoodsReceiptImportService`,
+  `ReceiptImportValues`, validator); Infrastructure `Spreadsheets/ClosedXmlReceiptSpreadsheet` (new package ClosedXML
+  0.105.1, MIT, approved; no known vulnerabilities). `ReceiptItemRules.Check` now names the field of a violation;
+  `GoodsReceiptService` creates drafts with a source type/file name and loads all lines in two queries;
+  `BusinessRuleException` can carry `errors` (422 problem details `errors`). No schema change, no migration.
 
 ## Not Yet Implied by Foundation Completion
 

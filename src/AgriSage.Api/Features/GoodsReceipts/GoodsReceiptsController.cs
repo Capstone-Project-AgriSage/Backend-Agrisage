@@ -1,8 +1,10 @@
 using AgriSage.Api.Extensions;
 using AgriSage.Application.Common.Models;
 using AgriSage.Application.Features.GoodsReceipts;
+using AgriSage.Application.Features.GoodsReceipts.Import;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace AgriSage.Api.Features.GoodsReceipts;
 
@@ -10,8 +12,56 @@ namespace AgriSage.Api.Features.GoodsReceipts;
 [ApiController]
 [Route("api/goods-receipts")]
 [Authorize(Roles = ApiRoles.Operate)]
-public sealed class GoodsReceiptsController(IGoodsReceiptService service) : ControllerBase
+public sealed class GoodsReceiptsController(IGoodsReceiptService service, IGoodsReceiptImportService import) : ControllerBase
 {
+    private const long ImportRequestLimit = ReceiptImportRules.MaxFileBytes + 512 * 1024;
+
+    // Excel import (FLOW_4 §5): template with the store's purchasable products, preview (nothing saved), import (DRAFT).
+    [HttpGet("import-template")]
+    [Produces(ReceiptImportRules.ContentType)]
+    [ProducesResponseType<FileContentResult>(StatusCodes.Status200OK, ReceiptImportRules.ContentType)]
+    public async Task<IActionResult> DownloadImportTemplate(CancellationToken cancellationToken)
+    {
+        var template = await import.GetTemplateAsync(cancellationToken);
+
+        return File(template.Content, template.ContentType, template.FileName);
+    }
+
+    // multipart/form-data: "file" (.xlsx ≤ 2 MB, ≤ 500 rows) + supplierId, receivedAt?, supplierInvoiceNumber?,
+    // supplierInvoiceDate?, note?. Every row is checked like manual entry; per-row errors come back in the response.
+    [HttpPost("import/preview")]
+    [EnableRateLimiting(RateLimitingExtensions.UploadPolicy)]
+    [RequestSizeLimit(ImportRequestLimit)]
+    [RequestFormLimits(MultipartBodyLengthLimit = ImportRequestLimit)]
+    [Consumes("multipart/form-data")]
+    public async Task<ActionResult<ReceiptImportPreviewResponse>> PreviewImport(
+        [FromForm] ReceiptImportRequest request, IFormFile? file, CancellationToken cancellationToken)
+    {
+        await using var content = file?.OpenReadStream();
+
+        return await import.PreviewAsync(request, ImportFile(file, content), cancellationToken);
+    }
+
+    // Same form as the preview. Creates one DRAFT receipt (source EXCEL_TEMPLATE) when every row is valid; otherwise
+    // 422 with `errors` per row and nothing is saved.
+    [HttpPost("import")]
+    [EnableRateLimiting(RateLimitingExtensions.UploadPolicy)]
+    [RequestSizeLimit(ImportRequestLimit)]
+    [RequestFormLimits(MultipartBodyLengthLimit = ImportRequestLimit)]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType<GoodsReceiptResponse>(StatusCodes.Status201Created)]
+    public async Task<IActionResult> Import(
+        [FromForm] ReceiptImportRequest request, IFormFile? file, CancellationToken cancellationToken)
+    {
+        await using var content = file?.OpenReadStream();
+        var response = await import.ImportAsync(request, ImportFile(file, content), cancellationToken);
+
+        return CreatedAtAction(nameof(Get), new { id = response.Id }, response);
+    }
+
+    private static ReceiptImportFile? ImportFile(IFormFile? file, Stream? content) =>
+        file is null || content is null ? null : new ReceiptImportFile(content, file.FileName, file.Length);
+
     [HttpGet]
     public async Task<ActionResult<PagedResult<GoodsReceiptListItem>>> List(
         [FromQuery] GoodsReceiptListRequest request, CancellationToken cancellationToken) =>

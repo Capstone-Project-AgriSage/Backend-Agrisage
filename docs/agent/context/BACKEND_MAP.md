@@ -91,6 +91,7 @@ HTTP
 IPaymentGateway    ← PayOsPaymentGateway
 IAiDiagnosisClient ← FastAPI client
 IFileStorageService← storage provider implementation
+IReceiptSpreadsheet← ClosedXmlReceiptSpreadsheet (goods receipt Excel template/import)
 IDateTimeProvider  ← system clock implementation
 ICurrentUserService← JWT/current request implementation
 ```

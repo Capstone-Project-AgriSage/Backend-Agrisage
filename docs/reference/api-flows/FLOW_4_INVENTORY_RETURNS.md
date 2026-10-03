@@ -38,7 +38,7 @@ set on store products (`/api/store-products`, field `minStockLevelBase`).
 |---|---|---|---|
 | F4.1 | **New** stock summary, alerts, expire-due | — | everyone (stock screens) |
 | F4.2 | Stocktake and manual adjustments | — | F2.6 (incident adjustments, decision D5) |
-| F4.3 | **New** goods receipt import from Excel | package approval (decision F-D7) | — |
+| F4.3 | **New** goods receipt import from Excel — **done by the lead** (2026-10-03), L4 maintains it | — | — |
 | F4.4 | Sales returns | fulfilled orders (tests build them through Domain; end-to-end after M2), F3.5 `IDebtReturnPosting` (temporary: applies 0) | F4.5 |
 | F4.5 | Refunds of returns and of cancelled orders, payment refunded status, proof-photo delete guard | F4.4, F1.6 | — |
 | F4.6 | **New** stock card, inventory movement and valuation reports | — | — |
@@ -157,30 +157,44 @@ differenceCostValue, reasonCode, note, countedBy, countedAt, isStale}]`.
 
 ---
 
-## 5. F4.3 — Goods receipt import from Excel (new, `Operate`)
+## 5. F4.3 — Goods receipt import from Excel (`Operate`) — done
 
-Design §22 "Excel workflow": template → upload → parse → DRAFT receipt → preview → validate → correct → confirm.
+Implemented by the lead (2026-10-03, decision F-D7); L4 maintains it. Design §22 "Excel workflow": template →
+upload → parse → preview → validate → correct → DRAFT receipt → confirm.
 
 | Method | Route | Body | Response |
 |---|---|---|---|
 | GET | `/api/goods-receipts/import-template` | — | `200` xlsx file (`AgriSage-goods-receipt-template.xlsx`) |
-| POST | `/api/goods-receipts/import/preview` | multipart `ReceiptImportForm` | `200 ReceiptImportPreviewResponse` (nothing saved) |
-| POST | `/api/goods-receipts/import` | multipart `ReceiptImportForm` | `201 GoodsReceiptResponse` (DRAFT, existing shape) |
+| POST | `/api/goods-receipts/import/preview` | multipart: `file` + `ReceiptImportRequest` fields | `200 ReceiptImportPreviewResponse` (nothing saved) |
+| POST | `/api/goods-receipts/import` | multipart: `file` + `ReceiptImportRequest` fields | `201 GoodsReceiptResponse` (DRAFT, existing shape) |
 
-`ReceiptImportForm`: `file` (xlsx, ≤ 2 MB, ≤ 500 data rows), `supplierId`, `supplierInvoiceNumber?`,
-`supplierInvoiceDate?`, `receivedAt?`, `note?` — header fields come from the form, lines from the sheet.
+Multipart form: `file` (.xlsx, ≤ 2 MB, ≤ 500 data rows) and the header fields of `ReceiptImportRequest`:
+`supplierId` (required), `receivedAt?`, `supplierInvoiceNumber?` (≤ 100), `supplierInvoiceDate?` (`yyyy-MM-dd`),
+`note?` (≤ 1000). Header rules = manual draft (supplier of the store and ACTIVE, received time not in the future).
+Preview and import use the `upload` rate limit (30 requests/min per client).
 
-Template columns (first sheet, header row fixed, one line per row):
+**Template** (generated per store):
+- sheet `Receipt` — header row only, columns formatted (SKU/Packaging/LotNumber as text so leading zeros stay, dates
+  as `yyyy-mm-dd`);
+- sheet `Products` — every ACTIVE store product (not DISCONTINUED) with each ACTIVE **purchase** packaging:
+  `SKU` (store SKU or product SKU), `ProductName`, `Packaging` (packaging name, else unit name), `Barcode`,
+  `ConversionToBase`, `BaseUnit`, `RequiresLotNumber`, `RequiresExpiryDate` (YES/NO); at most 5,000 lines;
+- sheet `Guide` — instructions in Vietnamese.
+
+Receipt sheet columns (the sheet named `Receipt`, else the first sheet; header in row 1; names match ignoring
+case, spaces, `_` and `-`; any order; unknown columns ignored; empty rows skipped):
 
 | Column | Required | Meaning |
 |---|---|---|
-| `SKU` | yes | store SKU when the store set one, otherwise the product SKU |
-| `Packaging` | yes | barcode of the packaging, or its packaging name (case-insensitive); must be an ACTIVE **purchase** packaging of that product |
-| `Quantity` | yes | integer > 0, packaging units |
-| `UnitCost` | yes | ≥ 0, ≤ 2 decimals, per packaging |
-| `LotNumber` | when the product tracks lots | |
-| `ExpiryDate` | when the product requires expiry | `yyyy-MM-dd` or an Excel date |
-| `ManufactureDate` | no | `yyyy-MM-dd` or an Excel date |
+| `SKU` | yes | store SKU (matched first), otherwise the product SKU; case-insensitive |
+| `Packaging` | yes | barcode, packaging name, unit name or unit code of a packaging of that product (case-insensitive); when several match, the single ACTIVE purchase packaging among them is taken; it must be an ACTIVE **purchase** packaging |
+| `Quantity` | yes | whole packaging units ≥ 1 |
+| `UnitCost` | yes | per packaging, ≥ 0, at most 2 decimals, never rounded; typed as text it uses a dot and no thousands separator |
+| `LotNumber` | when the product tracks lots | ≤ 100 characters, trimmed |
+| `ExpiryDate` | when the product requires expiry | an Excel date cell, or text `yyyy-MM-dd` / `dd/MM/yyyy` |
+| `ManufactureDate` | no | same formats |
+
+Formula cells are read as their value.
 
 `ReceiptImportPreviewResponse`:
 
@@ -192,21 +206,26 @@ Template columns (first sheet, header row fixed, one line per row):
     { "rowNumber": 2, "sku": "SKU-001", "packaging": "Bao 25kg", "storeProductId": "uuid",
       "productPackagingId": "uuid", "productName": "…", "quantity": 10, "unitCost": 240000.00,
       "lotNumber": "L01", "expiryDate": "2027-01-31", "manufactureDate": null,
-      "lineTotalAmount": 2400000.00, "errors": [ ] }
+      "lineTotalAmount": 2400000.00,
+      "errors": [ { "column": "ExpiryDate", "message": "The goods are already expired; expired stock cannot be received." } ] }
   ]
 }
 ```
 
+`rowNumber` is the Excel row; `errors[].column` is one of the sheet columns (or `Row`); `subtotalAmount` sums the
+valid rows only.
+
 Rules:
-- Every line rule of manual receiving applies unchanged (decision Receiving lot rules: lot/expiry flags, no
-  expired goods, no DISCONTINUED product, purchase packaging only, money rule); errors are reported per row with
-  the column name, never as one generic 400.
-- `import` refuses (422) when any row has an error — the user fixes the file and uploads again; it never creates a
-  partial receipt. A successful import creates one DRAFT receipt with `source_type = EXCEL_TEMPLATE` and
-  `source_file_name` = the uploaded name (the file itself is not stored); it is then edited and confirmed with the
-  existing endpoints.
-- The file is read in memory with the approved package only inside Infrastructure (an `IReceiptSheetReader`
-  abstraction in Application); formulas are read as values; unknown extra columns are ignored.
+- Every line rule of manual receiving applies unchanged (`ReceiptItemRules`: lot/expiry flags, no expired goods, no
+  DISCONTINUED product, ACTIVE purchase packaging only, money rule); each error names its column.
+- File-level problems answer **400** with `errors.file`: no file, not `.xlsx`, over 2 MB, not a readable workbook
+  (or unpacking beyond 50 MB / 500 entries), a required column missing (named), more than 500 rows, no data row.
+- `import` refuses with **422** when any row has an error — `detail` = "N of M rows are invalid…", `errors` =
+  `{ "row 3": ["LotNumber: A lot number is required for this product."] }` — and saves nothing. A successful import
+  creates one DRAFT receipt with `source_type = EXCEL_TEMPLATE` and `source_file_name` = the uploaded name without
+  any client path (the file itself is not stored); it is then edited and confirmed with the existing endpoints.
+- The workbook is read in memory with ClosedXML only inside `Infrastructure/Spreadsheets/ClosedXmlReceiptSpreadsheet`
+  behind `IReceiptSpreadsheet` (Application, `Features/GoodsReceipts/Import`).
 
 ---
 
@@ -395,4 +414,4 @@ their expiry.
 | F-D4 | Every refund endpoint belongs to L4 |
 | F-D5 | Reports are Manage-only and owned by the flow whose data they read |
 | F-D6 | Lots are marked EXPIRED by `POST /api/inventory/lots/expire-due`; sale/reservation checks still use the expiry date |
-| F-D7 | Excel import needs a new package approved by the lead before F4.3 (proposal: ClosedXML, MIT), used only in Infrastructure |
+| F-D7 | Excel import uses ClosedXML 0.105.1 (MIT, approved 2026-10-03), only inside `Infrastructure/Spreadsheets`; F4.3 was done by the lead |

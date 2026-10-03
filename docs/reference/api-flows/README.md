@@ -56,7 +56,7 @@ Errors use the existing `GlobalExceptionHandler` (RFC 7807 `application/problem+
 | 403 | Role not allowed, or the resource belongs to someone else (Farmer / assigned delivery staff checks) |
 | 404 | Resource not found (or soft-deleted); also someone else's id under `/api/me/...` |
 | 409 | Concurrency conflict (`version`), unique-index race, document number clash — client may retry |
-| 422 | Business rule / wrong state (`BusinessRuleException`, `DomainException`) |
+| 422 | Business rule / wrong state (`BusinessRuleException`, `DomainException`); may carry `errors: { item: [messages] }` when several items fail (decision F-D8) |
 | 503 | External dependency unavailable (storage, payOS) |
 
 Role gates (`ApiRoles`):
@@ -442,7 +442,7 @@ F4.1, F4.3, F4.6.
 | Phase | L1 (Lead) | L2 | L3 | L4 |
 |---|---|---|---|---|
 | 0 | F0.1 docs → F0.2 migration | — | — | — |
-| 1 | F1.1 → F1.2 → F1.3 | F2.1 → F2.2 → F2.4 | F3.1 → F3.2 | F4.1 → F4.2 → F4.3 |
+| 1 | F1.1 → F1.2 → F1.3 | F2.1 → F2.2 → F2.4 | F3.1 → F3.2 | F4.1 → F4.2 (F4.3 done by the lead) |
 | **M1** | F1.1–F1.3 merged | F2.3 can start | F3.3 can start | — |
 | 2 | F1.4 → F1.5 → F1.6 | F2.3 → F2.5 | F3.3 → F3.4 | F4.4 → F4.5 |
 | **M2** | F1.4–F1.5 merged | F2.6 can start | end-to-end credit sale | end-to-end return |
@@ -463,4 +463,5 @@ waiting for the other flow.
 | F-D4 | Every refund endpoint (return refunds and cancelled-order refunds) belongs to L4 (F4.5); L1 only requests cancelled-order refunds through `IOrderPaymentCancellation` |
 | F-D5 | Reports are `GET /api/reports/...` with role Manage, owned by the flow whose data they read |
 | F-D6 | Lots are marked EXPIRED by `POST /api/inventory/lots/expire-due` (Manage); every reservation/sale check still uses the expiry date itself, so an unmarked expired lot is never sold |
-| F-D7 | Excel import (F4.3) needs a new package; the lead approves it (proposal: ClosedXML, MIT) before F4.3 starts |
+| F-D7 | Excel import (F4.3) uses ClosedXML 0.105.1 (MIT, approved 2026-10-03) only inside `Infrastructure/Spreadsheets`; the lead implemented F4.3 so the import is available now |
+| F-D8 | A 422 may carry `errors` (`BusinessRuleException(message, errors)`) when several items fail, e.g. the rows of an Excel import or the short lines of a confirmation |

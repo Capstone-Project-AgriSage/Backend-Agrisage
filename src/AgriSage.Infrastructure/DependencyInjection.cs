@@ -1,9 +1,11 @@
 using AgriSage.Application.Common.Interfaces;
+using AgriSage.Application.Features.GoodsReceipts.Import;
 using AgriSage.Infrastructure.Authentication;
 using AgriSage.Infrastructure.Persistence;
 using AgriSage.Infrastructure.Persistence.Interceptors;
 using AgriSage.Infrastructure.Persistence.Seed;
 using AgriSage.Infrastructure.Services;
+using AgriSage.Infrastructure.Spreadsheets;
 using AgriSage.Infrastructure.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -65,6 +67,9 @@ public static class DependencyInjection
         // Object storage (Supabase); nothing connects at startup and a missing configuration fails only on use.
         services.AddOptions<StorageOptions>().Bind(configuration.GetSection(StorageOptions.SectionName));
         services.AddHttpClient<IFileStorageService, SupabaseFileStorageService>(client => client.Timeout = TimeSpan.FromSeconds(30));
+
+        // Goods receipt Excel template (ClosedXML, stateless).
+        services.AddSingleton<IReceiptSpreadsheet, ClosedXmlReceiptSpreadsheet>();
 
         // Further provider adapters (payOS, AI) are registered here by later tasks.
 

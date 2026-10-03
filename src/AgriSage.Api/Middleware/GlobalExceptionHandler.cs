@@ -52,11 +52,22 @@ public sealed class GlobalExceptionHandler(
         DbUpdateException update when databaseErrors.IsUniqueViolation(update) => Problem(
             StatusCodes.Status409Conflict, "Conflict.", "A record with the same unique value already exists."),
         StorageUnavailableException storage => Problem(StatusCodes.Status503ServiceUnavailable, "Service unavailable.", storage.Message),
-        BusinessRuleException rule => Problem(StatusCodes.Status422UnprocessableEntity, "Business rule violated.", rule.Message),
+        BusinessRuleException rule => WithErrors(
+            Problem(StatusCodes.Status422UnprocessableEntity, "Business rule violated.", rule.Message), rule.Errors),
         DomainException domain => Problem(StatusCodes.Status422UnprocessableEntity, "Business rule violated.", domain.Message),
         _ => Problem(StatusCodes.Status500InternalServerError, "Server error.", "An unexpected error occurred.")
     };
 
     private static ProblemDetails Problem(int status, string title, string detail) =>
         new() { Status = status, Title = title, Detail = detail };
+
+    private static ProblemDetails WithErrors(ProblemDetails problem, IReadOnlyDictionary<string, string[]>? errors)
+    {
+        if (errors is { Count: > 0 })
+        {
+            problem.Extensions["errors"] = errors;
+        }
+
+        return problem;
+    }
 }

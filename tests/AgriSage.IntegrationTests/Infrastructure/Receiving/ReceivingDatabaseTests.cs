@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using AgriSage.Application.Common;
 using AgriSage.Application.Common.Exceptions;
 using AgriSage.Application.Features.GoodsReceipts;
+using AgriSage.Application.Features.GoodsReceipts.Import;
 using AgriSage.Application.Features.Inventory;
 using AgriSage.Application.Features.Products.Dtos.Requests;
 using AgriSage.Application.Features.Products.Dtos.Responses;
@@ -17,7 +18,9 @@ using AgriSage.Domain.Features.Stores.Entities;
 using AgriSage.Domain.Features.Stores.Enums;
 using AgriSage.Infrastructure.Persistence;
 using AgriSage.Infrastructure.Services;
+using AgriSage.Infrastructure.Spreadsheets;
 using AgriSage.IntegrationTests.Infrastructure.Persistence;
+using ClosedXML.Excel;
 using Microsoft.EntityFrameworkCore;
 
 namespace AgriSage.IntegrationTests.Infrastructure.Receiving;
@@ -50,6 +53,8 @@ public class ReceivingDatabaseTests
 
         public GoodsReceiptService Receipts { get; private set; } = null!;
 
+        public GoodsReceiptImportService Import { get; private set; } = null!;
+
         public InventoryService Inventory { get; private set; } = null!;
 
         public ProductService Products { get; private set; } = null!;
@@ -70,6 +75,7 @@ public class ReceivingDatabaseTests
             Suppliers = new SupplierService(Context, errors);
             var confirmer = new GoodsReceiptConfirmer(Context, Locks, user, clock, errors);
             Receipts = new GoodsReceiptService(Context, user, clock, errors, confirmer);
+            Import = new GoodsReceiptImportService(Context, clock, new ClosedXmlReceiptSpreadsheet(), Receipts);
             Inventory = new InventoryService(Context, clock);
             Products = new ProductService(Context, errors);
             StoreProducts = new StoreProductService(Context, errors);
@@ -621,5 +627,155 @@ public class ReceivingDatabaseTests
         Assert.Equal(1, bySupplier.Items.Count(i => i.Status == "CONFIRMED"));
         Assert.All(bySupplier.Items, i => Assert.Equal(supplier.Name, i.SupplierName));
         Assert.Matches(new Regex(@"^GR-\d{8}-\d{4}$"), bySupplier.Items[0].ReceiptNumber);
+    }
+
+    // ----- Excel import (F4.3) -----
+
+    // A filled receipt sheet: columns in template order (SKU, Packaging, Quantity, UnitCost, LotNumber, ExpiryDate,
+    // ManufactureDate); C# values become real Excel cells (numbers, dates, text).
+    private static ReceiptImportFile Sheet(params object?[][] rows)
+    {
+        using var workbook = new XLWorkbook();
+        var sheet = workbook.AddWorksheet(ClosedXmlReceiptSpreadsheet.ReceiptSheet);
+        for (var column = 0; column < ReceiptSheetColumns.All.Count; column++)
+        {
+            sheet.Cell(1, column + 1).Value = ReceiptSheetColumns.All[column];
+        }
+
+        for (var row = 0; row < rows.Length; row++)
+        {
+            for (var column = 0; column < rows[row].Length; column++)
+            {
+                sheet.Cell(row + 2, column + 1).Value = XLCellValue.FromObject(rows[row][column]);
+            }
+        }
+
+        var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+        stream.Position = 0;
+
+        return new ReceiptImportFile(stream, @"C:\fakepath\nhap-kho.xlsx", stream.Length);
+    }
+
+    private static DateTime Date(DateOnly day) => day.ToDateTime(TimeOnly.MinValue);
+
+    private static async Task<int> ReceiptCountAsync(Env env, Guid supplierId) =>
+        await env.Context.GoodsReceipts.CountAsync(r => r.SupplierId == supplierId, Token);
+
+    [RealDbFact]
+    public async Task The_import_template_lists_only_the_purchasable_packagings_of_store_products()
+    {
+        await using var session = await RealDb.Session.StartAsync();
+        await using var env = await PrepareAsync(session);
+        var stocked = await NewStockedProductAsync(env);
+
+        var template = await env.Import.GetTemplateAsync(Token);
+
+        Assert.Equal(ReceiptImportRules.ContentType, template.ContentType);
+        Assert.Equal(ReceiptImportRules.TemplateFileName, template.FileName);
+        using var workbook = new XLWorkbook(new MemoryStream(template.Content));
+        var products = workbook.Worksheet(ClosedXmlReceiptSpreadsheet.ProductsSheet);
+        // Unit names come from the database (the seeded BOX / BOTTLE units may carry Vietnamese names).
+        string UnitName(Guid id) => env.Context.Units.Where(u => u.Id == id).Select(u => u.Name).Single();
+        var row = Assert.Single(products.RowsUsed(), r => r.Cell(1).GetString() == stocked.Product.Sku);
+        Assert.Equal(UnitName(env.BoxUnit), row.Cell(3).GetString());
+        Assert.Equal(6, row.Cell(5).GetValue<int>());
+        Assert.Equal(UnitName(env.BottleUnit), row.Cell(6).GetString());
+        Assert.Equal("YES", row.Cell(7).GetString());
+        Assert.Equal("YES", row.Cell(8).GetString());
+    }
+
+    [RealDbFact]
+    public async Task Preview_checks_every_row_like_manual_entry_and_saves_nothing()
+    {
+        await using var session = await RealDb.Session.StartAsync();
+        await using var env = await PrepareAsync(session);
+        var supplier = await NewSupplierAsync(env);
+        var stocked = await NewStockedProductAsync(env);
+        var sku = stocked.Product.Sku;
+        var nextYear = Date(Today.AddYears(1));
+
+        var preview = await env.Import.PreviewAsync(
+            new ReceiptImportRequest(supplier.Id),
+            Sheet(
+                [sku, "box", 2, 120_000, "LOT-A", nextYear],                  // row 2: valid
+                ["NOPE-" + Tag(), "Box", 1, 1_000, "L", nextYear],            // row 3: unknown SKU
+                [sku, "Bottle", 1, 1_000, "L", nextYear],                     // row 4: base unit, not a purchase unit
+                [sku, "Box", 1, 1_000, null, nextYear],                       // row 5: lot required
+                [sku, "Box", 1, 1_000, "L", Date(Today.AddDays(-1))],         // row 6: expired
+                [sku, "Box", 0, 1.234, "L", "2027/01/31"]),                   // row 7: quantity, cost, date format
+            Token);
+
+        Assert.Equal("nhap-kho.xlsx", preview.FileName);
+        Assert.Equal((6, 1, 240_000m), (preview.RowCount, preview.ValidRowCount, preview.SubtotalAmount));
+        var valid = preview.Rows[0];
+        Assert.Equal((2, stocked.StoreProductId, stocked.BoxId, 2L, 120_000m, 240_000m),
+            (valid.RowNumber, valid.StoreProductId!.Value, valid.ProductPackagingId!.Value, valid.Quantity!.Value,
+                valid.UnitCost!.Value, valid.LineTotalAmount!.Value));
+        Assert.Empty(valid.Errors);
+
+        string[] Columns(int index) => preview.Rows[index].Errors.Select(e => e.Column).ToArray();
+        Assert.Equal(["SKU"], Columns(1));
+        Assert.Equal(["Packaging"], Columns(2));
+        Assert.Contains("purchase unit", preview.Rows[2].Errors[0].Message);
+        Assert.Equal(["LotNumber"], Columns(3));
+        Assert.Equal(["ExpiryDate"], Columns(4));
+        Assert.Equal(["Quantity", "UnitCost", "ExpiryDate"], Columns(5));
+        Assert.Equal(0, await ReceiptCountAsync(env, supplier.Id));
+    }
+
+    [RealDbFact]
+    public async Task Import_creates_one_excel_draft_that_confirms_like_a_manual_one()
+    {
+        await using var session = await RealDb.Session.StartAsync();
+        await using var env = await PrepareAsync(session);
+        var supplier = await NewSupplierAsync(env);
+        var stocked = await NewStockedProductAsync(env);
+        var storeSku = $"KHO-{Tag()}";
+        await env.StoreProducts.UpdateAsync(stocked.StoreProductId, new UpdateStoreProductRequest(storeSku, null), Token);
+
+        var draft = await env.Import.ImportAsync(
+            new ReceiptImportRequest(supplier.Id, SupplierInvoiceNumber: "HD-001"),
+            Sheet(
+                [storeSku.ToLowerInvariant(), "BOX", 2, 120_000, "LOT-A", Date(Today.AddYears(1)), Date(Today.AddMonths(-1))],
+                [stocked.Product.Sku, "Box", 1, 60_000.5, "lot-a ", $"{Today.AddYears(1):dd/MM/yyyy}"]),
+            Token);
+
+        Assert.Equal(("DRAFT", "EXCEL_TEMPLATE", "HD-001"), (draft.Status, draft.SourceType, draft.SupplierInvoiceNumber));
+        Assert.Equal(2, draft.Items.Count);
+        Assert.Equal(300_000.5m, draft.TotalAmount);
+        Assert.Equal(
+            "nhap-kho.xlsx",
+            await env.Context.GoodsReceipts.Where(r => r.Id == draft.Id).Select(r => r.SourceFileName).SingleAsync(Token));
+
+        var confirmed = await env.Receipts.ConfirmAsync(draft.Id, Token);
+
+        // Same logical lot (lot number ignoring case/spaces + same expiry) → one lot of 18 bottles.
+        Assert.Equal("CONFIRMED", confirmed.Status);
+        Assert.Single(confirmed.Items.Select(i => i.InventoryLotId).Distinct());
+    }
+
+    [RealDbFact]
+    public async Task Import_with_one_invalid_row_saves_nothing_and_names_the_row()
+    {
+        await using var session = await RealDb.Session.StartAsync();
+        await using var env = await PrepareAsync(session);
+        var supplier = await NewSupplierAsync(env);
+        var stocked = await NewStockedProductAsync(env);
+        var file = Sheet(
+            [stocked.Product.Sku, "Box", 1, 10_000, "LOT-A", Date(Today.AddYears(1))],
+            [stocked.Product.Sku, "Box", 1, 10_000, null, Date(Today.AddYears(1))]);
+
+        var rejected = await Assert.ThrowsAsync<BusinessRuleException>(
+            () => env.Import.ImportAsync(new ReceiptImportRequest(supplier.Id), file, Token));
+
+        Assert.Contains("1 of 2 rows", rejected.Message);
+        var error = Assert.Single(Assert.Single(rejected.Errors!, pair => pair.Key == "row 3").Value);
+        Assert.StartsWith("LotNumber:", error);
+        Assert.Equal(0, await ReceiptCountAsync(env, supplier.Id));
+
+        await env.Suppliers.SetActiveAsync(supplier.Id, false, Token);
+        await Assert.ThrowsAsync<BusinessRuleException>(
+            () => env.Import.PreviewAsync(new ReceiptImportRequest(supplier.Id), Sheet([stocked.Product.Sku, "Box", 1, 1, "L"]), Token));
     }
 }
