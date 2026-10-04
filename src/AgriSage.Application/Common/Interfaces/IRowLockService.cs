@@ -4,6 +4,11 @@ namespace AgriSage.Application.Common.Interfaces;
 // same Goods Receipt. Must be called inside the use case transaction; the lock ends when it commits or rolls back.
 public interface IRowLockService
 {
+    // Customer/group mutations lock the store first, then the Farmer. This also serializes first-profile creation.
+    Task LockStoreAsync(Guid storeId, CancellationToken cancellationToken);
+
+    Task LockFarmerProfileAsync(Guid farmerProfileId, CancellationToken cancellationToken);
+
     Task LockGoodsReceiptAsync(Guid goodsReceiptId, CancellationToken cancellationToken);
 
     // Serializes payments, confirmation, fulfillment and cancellation of one order (api-flows README §3.1: one method per row type).
