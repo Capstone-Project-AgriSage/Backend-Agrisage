@@ -726,7 +726,7 @@ chỉ những bổ sung giúp thể hiện đúng luồng cho gọn mới đư�
    - **một bảng giá khách lẻ đang `ACTIVE`** có giá cho các quy cách (M12) — thiếu thì mọi lần tạo đơn trả `422`;
    - **lô hàng có tồn**: nhập kho bằng phiếu nhập `/api/goods-receipts` (rồi *confirm*) hoặc nhập Excel.
 3. **Dữ liệu mẫu (tiền tố `DEMO-`)** đã được tạo sẵn trên database dev bằng `scripts/SeedDemoData.cs`, nên không cần tự tạo bước 2:
-   - 7 sản phẩm: `DEMO-NPK-168`, `DEMO-URE` (lô không có hạn dùng), `DEMO-LUA-ST25`, `DEMO-ACTARA`, `DEMO-FILIA` (đủ quy cách chai/thùng),
+   - 8 sản phẩm: `DEMO-NPK-168`, `DEMO-KALI`, `DEMO-URE` (lô không có hạn dùng), `DEMO-LUA-ST25`, `DEMO-ACTARA`, `DEMO-FILIA` (đủ quy cách chai/thùng),
      `DEMO-SOFIT` (**chỉ 5 chai** để thử lỗi không đủ hàng), `DEMO-HUUCO` (**chưa có giá** để thử lỗi thiếu giá);
    - bảng giá khách lẻ `DEMO-BANGIA-LE` đang `ACTIVE`; các sản phẩm chính có 2-3 lô với hạn dùng khác nhau để thấy FEFO chia lô;
    - tài khoản: `demo.owner@example.com` (Chủ cửa hàng), `demo.sales@example.com` (Bán hàng), `demo.delivery@example.com` (Giao hàng).

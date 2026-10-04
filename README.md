@@ -153,13 +153,18 @@ dotnet run scripts/SeedDemoData.cs -- --base-url http://localhost:5206 --account
 
 It goes through the public API (never straight into the database), so stock appears only through confirmed goods
 receipts and every business rule applies. Every code starts with `DEMO-`; running it again keeps what exists.
-It creates 3 categories, 2 suppliers, 7 products (with packagings), 1 ACTIVE walk-in price list, 2 confirmed goods
-receipts (14 lots with different expiry dates, so FEFO is visible; one undated product; one product with low stock
+It creates 3 categories, 2 suppliers, 8 products (with packagings), 1 ACTIVE walk-in price list, confirmed goods
+receipts (15 lots with different expiry dates, so FEFO is visible; one undated product; one product with low stock
 and one without a price, to try the error cases) and 3 staff accounts (`demo.owner@`, `demo.sales@`,
 `demo.delivery@example.com`). Their random passwords are written only to `--accounts-file` (keep it out of git) and
 never printed. The Admin login is taken from `AGRISAGE_ADMIN_IDENTIFIER` / `AGRISAGE_ADMIN_PASSWORD`, else from
 `AdminBootstrap` in `appsettings.Local.json`, else a prompt. An existing ACTIVE walk-in price list of someone else is
-never replaced (the demo list then stays DRAFT). The database is shared: run it **once**, with the lead's approval.
+never replaced (the demo list then stays DRAFT).
+
+To add more demo data, add a product (or a lot) to the `specs` list at the top of the script and run it again: only what
+is missing is created, and a lot is received (in a new receipt `DEMO-HD-nnn`) only when the product has no lot with that
+number yet. Existing products are not modified; change them through the API. The database is shared: tell the team
+before running it, and never run it twice at the same time.
 
 ## Authentication
 
