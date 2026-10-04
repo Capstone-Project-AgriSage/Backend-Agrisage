@@ -1,0 +1,14 @@
+# Run the AgriSage API locally in Docker:   copy .env.example .env  (fill it in)   then   docker compose up --build
+# Steps and troubleshooting: docs/reference/RUN_WITH_DOCKER.md
+services:
+  api:
+    build: .
+    image: agrisage-api:local
+    ports:
+      - "5206:8080"          # http://localhost:5206 (Swagger: http://localhost:5206/swagger)
+    env_file:
+      - .env                 # Database__Password, Jwt__SigningKey, Storage__SecretKey (gitignored, never committed)
+    environment:
+      # Development turns on Swagger and the local web origins (http://localhost:5173 and :3000) for CORS.
+      ASPNETCORE_ENVIRONMENT: Development
+    restart: unless-stopped

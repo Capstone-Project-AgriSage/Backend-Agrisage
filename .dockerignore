@@ -1,0 +1,28 @@
+# Keep the build context small and keep secrets and local files out of the image.
+**/bin/
+**/obj/
+.git/
+.github/
+.vs/
+.vscode/
+.idea/
+.claude/
+.agents/
+.codex/
+.tmp-art/
+tests/
+docs/
+scripts/
+
+# secrets and per-developer files: never part of an image
+**/appsettings.Local.json
+.env
+.env.*
+!.env.example
+**/secrets.json
+
+**/node_modules/
+*.zip
+*.md
+Dockerfile
+docker-compose*.yml

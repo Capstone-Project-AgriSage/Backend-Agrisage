@@ -719,6 +719,7 @@ chỉ những bổ sung giúp thể hiện đúng luồng cho gọn mới đư�
 
 ## 9. Chuẩn bị môi trường và dữ liệu để chạy thử
 
+0. **Chưa cài .NET?** Chạy API bằng Docker theo `docs/reference/RUN_WITH_DOCKER.md` (`docker compose up --build`, API ở `http://localhost:5206`; khi đó `VITE_API_URL=http://localhost:5206`).
 1. Backend chạy từ `main` mới nhất (API cũ ở cổng 5206 của máy BE có thể chưa có các route này). Hỏi BE mật khẩu DB qua kênh riêng, **không** đưa bí mật vào repo FE.
 2. Cần có sẵn để màn bán hàng chạy được:
    - **tài khoản nhân viên** (Admin/Chủ cửa hàng tạo bằng `POST /api/staff`);

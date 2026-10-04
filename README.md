@@ -5,6 +5,7 @@ ASP.NET Core (.NET 10) backend for AgriSage. Architecture and rules: `AGENTS.md`
 ## Prerequisites
 
 - .NET 10 SDK (pinned in `global.json`)
+- or, to run the API without installing .NET: Docker — see `docs/reference/RUN_WITH_DOCKER.md` (`docker compose up --build`)
 
 ## Structure
 
