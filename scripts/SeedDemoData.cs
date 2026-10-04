@@ -8,6 +8,8 @@
 //   1. environment AGRISAGE_ADMIN_IDENTIFIER + AGRISAGE_ADMIN_PASSWORD
 //   2. AdminBootstrap:Email / :Password in src/AgriSage.Api/appsettings.Local.json (gitignored)
 //   3. a prompt
+// To add demo data: add a product (or a lot) to the `specs` list below and run again; only what is missing is created, and
+// new lots are received in a new goods receipt. Existing products are not modified (change them through the API).
 // Passwords of the demo staff accounts are generated, written only to --accounts-file (keep it OUT of git), never printed.
 #:property PublishAot=false
 #:property JsonSerializerIsReflectionEnabledByDefault=true
@@ -53,7 +55,11 @@ var specs = new ProductSpec[]
     new("DEMO-SOFIT", "Thuốc trừ cỏ Sofit 300EC (chai 1 lít) - tồn thấp", "DEMO-THUOC-BVTV", true, "DEMO-NCC-02",
         "Trừ cỏ tiền nảy mầm trên ruộng lúa sạ. Chỉ nhập 5 chai để thử lỗi \"không đủ hàng\".", "Phun sau sạ 0-3 ngày.",
         [new("ML", 1, true, false, false, null, null), new("BOTTLE", 1000, false, true, true, "Chai 1 lít", 265000)],
-        [new("BOTTLE", 5, 210000, 400, "DEMO-SOF-L1", 25)])
+        [new("BOTTLE", 5, 210000, 400, "DEMO-SOF-L1", 25)]),
+    new("DEMO-KALI", "Phân Kali Clorua (bao 50 kg)", "DEMO-PHAN-BON", true, "DEMO-NCC-01",
+        "Phân kali đỏ, tăng chất lượng hạt và khả năng chống chịu cho lúa và cây ăn trái.", "Bón thúc 50-100 kg/ha.",
+        [new("KG", 1, true, false, true, null, 16000), new("BAG", 50, false, true, true, "Bao 50 kg", 780000)],
+        [new("BAG", 50, 650000, 600, "DEMO-KALI-L1", 20)])
 };
 
 using var http = new HttpClient { BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/"), Timeout = TimeSpan.FromSeconds(90) };
@@ -207,44 +213,66 @@ async Task Run()
         }
     }
 
-    // ---- stock: goods receipts, so lots, stock movements and the weighted-average cost are created by the real use case ----
-    foreach (var (supplierCode, invoice) in new[] { ("DEMO-NCC-01", "DEMO-HD-001"), ("DEMO-NCC-02", "DEMO-HD-002") })
+    // ---- stock: goods receipts, so lots, stock movements and the weighted-average cost are created by the real use case.
+    // A lot is received only when the product has no lot with that number yet, so after adding a product or a lot to the
+    // catalog above, running again receives just the new stock in a new receipt (DEMO-HD-nnn). ----
+    var demoReceipts = Items(await Get("api/goods-receipts?pageSize=100"))
+        .Where(r => Text(r, "supplierInvoiceNumber").StartsWith("DEMO-HD-", StringComparison.Ordinal)).ToList();
+
+    // A receipt a failed run left as DRAFT is confirmed first, so its lots are not received twice.
+    foreach (var draft in demoReceipts.Where(r => Text(r, "status") == "DRAFT"))
     {
-        var supplierId = suppliers[supplierCode];
-        var existing = Items(await Get($"api/goods-receipts?supplierId={supplierId}&pageSize=100"))
-            .FirstOrDefault(r => Text(r, "supplierInvoiceNumber") == invoice);
-        if (existing is not null && Text(existing, "status") != "DRAFT")
-        {
-            Console.WriteLine($"  receipt {invoice}: exists ({Text(existing, "status")})");
-            continue;
-        }
+        await Send(HttpMethod.Post, $"api/goods-receipts/{Text(draft, "id")}/confirm");
+        Console.WriteLine($"  receipt {Text(draft, "supplierInvoiceNumber")}: confirmed (it was left as DRAFT)");
+    }
 
-        var receiptId = existing is not null ? Text(existing, "id") : null;
-        if (receiptId is null)
-        {
-            var lines = catalog.Where(p => p.Spec.Supplier == supplierCode).SelectMany(p => p.Spec.Lots.Select(lot => new
-            {
-                storeProductId = p.StoreProductId,
-                productPackagingId = p.PackagingByUnit[lot.Unit],
-                receivedQuantity = lot.Quantity,
-                purchaseUnitCost = lot.Cost,
-                supplierLotNumber = lot.Number,
-                manufacturingDate = today.AddDays(-lot.AgeDays).ToString("yyyy-MM-dd"),
-                expiryDate = lot.ExpiresInDays is { } days ? today.AddDays(days).ToString("yyyy-MM-dd") : null
-            })).ToArray();
-            var receipt = await Send(HttpMethod.Post, "api/goods-receipts", new
-            {
-                supplierId,
-                supplierInvoiceNumber = invoice,
-                supplierInvoiceDate = today.ToString("yyyy-MM-dd"),
-                note = "Dữ liệu mẫu",
-                items = lines
-            });
-            receiptId = Text(receipt, "id");
-        }
+    var nextInvoice = demoReceipts
+        .Select(r => int.TryParse(Text(r, "supplierInvoiceNumber")["DEMO-HD-".Length..], out var n) ? n : 0)
+        .Append(0).Max() + 1;
 
-        await Send(HttpMethod.Post, $"api/goods-receipts/{receiptId}/confirm");
-        Console.WriteLine($"  receipt {invoice}: created and confirmed");
+    var missingLots = new Dictionary<string, List<(ProductInfo Product, LotSpec Lot)>>(); // by supplier code
+    foreach (var product in catalog)
+    {
+        var receivedLots = Items(await Get($"api/inventory/lots?storeProductId={product.StoreProductId}&pageSize=100"))
+            .Select(l => Text(l, "lotNumber")).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var lot in product.Spec.Lots.Where(l => !receivedLots.Contains(l.Number)))
+        {
+            if (!missingLots.TryGetValue(product.Spec.Supplier, out var list))
+            {
+                missingLots[product.Spec.Supplier] = list = [];
+            }
+
+            list.Add((product, lot));
+        }
+    }
+
+    if (missingLots.Count == 0)
+    {
+        Console.WriteLine("  stock: every demo lot is already received");
+    }
+
+    foreach (var (supplierCode, lots) in missingLots)
+    {
+        var invoice = $"DEMO-HD-{nextInvoice++:000}";
+        var receipt = await Send(HttpMethod.Post, "api/goods-receipts", new
+        {
+            supplierId = suppliers[supplierCode],
+            supplierInvoiceNumber = invoice,
+            supplierInvoiceDate = today.ToString("yyyy-MM-dd"),
+            note = "Dữ liệu mẫu",
+            items = lots.Select(x => new
+            {
+                storeProductId = x.Product.StoreProductId,
+                productPackagingId = x.Product.PackagingByUnit[x.Lot.Unit],
+                receivedQuantity = x.Lot.Quantity,
+                purchaseUnitCost = x.Lot.Cost,
+                supplierLotNumber = x.Lot.Number,
+                manufacturingDate = today.AddDays(-x.Lot.AgeDays).ToString("yyyy-MM-dd"),
+                expiryDate = x.Lot.ExpiresInDays is { } days ? today.AddDays(days).ToString("yyyy-MM-dd") : null
+            }).ToArray()
+        });
+        await Send(HttpMethod.Post, $"api/goods-receipts/{Text(receipt, "id")}/confirm");
+        Console.WriteLine($"  receipt {invoice}: {lots.Count} lot(s) for {supplierCode} received and confirmed");
     }
 
     // ---- demo staff accounts ----
