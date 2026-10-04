@@ -48,6 +48,9 @@ Conventions specific to L3:
 
 ## 3. F3.1 — Customer groups and price-list links
 
+The additive customer directory, staff creation/editing and customer history contract is documented in
+[CUSTOMER_MANAGEMENT.md](CUSTOMER_MANAGEMENT.md). It uses the same FarmerProfile identity and group/credit rules.
+
 | Method | Route | Roles | Body | Response |
 |---|---|---|---|---|
 | GET | `/api/customer-groups` | Operate | query: `isActive`, `search`, `page`, `pageSize` | `200 PagedResult<CustomerGroupResponse>` |

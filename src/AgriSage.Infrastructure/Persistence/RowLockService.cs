@@ -5,6 +5,14 @@ namespace AgriSage.Infrastructure.Persistence;
 
 public sealed class RowLockService(AgriSageDbContext context) : IRowLockService
 {
+    public async Task LockStoreAsync(Guid storeId, CancellationToken cancellationToken) =>
+        await context.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT 1 FROM stores WHERE id = {storeId} FOR UPDATE", cancellationToken);
+
+    public async Task LockFarmerProfileAsync(Guid farmerProfileId, CancellationToken cancellationToken) =>
+        await context.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT 1 FROM farmer_profiles WHERE id = {farmerProfileId} FOR UPDATE", cancellationToken);
+
     // SELECT ... FOR UPDATE on the receipt row: a second confirmation of the same receipt waits here until the first
     // transaction ends, then sees it already CONFIRMED.
     public async Task LockGoodsReceiptAsync(Guid goodsReceiptId, CancellationToken cancellationToken) =>

@@ -3,6 +3,7 @@ using AgriSage.Application.Common.Placeholders;
 using AgriSage.Application.Features.Auth.Interfaces;
 using AgriSage.Application.Features.Auth.Services;
 using AgriSage.Application.Features.Credit;
+using AgriSage.Application.Features.Customers;
 using AgriSage.Application.Features.Debt;
 using AgriSage.Application.Features.Files;
 using AgriSage.Application.Features.GoodsReceipts;
@@ -32,6 +33,10 @@ public static class DependencyInjection
         services.AddScoped<IAdminBootstrapService, AdminBootstrapService>();
         services.AddScoped<IUserAccessValidator, UserAccessValidator>();
         services.AddScoped<IStaffService, StaffService>();
+        services.AddScoped<CustomerWrites>();
+        services.AddScoped<ICustomerService, CustomerService>();
+        services.AddScoped<ICustomerGroupService, CustomerGroupService>();
+        services.AddScoped<ICustomerCreditService, CustomerCreditService>();
 
         services.AddScoped<ICategoryService, CategoryService>();
         services.AddScoped<IBrandService, BrandService>();

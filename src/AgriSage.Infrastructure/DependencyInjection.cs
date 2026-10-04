@@ -1,4 +1,5 @@
 using AgriSage.Application.Common.Interfaces;
+using AgriSage.Application.Features.Customers;
 using AgriSage.Application.Features.GoodsReceipts.Import;
 using AgriSage.Infrastructure.Authentication;
 using AgriSage.Infrastructure.Persistence;
@@ -60,6 +61,7 @@ public static class DependencyInjection
 
         services.AddScoped<IAgriSageDbContext>(provider => provider.GetRequiredService<AgriSageDbContext>());
         services.AddScoped<IRowLockService, RowLockService>();
+        services.AddScoped<ICustomerGroupDefaultSwitcher, CustomerGroupDefaultSwitcher>();
 
         services.AddOptions<SeedStoreOptions>().Bind(configuration.GetSection(SeedStoreOptions.SectionName));
         services.AddScoped<DatabaseSeeder>();
