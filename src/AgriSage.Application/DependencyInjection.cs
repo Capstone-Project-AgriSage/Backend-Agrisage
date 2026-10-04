@@ -11,6 +11,7 @@ using AgriSage.Application.Features.Inventory;
 using AgriSage.Application.Features.Payments;
 using AgriSage.Application.Features.Orders;
 using AgriSage.Application.Features.Pricing;
+using AgriSage.Application.Features.Reports;
 using AgriSage.Application.Features.Suppliers;
 using AgriSage.Application.Features.Products.Interfaces;
 using AgriSage.Application.Features.Products.Services;
@@ -62,6 +63,8 @@ public static class DependencyInjection
         services.AddScoped<OrderCanceller>();
         services.AddScoped<IOrderCancellationService, OrderCancellationService>();
         services.AddScoped<ICounterSaleService, CounterSaleService>();
+
+        services.AddScoped<ISalesReportService, SalesReportService>();
 
         services.AddScoped<PaymentAllocator>();
         services.AddScoped<PaymentQueries>();

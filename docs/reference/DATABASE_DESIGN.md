@@ -6446,6 +6446,28 @@ Every enum-backed varchar column also has an IN (...) CHECK of its
 documented values (§0.5).
 ```
 
+## 35.22 Sales report revenue from SALE movements (tables 26, 27, 34, 35, 57, 58) — no schema change
+
+```text
+Decided 2026-10-04 (task F1.8). Revenue is recognized when goods leave the store, so the
+sales report reads the POSTED SALE stock movements of a period (Vietnam days on posted_at),
+not the orders. stock_movement_items name a lot, not an order item, so the value of a sale
+is computed per (stock movement, order, store product):
+
+  fulfilled value = round2( base units that left x sum(order line totals of that product)
+                            / sum(order line base quantities of that product) )
+
+which is the order line's own price per base unit when the order sells the product in one
+packaging, and the weighted average per base unit when it sells it in several. Multiplying
+before dividing keeps a fully handed-over order equal to its total; across several partial
+movements the rounding of each movement can differ from the total by cents.
+
+cost of goods = sum(total_cost_snapshot) of the movement items, rounded per line.
+return value  = return_value of the lines of sales returns COMPLETED in the period.
+All figures are rounded per line and then added, so rows and totals agree for every
+grouping (DAY / PRODUCT / STAFF / CUSTOMER_GROUP).
+```
+
 ## 35.21 Giving back the unconsumed part of an order prepayment (tables 36, 37, 54) — no schema change
 
 ```text

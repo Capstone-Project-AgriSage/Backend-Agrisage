@@ -497,7 +497,7 @@ Rules:
 
 ---
 
-## 10. F1.8 — Sales report (new, `Manage`)
+## 10. F1.8 — Sales report (new, `Manage`) — done
 
 | Method | Route | Query | Response |
 |---|---|---|---|
@@ -518,13 +518,24 @@ Rules:
 }
 ```
 
-- Revenue is recognized at fulfillment: `fulfilledValue` = Σ per SALE movement line of round2(base quantity ×
-  order item unit price ÷ conversion), on the movement's posting day.
-- `costOfGoods` = Σ `total_cost_snapshot` of the SALE movement items (rounded to 2 decimals); `grossProfit` =
-  fulfilled − cost.
-- `returnValue` = Σ `return_value` of returns completed in the period (L4 data, read only); `netSales` =
-  fulfilled − returns.
-- `STAFF` = order creator; `CUSTOMER_GROUP` = the order's customer group snapshot (walk-in → key `WALK_IN`).
+- Revenue is recognized at fulfillment, from the POSTED SALE stock movements whose posting time falls in the period
+  (Vietnam days, both included). A stock movement item names no order line, so the value is computed per (movement, order,
+  product): `fulfilledValue` = round2(base quantity × Σ line totals ÷ Σ base quantities of the order's lines of that product)
+  — the line's own price when the order sells the product in one packaging, the weighted average per base unit when it sells
+  several (design §35.22). A fully handed-over order adds up to its total. Overridden prices count (the line total is used).
+- `costOfGoods` = Σ `total_cost_snapshot` of the SALE movement items of that line, rounded to 2 decimals; `grossProfit` =
+  fulfilled − cost (before returns).
+- `returnValue` = Σ `return_value` of the lines of returns **completed** in the period (`SalesReturn.CompletedAt`; L4's data,
+  read only; 0 until L4 completes returns), attributed through the line's lot (product) and the return's order (staff, group);
+  `netSales` = fulfilled − returns.
+- Lines are rounded first and then added, so every grouping has the same totals and the rows add up to them.
+  `totals.orderCount` counts each order once even when it appears in several rows (an order handed over on two days is in two
+  DAY rows); a row's `orderCount` counts the orders with a sale line in it (0 for a row that has only returns).
+- Keys and labels: DAY → `yyyy-MM-dd` (ascending); PRODUCT → store product id, label `name (SKU)`; STAFF → creator's user id,
+  label full name; CUSTOMER_GROUP → group id with its name, `WALK_IN` ("Khách lẻ") for walk-in orders, `UNGROUPED`
+  ("Chưa phân nhóm") for a registered customer without a group. Non-DAY groupings are ordered by fulfilled value, largest first.
+- `fromDate` and `toDate` are required (400 otherwise), `toDate` ≥ `fromDate`, at most 366 days; unknown `groupBy` → 400.
+  Reversed or cancelled movements are not counted.
 
 ---
 
