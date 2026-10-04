@@ -260,7 +260,7 @@ first. Implementations never call `SaveChangesAsync` or open a transaction (§3.
 | `IOrderPaymentCancellation` | `Features/Payments` | F1.6 | F1.5 (cancel-remaining), F1.6, F2.3 (Farmer cancel) | **real implementation done** (`OrderPaymentCancellation`); a PENDING payOS payment is refused until F2.4 cancels the link through the gateway there |
 | `IOrderSettlementGuard` | `Features/Credit` | F3.3 | F1.4 (confirm), F1.6 (cancel), F1.7 | accepts FULL_PAYMENT without the payment check, refuses CREDIT (422) |
 | `ICreditReservationAdjuster` | `Features/Credit` | F3.3 | F1.3 (`PaymentAllocator`), F2.4 | does nothing |
-| `IFulfillmentFinancialPosting` | `Features/Debt` | F3.4 | F1.5 (`FulfillmentPostingService`, also used by F2.6) | nothing for FULL_PAYMENT, throws for CREDIT |
+| `IFulfillmentFinancialPosting` | `Features/Debt` | F3.4 | F1.5 (`FulfillmentPostingService`, also used by F2.6) | consumes prepayment for FULL_PAYMENT (value handed over, oldest allocation first; no debt), throws for CREDIT |
 | `IDebtRepaymentPosting` | `Features/Debt` | F3.5 | F1.3 (`PaymentAllocator`), F2.4 | refuses DEBT_REPAYMENT (422 "debt is not available yet") |
 | `IDebtReturnPosting` | `Features/Debt` | F3.5 | F4.4 | applies 0 (everything is refunded) |
 | `IPaymentGateway` (changes in FLOW_2 §6) | `Common/Interfaces` | F2.4 | F2.4, F1.6 (cancel pending payOS links) | not implemented yet |

@@ -6,7 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace AgriSage.IntegrationTests.Api;
 
-// Order confirmation, pickup, cancel-remaining and cancel endpoints (F1.4 to F1.6) without a database: roles, validation and Swagger.
+// Order confirmation, pickup, cancel, cancel-remaining and quick counter sale endpoints (F1.4 to F1.7) without a database: roles, validation and Swagger.
 public class OrderConfirmationHttpTests : IClassFixture<StaffHttpTests.StaffApiFactory>
 {
     private readonly StaffHttpTests.StaffApiFactory _factory;
@@ -44,7 +44,9 @@ public class OrderConfirmationHttpTests : IClassFixture<StaffHttpTests.StaffApiF
         { "GET", $"/api/orders/{Id}/reservation" },
         { "POST", $"/api/orders/{Id}/pickup" },
         { "POST", $"/api/orders/{Id}/items/{Id}/cancel-remaining" },
-        { "POST", $"/api/orders/{Id}/cancel" }
+        { "POST", $"/api/orders/{Id}/cancel" },
+        { "POST", "/api/counter-sales/preview" },
+        { "POST", "/api/counter-sales" }
     };
 
     [Theory]
@@ -82,6 +84,10 @@ public class OrderConfirmationHttpTests : IClassFixture<StaffHttpTests.StaffApiF
             (await client.PostAsJsonAsync($"/api/orders/{Id}/pickup", new { items = new[] { new { orderItemId = Guid.NewGuid(), lots = new[] { new { inventoryLotId = Guid.NewGuid(), baseQuantity = 0 } } } } }, Token)).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync($"/api/orders/{Id}/items/{Id}/cancel-remaining", new { reason = "" }, Token)).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync($"/api/orders/{Id}/cancel", new { reason = " " }, Token)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync("/api/counter-sales", new { customerType = "VIP", items = Array.Empty<object>() }, Token)).StatusCode);
+        Assert.Equal(
+            HttpStatusCode.BadRequest,
+            (await client.PostAsJsonAsync("/api/counter-sales/preview", new { customerType = "WALK_IN", items = new[] { new { storeProductId = Guid.NewGuid(), productPackagingId = Guid.NewGuid(), quantity = 0 } } }, Token)).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync($"/api/orders/{Id}/cancel", new { reason = new string('r', 1001) }, Token)).StatusCode);
     }
 
@@ -96,7 +102,8 @@ public class OrderConfirmationHttpTests : IClassFixture<StaffHttpTests.StaffApiF
                  {
                      "/api/orders/{id}/fefo-suggestions", "/api/orders/{id}/confirm", "/api/orders/{id}/start-preparing",
                      "/api/orders/{id}/mark-ready", "/api/orders/{id}/reservation", "/api/orders/{id}/pickup",
-                     "/api/orders/{id}/items/{itemId}/cancel-remaining", "/api/orders/{id}/cancel"
+                     "/api/orders/{id}/items/{itemId}/cancel-remaining", "/api/orders/{id}/cancel",
+                     "/api/counter-sales/preview", "/api/counter-sales"
                  })
         {
             Assert.True(paths.TryGetProperty(path, out _), path);

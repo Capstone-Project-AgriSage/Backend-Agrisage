@@ -136,7 +136,7 @@ public sealed class PaymentService(
         return await queries.GetAsync(id, null, cancellationToken);
     }
 
-    private async Task<Payment> NewPaidPaymentAsync(
+    private Task<Payment> NewPaidPaymentAsync(
         Guid storeId,
         PaymentContext paymentContext,
         CashPaymentRequest request,
@@ -144,22 +144,9 @@ public sealed class PaymentService(
         Guid? orderId,
         Guid actorId,
         DateTimeOffset now,
-        CancellationToken cancellationToken)
-    {
-        var number = await DocumentNumbers.NextAsync(
-            context.Payments.IgnoreQueryFilters().AsNoTracking().Where(p => p.StoreId == storeId).Select(p => p.PaymentNumber),
-            DocumentNumbers.Payment,
-            BusinessCalendar.Today(now),
-            cancellationToken);
-
-        var payment = new Payment(
-            storeId, number, paymentContext, PaymentMethod.Cash, request.Amount, now, payerFarmerProfileId, actorId,
-            Texts.Clean(request.Note), orderId: orderId);
-        payment.MarkPaid(PaymentConfirmationSource.Staff, now, actorId);
-        context.Payments.Add(payment);
-
-        return payment;
-    }
+        CancellationToken cancellationToken) =>
+        CashPayments.CreatePaidAsync(
+            context, storeId, paymentContext, request.Amount, payerFarmerProfileId, orderId, actorId, now, request.Note, cancellationToken);
 
     private async Task SaveAsync(CancellationToken cancellationToken)
     {

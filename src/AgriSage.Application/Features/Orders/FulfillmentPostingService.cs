@@ -63,11 +63,15 @@ public sealed class FulfillmentPostingService(
             throw new BusinessRuleException($"{errors.Count} line(s) cannot be handed over; nothing was saved.", errors);
         }
 
+        // A reservation made earlier in the same unit of work (the quick sale) is not saved yet: read the tracked ones too.
         var reservation = await context.InventoryReservations.Include(r => r.Items)
-            .FirstOrDefaultAsync(
-                r => r.OrderId == order.Id
-                    && (r.Status == InventoryReservationStatus.Active || r.Status == InventoryReservationStatus.PartiallyConsumed),
-                cancellationToken)
+                .FirstOrDefaultAsync(
+                    r => r.OrderId == order.Id
+                        && (r.Status == InventoryReservationStatus.Active || r.Status == InventoryReservationStatus.PartiallyConsumed),
+                    cancellationToken)
+            ?? context.InventoryReservations.Local.FirstOrDefault(
+                r => r.OrderId == order.Id && !r.IsDeleted
+                    && (r.Status == InventoryReservationStatus.Active || r.Status == InventoryReservationStatus.PartiallyConsumed))
             ?? throw new BusinessRuleException($"Order '{order.OrderNumber}' has no open stock reservation.");
 
         var pickedItemIds = picks.Select(p => p.OrderItemId).ToHashSet();
@@ -176,7 +180,7 @@ public sealed class FulfillmentPostingService(
         return new FulfillmentPostingResult(movement, fulfilled);
     }
 
-    // Quantities per order item: the item is on the order, the lots add up to at most what is left, whole packages only.
+    // Quantities per order item: the item is on the order, the lots add up to at most what is left and to whole packages.
     private static Dictionary<string, string[]> CheckQuantities(List<OrderItem> items, List<FulfillmentLine> picks)
     {
         var errors = new Dictionary<string, string[]>();
@@ -197,9 +201,11 @@ public sealed class FulfillmentPostingService(
                 messages.Add("Every quantity must be positive.");
             }
 
-            if (group.Any(p => p.BaseQuantity % item.ConversionToBaseSnapshot != 0))
+            // The total of the line, not each lot: stock is kept in base units and FEFO splits a line between lots at any
+            // base quantity, so a lot on its own need not hold whole packages.
+            if (group.Sum(p => p.BaseQuantity) % item.ConversionToBaseSnapshot != 0)
             {
-                messages.Add($"Quantities must be whole packages of {item.ConversionToBaseSnapshot} base units.");
+                messages.Add($"The total must be whole packages of {item.ConversionToBaseSnapshot} base units.");
             }
 
             if (group.Sum(p => p.BaseQuantity) > item.RemainingBaseQuantity)

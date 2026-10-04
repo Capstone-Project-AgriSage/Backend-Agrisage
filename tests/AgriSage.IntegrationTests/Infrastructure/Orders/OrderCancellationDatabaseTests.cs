@@ -57,7 +57,7 @@ public class OrderCancellationDatabaseTests
                 context, locks, new OrderConfirmer(context, locks, new TemporaryOrderSettlementGuard(), user, clock, audit), queries, clock, errors, audit);
             Cancellation = new OrderPaymentCancellation(context, locks, clock, audit);
             Pickup = new OrderPickupService(
-                context, locks, new FulfillmentPostingService(context, locks, new TemporaryFulfillmentFinancialPosting()),
+                context, locks, new FulfillmentPostingService(context, locks, new TemporaryFulfillmentFinancialPosting(new OrderPrepaymentLedger(context))),
                 new TemporaryOrderSettlementGuard(), Cancellation, queries, user, clock, audit);
             Canceller = new OrderCancellationService(
                 context, locks, new OrderCanceller(context, locks, new TemporaryOrderSettlementGuard(), Cancellation), queries, user, clock, errors, audit);
@@ -379,9 +379,9 @@ public class OrderCancellationDatabaseTests
         await env.Confirmation.ConfirmAsync(order.Id, Token);
         await env.Pickup.PickupAsync(order.Id, Take(itemId, lot.Id, 20), Token);
 
-        // The debt posting (F3.4) consumes prepayment when goods are handed over; here 250 000 were consumed, which is
-        // more than the 200 000 delivered, so only 250 000 can go back.
-        Assert.Equal(250_000m, await env.Ledger.ConsumeAsync(order.Id, 250_000m, Token));
+        // The handover consumed 200 000 (the value delivered). Another 50 000 are consumed, which is more than the delivered
+        // value, so only 250 000 can go back.
+        Assert.Equal(50_000m, await env.Ledger.ConsumeAsync(order.Id, 50_000m, Token));
         await env.Context.SaveChangesAsync(Token);
         await env.Pickup.CancelRemainingAsync(order.Id, itemId, new CancelRemainingRequest("Khách không lấy nữa"), Token);
 

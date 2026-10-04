@@ -54,7 +54,7 @@ public class OrderPickupDatabaseTests
             Confirmation = new OrderConfirmationService(
                 context, locks, new OrderConfirmer(context, locks, new TemporaryOrderSettlementGuard(), user, clock, audit), queries, clock, errors, audit);
             Pickup = new OrderPickupService(
-                context, locks, new FulfillmentPostingService(context, locks, new TemporaryFulfillmentFinancialPosting()),
+                context, locks, new FulfillmentPostingService(context, locks, new TemporaryFulfillmentFinancialPosting(new OrderPrepaymentLedger(context))),
                 new TemporaryOrderSettlementGuard(), new OrderPaymentCancellation(context, locks, clock, audit), queries, user, clock, audit);
         }
 
@@ -432,6 +432,29 @@ public class OrderPickupDatabaseTests
             Token);
         await env.Confirmation.ConfirmAsync(delivery.Id, Token);
         await Assert.ThrowsAsync<BusinessRuleException>(() => env.Pickup.PickupAsync(delivery.Id, Take(delivery.Items.Single().Id, (lot.Id, 1)), Token));
+    }
+
+    [RealDbFact]
+    public async Task A_line_of_boxes_split_between_lots_at_any_base_quantity_is_handed_over_as_reserved()
+    {
+        await using var session = await RealDb.Session.StartAsync();
+        await using var env = await PrepareAsync(session);
+        var sku = await NewSkuAsync(env);
+        var early = await NewLotAsync(env, sku, "L-EARLY", 100, Today.AddDays(30));
+        var late = await NewLotAsync(env, sku, "L-LATE", 80, Today.AddDays(90));
+        // 21 boxes of 6 = 126 base units: FEFO reserves 100 + 26, neither a whole number of boxes on its own.
+        var order = await ConfirmedOrderAsync(env, sku, 21, box: true);
+        var itemId = order.Items.Single().Id;
+        Assert.Equal((100L, 100L), await BalanceAsync(env, early.Id));
+        Assert.Equal((80L, 26L), await BalanceAsync(env, late.Id));
+
+        var done = await env.Pickup.PickupAsync(
+            order.Id, new PickupRequest([new PickupItemRequest(itemId, [new PickupLotRequest(early.Id, 100), new PickupLotRequest(late.Id, 26)])]), Token);
+
+        Assert.Equal("COMPLETED", done.Status);
+        Assert.Equal((0L, 0L), await BalanceAsync(env, early.Id));
+        Assert.Equal((54L, 0L), await BalanceAsync(env, late.Id));
+        Assert.Equal("CONSUMED", (await env.Confirmation.GetReservationAsync(order.Id, Token)).Status);
     }
 
     // ----- Cancel remaining -----

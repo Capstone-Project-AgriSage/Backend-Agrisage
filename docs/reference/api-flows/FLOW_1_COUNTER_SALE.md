@@ -370,8 +370,8 @@ Reservation status is derived (§35.3), never set by a request.
 - Staff send the **actual** lots handed over. A reserved lot is issued from its reservation
   (`IssueReserved`); a different lot must be eligible and available, is issued with `IssueUnreserved`, and
   the same quantity of the original reservation is released.
-- Per line, the sum of lot quantities ≤ remaining base quantity; quantities must be multiples of the
-  packaging conversion (whole packages only).
+- Per line, the sum of lot quantities ≤ remaining base quantity and a whole number of packages (a multiple of the
+  packaging conversion); a single lot need not hold whole packages.
 - Partial pickup is allowed; the order becomes `PARTIALLY_FULFILLED` until the rest is picked up or
   cancelled with cancel-remaining (which releases the remaining reservation, no stock movement, and calls
   `IOrderSettlementGuard.ReleaseAsync`; when nothing stays open the order becomes PARTIALLY_CANCELLED and
@@ -388,7 +388,8 @@ Built as `FulfillmentPostingService.PostAsync(order, lines, source, deliveryId?,
 `Application/Features/Orders` (`FulfillmentLine(orderItemId, lotId, baseQuantity)`; returns the movement and the
 `FulfilledLine`s). Rules settled while building:
 - All checks run before anything changes: status, lines of the same (item, lot) are added together, per item the sum ≤
-  remaining base quantity and every lot quantity is a whole number of packages, the order has an open reservation, every
+  remaining base quantity and the **sum over the lots is a whole number of packages** (not each lot: stock is in base units
+  and FEFO splits a line between lots at any base quantity), the order has an open reservation, every
   lot exists, belongs to the item's product and `IsEligibleForSale(today)`. Problems come back as one 422 with `errors`
   keyed `items[i]` (index in the order's response order).
 - A lot that holds the item's reservation is issued with `IssueReserved` and the reservation item is consumed. For
@@ -440,7 +441,7 @@ amount } ] }` (what staff must hand back; the refunds are completed with F4.5's 
 
 ---
 
-## 9. F1.7 — Quick counter sale (new, `Operate`)
+## 9. F1.7 — Quick counter sale (new, `Operate`) — done
 
 For the most frequent case: a customer at the counter pays cash and takes the goods now (decision F-D3).
 
@@ -482,6 +483,17 @@ Rules:
   → `OrderConfirmer` core with the given lots → `FulfillmentPostingService` → order COMPLETED → one
   `SaveChangesAsync` → commit. Any failure rolls back everything (no order, payment or stock change remains).
 - The cash amount is the order total (decision C-D4: change is given physically).
+- Built as `CounterSaleService` (`Application/Features/Orders`) over the shared steps: `OrderBuilder`, `CashPayments.CreatePaidAsync`
+  (new shared step; the cash route uses it too) + `PaymentAllocator`, `OrderConfirmer.ConfirmCoreAsync` with the lots as `LotPick`s,
+  `FulfillmentPostingService`, `FefoProposals.ProposeAsync` (new shared read; the pending order's suggestions use it too). Line i of the
+  request is order item i. Nothing is saved before the final `SaveChangesAsync`, so the steps find what an earlier step just added
+  through the tracked entities: the ledger reads the unsaved payment (`DbSet.Local`), and `FulfillmentPostingService` finds the
+  unsaved reservation there. A total of 0 → 422 (a payment must be above 0).
+- Errors: missing `lots` on a line → 400 `items[i].lots`; lots that do not add up to the line, an unsellable lot, another
+  product's lot or not enough stock → 422 with `errors` per line (`items[i]`), nothing saved. The same lot named twice for a line
+  counts once as the sum. Audit: `PAYMENT_RECEIVED`, `ORDER_CONFIRMED`, `PRICE_OVERRIDE` (if any) and `COUNTER_SALE_COMPLETED`.
+- The preview builds and prices the order without adding it to the context and proposes FEFO lots per line, each against the free
+  stock (lines of one product share it); it saves and reserves nothing.
 
 ---
 

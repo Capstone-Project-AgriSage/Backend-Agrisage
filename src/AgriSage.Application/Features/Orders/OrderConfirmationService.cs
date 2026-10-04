@@ -129,37 +129,14 @@ public sealed class OrderConfirmationService(
                 i.RemainingQuantity)).ToList());
     }
 
-    private async Task<FefoSuggestionResponse> ProposeAsync(Order order, List<OrderItem> items, CancellationToken cancellationToken)
-    {
-        var today = BusinessCalendar.Today(clock.UtcNow);
-        var productIds = items.Select(i => i.StoreProductId).Distinct().ToList();
-        var lots = await context.InventoryLots.AsNoTracking().Include(l => l.Balance)
-            .Where(l => productIds.Contains(l.StoreProductId)
-                && l.Status == InventoryLotStatus.Active
-                && (l.ExpiryDate == null || l.ExpiryDate >= today)
-                && l.Balance.QuantityOnHand - l.Balance.QuantityReserved > 0)
-            .ToListAsync(cancellationToken);
-        var byId = lots.ToDictionary(l => l.Id);
-
-        var allocations = FefoAllocator.Allocate(
-            items.Select(i => new FefoDemand(i.Id, i.StoreProductId, i.BaseQuantity)).ToList(),
-            lots.Select(l => new FefoLot(l.Id, l.StoreProductId, l.ExpiryDate, l.CreatedAt, l.Balance.AvailableQuantity)).ToList());
-
-        return new FefoSuggestionResponse(
+    private async Task<FefoSuggestionResponse> ProposeAsync(Order order, List<OrderItem> items, CancellationToken cancellationToken) =>
+        new(
             order.Id,
-            items.Select(item =>
-            {
-                var allocation = allocations.Single(a => a.OrderItemId == item.Id);
-
-                return new FefoItemSuggestion(
-                    item.Id,
-                    item.BaseQuantity,
-                    item.RemainingBaseQuantity,
-                    allocation.Picks.Select(p => new FefoLotSuggestion(
-                        p.LotId, byId[p.LotId].LotNumber, byId[p.LotId].ExpiryDate, byId[p.LotId].Balance.AvailableQuantity, p.BaseQuantity)).ToList(),
-                    allocation.ShortageBaseQuantity);
-            }).ToList());
-    }
+            await FefoProposals.ProposeAsync(
+                context,
+                BusinessCalendar.Today(clock.UtcNow),
+                items.Select(i => new FefoDemand(i.Id, i.StoreProductId, i.BaseQuantity)).ToList(),
+                cancellationToken));
 
     private async Task<FefoSuggestionResponse> FromReservationAsync(Order order, List<OrderItem> items, CancellationToken cancellationToken)
     {

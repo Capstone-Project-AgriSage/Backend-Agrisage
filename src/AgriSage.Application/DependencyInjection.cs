@@ -61,6 +61,7 @@ public static class DependencyInjection
         services.AddScoped<IOrderPickupService, OrderPickupService>();
         services.AddScoped<OrderCanceller>();
         services.AddScoped<IOrderCancellationService, OrderCancellationService>();
+        services.AddScoped<ICounterSaleService, CounterSaleService>();
 
         services.AddScoped<PaymentAllocator>();
         services.AddScoped<PaymentQueries>();

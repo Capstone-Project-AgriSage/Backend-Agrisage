@@ -2,6 +2,8 @@ using AgriSage.Application.Common;
 using AgriSage.Application.Common.Exceptions;
 using AgriSage.Application.Common.Placeholders;
 using AgriSage.Application.Features.Debt;
+using AgriSage.Application.Features.Payments;
+using AgriSage.Domain.Features.Orders.Entities;
 using AgriSage.Domain.Features.Orders.Enums;
 using AgriSage.Domain.Features.Payments.Entities;
 using AgriSage.Domain.Features.Payments.Enums;
@@ -27,15 +29,37 @@ public class TemporaryImplementationTests
         await guard.ReleaseAsync(CreateOrder(), StaffId, "cancelled", Token);
     }
 
-    [Fact]
-    public async Task Fulfillment_posting_does_nothing_for_full_payment_and_fails_loudly_for_credit()
+    private sealed class RecordingLedger : IOrderPrepaymentLedger
     {
-        var posting = new TemporaryFulfillmentFinancialPosting();
-        FulfillmentPostingContext Context(SettlementType settlement) => new(
-            CreateOrder(settlementType: settlement), [], FulfillmentSource.Pickup, null, null, Guid.NewGuid(), StaffId, Now);
+        public List<(Guid OrderId, decimal Max)> Consumed { get; } = [];
 
-        await posting.PostAsync(Context(SettlementType.FullPayment), Token);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => posting.PostAsync(Context(SettlementType.Credit), Token));
+        public Task<decimal> GetPaidAmountAsync(Guid orderId, CancellationToken cancellationToken) => Task.FromResult(0m);
+
+        public Task<decimal> GetAvailableAsync(Guid orderId, CancellationToken cancellationToken) => Task.FromResult(0m);
+
+        public Task<decimal> ConsumeAsync(Guid orderId, decimal maxAmount, CancellationToken cancellationToken)
+        {
+            Consumed.Add((orderId, maxAmount));
+            return Task.FromResult(maxAmount);
+        }
+    }
+
+    [Fact]
+    public async Task Fulfillment_posting_consumes_prepayment_for_full_payment_and_fails_loudly_for_credit()
+    {
+        var ledger = new RecordingLedger();
+        var posting = new TemporaryFulfillmentFinancialPosting(ledger);
+        var order = CreateOrder();
+        FulfillmentPostingContext Context(Order target, params FulfilledLine[] lines) => new(
+            target, lines, FulfillmentSource.Pickup, null, null, Guid.NewGuid(), StaffId, Now);
+
+        await posting.PostAsync(Context(order, new FulfilledLine(Guid.NewGuid(), 6, 55_000m), new FulfilledLine(Guid.NewGuid(), 1, 10_000m)), Token);
+
+        // What was handed over is the value of the prepayment that is used up.
+        Assert.Equal((order.Id, 65_000m), Assert.Single(ledger.Consumed));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            posting.PostAsync(Context(CreateOrder(settlementType: SettlementType.Credit)), Token));
+        Assert.Single(ledger.Consumed);
     }
 
     [Fact]
