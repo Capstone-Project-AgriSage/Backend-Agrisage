@@ -725,7 +725,14 @@ chỉ những bổ sung giúp thể hiện đúng luồng cho gọn mới đư�
    - **sản phẩm đang bán** có quy cách bán (`/api/products`, `/api/store-products`, đánh dấu *sellable*);
    - **một bảng giá khách lẻ đang `ACTIVE`** có giá cho các quy cách (M12) — thiếu thì mọi lần tạo đơn trả `422`;
    - **lô hàng có tồn**: nhập kho bằng phiếu nhập `/api/goods-receipts` (rồi *confirm*) hoặc nhập Excel.
-3. Thử nhanh bằng Swagger trước khi viết UI. BE có sẵn script PowerShell chạy cả chuỗi (tạo đơn → ghi đè giá → thu tiền → huỷ → thu đồng thời) làm ví dụ về thứ tự gọi.
+3. **Dữ liệu mẫu (tiền tố `DEMO-`)** đã được tạo sẵn trên database dev bằng `scripts/SeedDemoData.cs`, nên không cần tự tạo bước 2:
+   - 7 sản phẩm: `DEMO-NPK-168`, `DEMO-URE` (lô không có hạn dùng), `DEMO-LUA-ST25`, `DEMO-ACTARA`, `DEMO-FILIA` (đủ quy cách chai/thùng),
+     `DEMO-SOFIT` (**chỉ 5 chai** để thử lỗi không đủ hàng), `DEMO-HUUCO` (**chưa có giá** để thử lỗi thiếu giá);
+   - bảng giá khách lẻ `DEMO-BANGIA-LE` đang `ACTIVE`; các sản phẩm chính có 2-3 lô với hạn dùng khác nhau để thấy FEFO chia lô;
+   - tài khoản: `demo.owner@example.com` (Chủ cửa hàng), `demo.sales@example.com` (Bán hàng), `demo.delivery@example.com` (Giao hàng).
+     **Mật khẩu hỏi BE qua kênh riêng**, không đưa vào repo. Đăng nhập bằng email ở `POST /api/auth/login`.
+   - Đừng sửa hay xoá dữ liệu `DEMO-`; chạy bán thử sẽ trừ tồn thật. Hết hàng thì nhờ BE nhập thêm bằng phiếu nhập.
+4. Thử nhanh bằng Swagger trước khi viết UI. BE có sẵn script PowerShell chạy cả chuỗi (tạo đơn → ghi đè giá → thu tiền → huỷ → thu đồng thời) làm ví dụ về thứ tự gọi.
 4. Dữ liệu thử có tiền tố `TEST-` trong DB dev là của BE; đừng dựa vào nó. Hỏi BE trước khi xoá hoặc sửa.
 5. Biến môi trường FE gợi ý: `VITE_API_URL=https://localhost:7068`.
 
