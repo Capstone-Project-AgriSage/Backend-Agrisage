@@ -11,6 +11,10 @@ Version 2.0 — 2026-10-03. Replaces the three module contracts (`API_CONTRACT_S
 | L3 | [FLOW_3_CREDIT_DEBT.md](FLOW_3_CREDIT_DEBT.md) | Teammate 3 | Customer groups carry prices and a credit tier, credit sales respect the limit, debt is created on fulfillment and collected |
 | L4 | [FLOW_4_INVENTORY_RETURNS.md](FLOW_4_INVENTORY_RETURNS.md) | Teammate 4 | Stock is imported, watched (expiry, low stock), counted, adjusted, reported, and returned goods come back |
 
+**For the front-end team:** [FE_GUIDE_FLOW_1.md](FE_GUIDE_FLOW_1.md) maps the designed screens of the Sales, Agent and Admin apps to the
+routes of flow L1 (Vietnamese; examples, errors, TypeScript types, gaps between the design and the API). Update it in the same PR
+whenever a flow L1 route or DTO changes.
+
 Every route and DTO of the old contracts is kept unchanged (moved into one flow file); flows only **add**
 endpoints and fields. Business rules come from `DATABASE_DESIGN.md`; when a flow file and the design disagree,
 the design wins and the flow file is corrected.
