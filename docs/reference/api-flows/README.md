@@ -39,7 +39,8 @@ then change the code. Never change a route, field name or status code only in co
 | Deleted | `204 No Content` |
 | Server-owned values | prices, totals, base quantities, statuses, numbers, actor ids and timestamps are computed by the server; a client value for them is ignored or rejected |
 | Route ids | `{id:guid}` route constraints, so fixed segments (`/import-template`, `/stock-summary`) never clash with ids |
-| Reports | `GET /api/reports/...`, read-only, `AsNoTracking`, aggregated in SQL, Vietnam days through `BusinessCalendar`; each flow owns the reports of its own data |
+| CORS | Browser clients are allowed only from the origins in `Cors:AllowedOrigins` (Development: `http://localhost:5173` and `http://localhost:3000`; elsewhere set `Cors__AllowedOrigins__0`, `__1`, … or the appsettings array; none = same-origin only). Bearer token in the `Authorization` header, no cookies, no wildcard |
+| Reports | `GET /api/reports/..., read-only, `AsNoTracking`, aggregated in SQL, Vietnam days through `BusinessCalendar`; each flow owns the reports of its own data |
 
 `PagedResult<T>`:
 

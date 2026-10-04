@@ -23,6 +23,7 @@ builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddApiAuthentication();
 builder.Services.AddAuthorization();
 builder.Services.AddApiRateLimiting();
+builder.Services.AddApiCors(builder.Configuration);
 builder.Services.AddApiSwagger();
 
 var app = builder.Build();
@@ -32,6 +33,9 @@ if (commands.Count > 0)
     Environment.ExitCode = await MaintenanceCommands.RunAsync(app, commands);
     return;
 }
+
+// First, so that preflight requests and error responses (401, 422, 500...) carry the CORS headers too.
+app.UseCors(CorsExtensions.PolicyName);
 
 app.UseExceptionHandler(_ => { });
 
