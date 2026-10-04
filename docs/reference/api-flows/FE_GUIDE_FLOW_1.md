@@ -1,7 +1,11 @@
 # Hướng dẫn FE tích hợp API — Luồng 1: Bán hàng tại quầy
 
-Viết cho: đội FE (React) của các app **Bán hàng (Sales staff)**, **Đại lý (Agent)** và **Admin** trong thiết kế
-`AgriSage-UI-Rework-Anti`. Tài liệu chỉ nói về API của luồng 1; việc gắn vào từng màn hình đã thiết kế nằm ở §2.
+Viết cho: đội FE (React) của các app **Bán hàng (Sales staff)**, **Đại lý (Agent)** và **Admin**. Tài liệu chỉ nói về luồng 1 (bán hàng tại quầy):
+luồng nghiệp vụ, các màn hình **cần có để thể hiện đúng luồng**, và API của từng màn.
+
+> **Luồng là chuẩn, UI đi theo luồng.** Thiết kế UI/UX hiện có (`AgriSage-UI-Rework-Anti`) chỉ là **tài liệu tham khảo** về bố cục và phong cách. Chỗ nào
+> thiết kế không khớp luồng thì **UI phải sửa**, không đổi luồng hay API theo UI. §2 mô tả màn hình theo luồng (kèm trang tham khảo có thể tái sử dụng);
+> §6 liệt kê những thay đổi UI bắt buộc.
 
 Nguồn sự thật: code trên nhánh `main` của backend. Hợp đồng chi tiết nằm ở `docs/reference/api-flows/FLOW_1_COUNTER_SALE.md`;
 Swagger (`/swagger`, chỉ bật ở môi trường Development) liệt kê đủ route và DTO. Khi tài liệu này và Swagger khác nhau, **Swagger đúng**
@@ -13,11 +17,11 @@ và xin báo BE để sửa tài liệu.
 
 0. [Đọc trước: 10 điều quan trọng](#0-đọc-trước-10-điều-quan-trọng)
 1. [Kết nối, đăng nhập, quy ước chung](#1-kết-nối-đăng-nhập-quy-ước-chung)
-2. [Bản đồ màn hình thiết kế → API](#2-bản-đồ-màn-hình-thiết-kế--api)
+2. [Luồng bán hàng tại quầy và các màn hình cần có](#2-luồng-bán-hàng-tại-quầy-và-các-màn-hình-cần-có)
 3. [Kịch bản đầu–cuối có JSON mẫu](#3-kịch-bản-đầucuối-có-json-mẫu)
 4. [Tham chiếu từng API](#4-tham-chiếu-từng-api)
 5. [Lỗi và cách hiển thị](#5-lỗi-và-cách-hiển-thị)
-6. [Chỗ thiết kế UI khác với API (cần chỉnh UI)](#6-chỗ-thiết-kế-ui-khác-với-api-cần-chỉnh-ui)
+6. [Thay đổi UI bắt buộc so với thiết kế tham khảo](#6-thay-đổi-ui-bắt-buộc-so-với-thiết-kế-tham-khảo)
 7. [Đề xuất bổ sung phía BE (chưa có)](#7-đề-xuất-bổ-sung-phía-be-chưa-có)
 8. [Chưa làm được vì phụ thuộc luồng khác](#8-chưa-làm-được-vì-phụ-thuộc-luồng-khác)
 9. [Chuẩn bị môi trường và dữ liệu để chạy thử](#9-chuẩn-bị-môi-trường-và-dữ-liệu-để-chạy-thử)
@@ -126,41 +130,90 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 ---
 
-## 2. Bản đồ màn hình thiết kế → API
+## 2. Luồng bán hàng tại quầy và các màn hình cần có
 
-Ký hiệu: **[S]** app Bán hàng, **[A]** app Đại lý. Mọi trang trong thiết kế hiện chạy bằng dữ liệu giả (`data/mock*.ts`); phần này cho biết
-thay bằng API nào và **UI cần chỉnh chỗ nào** (chi tiết chỗ khác biệt ở §6).
+> **Nguyên tắc:** luồng nghiệp vụ dưới đây là chuẩn. Thiết kế UI/UX hiện có (`AgriSage-UI-Rework-Anti`) **chỉ để tham khảo bố cục và phong cách**;
+> khi thiết kế không khớp luồng thì **sửa UI theo luồng**, không đòi API đổi theo UI. Mục "Tham khảo thiết kế" ở mỗi màn chỉ ra trang có thể tái sử dụng
+> khung và những gì phải đổi (tổng hợp ở §6).
 
-### 2.1 Đăng nhập [S][A]
+### 2.0 Luồng tổng thể
 
-`POST /api/auth/login` → lưu `accessToken`, `user.role`. Chặn đúng vai trò: app Bán hàng chỉ cho `SALES_STAFF` (và có thể cho
-`STORE_OWNER`/`ADMIN` nếu muốn), app Đại lý chỉ cho `STORE_OWNER`/`ADMIN`. Thiết kế đang cho chọn vai trò để điền sẵn email: bỏ bước này,
-dùng `role` do server trả. `user.storeName` của thiết kế **chưa có API** (hiện chỉ có một cửa hàng; hardcode tên hoặc chờ API cửa hàng).
+```
+        ┌────────────── Bán nhanh (khách trả tiền mặt đủ, lấy hàng ngay) ──────────────┐
+        │  chọn hàng → xem trước (giá + lô) → Bán  ⇒  đơn COMPLETED + thanh toán PAID   │
+        └───────────────────────────────────────────────────────────────────────────────┘
 
-### 2.2 Sản phẩm — tra giá, tồn, "Thêm vào đơn" [S]
+ Đơn nhiều bước:
+  Soạn đơn ──► Thu tiền (một hoặc nhiều lần) ──► Xác nhận (giữ hàng theo FEFO) ──► [Chuẩn bị] ──► [Sẵn sàng] ──► Giao tại quầy ──► Hoàn thành
+     │                                                   │                                              │ (giao từng phần được)
+     └────────────── Hủy đơn (chưa giao gì) ◄────────────┘                         Hủy phần còn lại ◄──┘
+                         │                                                              │
+                         └──► Khoản phải hoàn tiền cho khách (nếu khách đã trả trước) ◄──┘
+```
 
-Thiết kế hiển thị: tên, mô tả, danh mục, **giá**, **tình trạng tồn** (Còn hàng / Sắp hết / Hết hàng), số lượng, đơn vị.
+Ba nguyên tắc của luồng mà giao diện phải thể hiện:
+1. **Giữ hàng ≠ xuất hàng.** Xác nhận chỉ giữ hàng; hàng chỉ rời kho khi giao tại quầy. Tồn "khả dụng" = tồn thực − hàng đang giữ.
+2. **Tiền và hàng là hai trạng thái độc lập.** Một đơn có *trạng thái đơn* (`status`) và *trạng thái thanh toán* (suy ra từ tóm tắt thanh toán). Luôn hiển thị cả hai, không gộp thành một nhãn.
+3. **Lô hàng là một phần của nghiệp vụ.** Nhân viên xác nhận lô thực tế khi giao (hàng hết hạn sớm nhất xuất trước — FEFO). Màn nào xuất hàng đều phải cho thấy lô.
+
+### 2.1 Danh sách màn hình và vai trò
+
+| Mã | Màn hình | Ai dùng | API chính | Trang tham khảo trong thiết kế |
+|---|---|---|---|---|
+| M1 | Đăng nhập | mọi nhân viên | `POST /api/auth/login` | `features/auth/LoginPage` |
+| M2 | Chọn hàng: tra cứu sản phẩm, quy cách, giá | Bán hàng, Đại lý | `GET /api/catalog/...`, `GET /api/inventory/lots` | `features/products/ProductsPage` |
+| M3 | Soạn đơn tại quầy (tạo, sửa dòng, ghi đè giá) | Bán hàng, Đại lý | `POST/PUT/DELETE /api/orders…` | form "Tạo đơn hàng" trong `OrdersPage` |
+| M4 | Thu tiền cho đơn | Bán hàng, Đại lý | `POST /api/payments/cash`, `GET /api/orders/{id}/payments` | `features/payments/PaymentsPage` |
+| M5 | Xác nhận đơn và giữ hàng (xem lô FEFO) | Bán hàng, Đại lý | `GET …/fefo-suggestions`, `POST …/confirm` | *chưa có* |
+| M6 | Giao hàng tại quầy (chọn lô thực tế) | Bán hàng, Đại lý | `POST …/pickup` | *chưa có* |
+| M7 | Bán nhanh | Bán hàng, Đại lý | `POST /api/counter-sales/preview`, `POST /api/counter-sales` | tuỳ chọn "Hoàn tất ngay" của form tạo đơn |
+| M8 | Hủy đơn, hủy phần còn lại, khoản phải hoàn | Bán hàng, Đại lý | `POST …/cancel`, `POST …/cancel-remaining` | nút "Hủy đơn" |
+| M9 | Danh sách đơn và chi tiết đơn (trung tâm điều hướng) | Bán hàng, Đại lý | `GET /api/orders`, `GET /api/orders/{id}` | `features/orders/OrdersPage` |
+| M10 | Thanh toán: theo dõi tiền thu theo đơn | Bán hàng, Đại lý | `GET /api/orders/{id}/payments`, `GET /api/payments` | `features/payments/PaymentsPage` |
+| M11 | Kho: tra cứu lô, hạn dùng, biến động | Bán hàng, Đại lý | `GET /api/inventory/…` | `features/inventory/InventoryPage` |
+| M12 | Bảng giá | **Đại lý** (đọc: Bán hàng) | `/api/price-lists…` | *chưa có* |
+| M13 | Báo cáo bán hàng, dashboard doanh thu | **Đại lý** | `GET /api/reports/sales` | `features/dashboard/DashboardPage` (Đại lý) |
+
+Gợi ý menu: **Bán hàng** (Bán nhanh · Đơn hàng) · **Thu tiền** · **Kho** · *(chỉ Đại lý)* **Bảng giá** · **Báo cáo**.
+
+---
+
+### M1. Đăng nhập
+
+`POST /api/auth/login` → lưu `accessToken` và `user.role`; vai trò quyết định menu (§1.3). Gặp `401` ở bất kỳ API nào → xoá token, về đăng nhập.
+Tham khảo thiết kế: bỏ bước "chọn vai trò để điền sẵn email" (vai trò do server trả); bỏ "Quên mật khẩu" (chưa có API; Chủ cửa hàng đặt lại mật khẩu
+cho nhân viên qua `POST /api/staff/{id}/reset-password`); tên cửa hàng chưa có API (hiện chỉ một cửa hàng).
+
+### M2. Chọn hàng: sản phẩm, quy cách, giá, tồn
+
+Dùng làm bộ chọn sản phẩm cho M3 và M7, đồng thời là trang tra cứu độc lập.
 
 | Cần | API | Ghi chú |
 |---|---|---|
 | Danh sách sản phẩm đang bán + giá | `GET /api/catalog/products?search=&categoryId=&page=&pageSize=` (không cần token) | `id` = **storeProductId** (cái đơn hàng tham chiếu). `fromPrice` = giá thấp nhất của các quy cách bán |
-| Quy cách + giá từng quy cách | `GET /api/catalog/products/{id}` | `packagings[]`: `id` = **productPackagingId**, `conversionToBase`, `price` (giá **bảng giá khách lẻ**). `price = null` → quy cách đó chưa có giá, **không bán được** (server trả 422) |
+| Quy cách + giá từng quy cách | `GET /api/catalog/products/{id}` | `packagings[]`: `id` = **productPackagingId**, `conversionToBase`, `price` (giá **bảng giá khách lẻ**). `price = null` → quy cách chưa có giá, **không bán được** (server trả 422) |
 | Danh mục để lọc | `GET /api/catalog/categories` | |
-| Tồn kho khả dụng | `GET /api/inventory/lots?storeProductId=&hasStock=true` | cộng `quantityAvailable` của các lô (đơn vị cơ sở). **Chưa có API tổng hợp theo sản phẩm** (§7); ngưỡng "Sắp hết" lấy từ `minStockLevelBase` của `GET /api/store-products/{id}` |
-| Nút "Thêm vào đơn" | không gọi API | đưa sản phẩm + quy cách vào giỏ của form tạo đơn (§2.3) |
+| Tồn khả dụng | `GET /api/inventory/lots?storeProductId=&hasStock=true` | cộng `quantityAvailable` các lô (đơn vị cơ sở). Chưa có API tổng hợp (§7). Ngưỡng "Sắp hết": `minStockLevelBase` của `GET /api/store-products/{id}` |
 
-Lưu ý: `GET /api/catalog/...` là API công khai, có giới hạn 120 lần/phút/IP; đủ cho tra cứu thông thường. Giá hiển thị ở đây là giá khách lẻ;
-**giá cuối cùng luôn lấy từ phản hồi của `POST /api/orders`** (khi có khách quen theo nhóm, giá có thể khác).
+Hành vi bắt buộc:
+- Người dùng chọn **quy cách** (bao, hộp, chai…) chứ không chỉ chọn sản phẩm; giá và số lượng luôn gắn với một quy cách.
+- Hiển thị rõ đơn vị: số lượng đặt là **số quy cách**, tồn kho là **đơn vị cơ sở**; đổi qua lại bằng `conversionToBase` (21 hộp × 6 = 126 chai).
+- Quy cách không có giá (`price = null`) hiển thị "Chưa có giá" và không cho thêm vào đơn.
+- Giá ở đây là **giá khách lẻ để tham khảo**; giá cuối cùng luôn lấy từ phản hồi của `POST /api/orders` hoặc `preview`.
+- API catalog là công khai, giới hạn 120 lần/phút/IP: dùng debounce khi tìm kiếm.
 
-### 2.3 Tạo đơn hàng [S]
+Tham khảo thiết kế: `ProductsPage` có sẵn bộ lọc, tình trạng tồn, nút "Thêm vào đơn" — giữ khung này nhưng thêm bước chọn quy cách.
 
-Thiết kế hiện chỉ có **một dòng, gõ tay tên sản phẩm và đơn giá**. API cần **nhiều dòng**, mỗi dòng chọn từ catalog (`storeProductId` +
-`productPackagingId`) và **giá do server tính**. Đề xuất giao diện:
+### M3. Soạn đơn tại quầy
 
-1. Ô chọn khách: **Khách lẻ** (tên và SĐT không bắt buộc; để trống tên → server ghi "Khách lẻ"). *Khách quen chưa dùng được (§8).*
-2. Bảng dòng hàng: chọn sản phẩm → chọn quy cách → số lượng. Đơn giá hiển thị **chỉ đọc** (giá gợi ý); có nút "Sửa giá" mở ô nhập giá mới + **lý do bắt buộc**.
-3. Ghi chú (≤ 1000 ký tự).
-4. Nút **Tạo đơn** → `POST /api/orders` (đơn ở trạng thái *Chờ xác nhận*), hoặc **Bán nhanh** (§2.7).
+Một đơn gồm **nhiều dòng**; mỗi dòng là (sản phẩm, quy cách, số lượng). Giá **không nhập tay**.
+
+Giao diện bắt buộc:
+1. **Khách:** chỉ **Khách lẻ**; tên và SĐT không bắt buộc (để trống tên → server ghi "Khách lẻ"). *Khách quen chưa dùng được (§8).*
+2. **Bảng dòng hàng:** chọn sản phẩm → quy cách → số lượng (từ M2). Đơn giá hiển thị **chỉ đọc**; nút "Sửa giá" mở ô nhập giá mới và **lý do bắt buộc**. Dòng đã sửa giá hiển thị cả giá gợi ý (gạch ngang) và giá bán, kèm dấu "đã ghi đè".
+3. **Tổng tiền** lấy từ phản hồi của server, không tự cộng ở FE.
+4. **Ghi chú** (≤ 1000 ký tự).
+5. Hai nút: **Tạo đơn** (đơn *Chờ xác nhận*) và **Bán nhanh** (sang M7).
 
 ```http
 POST /api/orders
@@ -174,69 +227,54 @@ POST /api/orders
 }
 ```
 
-- `customerType` cố định `WALK_IN`, `settlementType` cố định `FULL_PAYMENT`, `fulfillmentType` cố định `PICKUP` cho màn này.
-- Gửi `unitPrice` chỉ khi nhân viên **đã sửa** giá; nếu bằng giá gợi ý thì server bỏ qua. Khác giá mà thiếu `overrideReason` → `422` (`errors["items[i]"]`).
-- Mỗi cặp (sản phẩm, quy cách) chỉ xuất hiện **một lần** trong đơn (trùng → `400`). Gộp số lượng ở FE.
+- `customerType`, `settlementType`, `fulfillmentType` cố định `WALK_IN`, `FULL_PAYMENT`, `PICKUP` cho màn này.
+- Gửi `unitPrice` chỉ khi nhân viên **đã sửa** giá; bằng giá gợi ý thì server bỏ qua. Khác giá mà thiếu `overrideReason` → `422` (`errors["items[i]"]`).
+- Mỗi cặp (sản phẩm, quy cách) chỉ **một lần** trong đơn (trùng → `400`): gộp số lượng ở FE.
 - Tối đa 100 dòng; `quantity` từ 1 đến 100.000.000.
-- Phản hồi `201` là `OrderResponse` đầy đủ (mã `OD-yyyyMMdd-NNNN`, từng dòng có `suggestedUnitPrice`, `unitPrice`, `priceOverridden`, `lineTotalAmount`, `baseQuantity`).
+- Phản hồi `201` là `OrderResponse` đầy đủ: mã `OD-yyyyMMdd-NNNN`, mỗi dòng có `suggestedUnitPrice`, `unitPrice`, `priceOverridden`, `lineTotalAmount`, `baseQuantity`.
 
-**Sửa đơn khi còn "Chờ xác nhận"** (sau khi xác nhận thì mọi sửa đổi bị từ chối `422`):
+**Sửa đơn khi còn *Chờ xác nhận*** (sau khi xác nhận mọi sửa đổi bị từ chối `422`: hãy khoá form và hiện "Đơn đã xác nhận, không sửa được"):
 
 | Việc | API |
 |---|---|
-| Đổi ghi chú (gửi chuỗi rỗng để xoá) | `PUT /api/orders/{id}` `{ "note": "…" }` |
-| Thêm dòng | `POST /api/orders/{id}/items` (cùng dạng một dòng như lúc tạo). Dòng thêm sau dùng **bảng giá đã chốt của đơn**. Thêm cặp đã có → `422` (hãy đổi số lượng dòng đó) |
+| Đổi ghi chú (chuỗi rỗng để xoá) | `PUT /api/orders/{id}` `{ "note": "…" }` |
+| Thêm dòng | `POST /api/orders/{id}/items` (một dòng như lúc tạo). Dòng thêm sau dùng **bảng giá đã chốt của đơn**. Thêm cặp đã có → `422` (hãy đổi số lượng dòng đó) |
 | Đổi số lượng | `PUT /api/orders/{id}/items/{itemId}` `{ "quantity": 5 }` |
-| Ghi đè giá | `PUT /api/orders/{id}/items/{itemId}/price` `{ "unitPrice": 640000, "reason": "…" }` (lý do bắt buộc) |
+| Ghi đè giá | `PUT /api/orders/{id}/items/{itemId}/price` `{ "unitPrice": 640000, "reason": "…" }` |
 | Trả về giá gợi ý | `DELETE /api/orders/{id}/items/{itemId}/price` |
 | Xoá dòng | `DELETE /api/orders/{id}/items/{itemId}` |
 
-Mỗi lần gọi đều trả `OrderResponse` mới → hiển thị tổng tiền mới ngay.
+Mỗi lần gọi trả `OrderResponse` mới → thay state và hiển thị tổng tiền mới ngay.
 
-### 2.4 Danh sách đơn hàng [S][A]
+Tham khảo thiết kế: form hiện tại (một dòng, gõ tay tên sản phẩm và đơn giá, chọn phương thức thanh toán) **phải thay** bằng bố cục trên.
+Phương thức thanh toán **không chọn lúc soạn đơn**; tiền được thu ở M4.
 
-`GET /api/orders?status=&search=&fromDate=&toDate=&customerType=&source=&page=&pageSize=` (mới nhất trước).
+### M4. Thu tiền
 
-- `search` tìm theo **mã đơn, tên khách, số điện thoại**.
-- `status` nhận giá trị trong bảng dưới. Muốn lọc nhiều trạng thái (ví dụ "Đang chuẩn bị" = `CONFIRMED` + `PREPARING`) thì gọi nhiều lần hoặc lọc ở FE.
-- Mỗi hàng (`OrderListItem`): `id, orderNumber, source, customerType, customerName, customerPhone, settlementType, fulfillmentType, status, totalAmount, itemCount, createdAt, confirmedAt`.
-  **Không có** danh sách sản phẩm trong hàng danh sách: cột "Sản phẩm" của thiết kế hiển thị `itemCount` ("3 sản phẩm"), hoặc gọi `GET /api/orders/{id}` khi mở chi tiết.
-- **Chưa có** cột "đã thu/còn lại" trong danh sách (§7); cột "Thanh toán" của thiết kế lấy từ `GET /api/orders/{id}/payments` của từng dòng đang hiển thị (≤ `pageSize` lần gọi) cho tới khi BE bổ sung.
-- KPI trên đầu trang (Đơn hàng, Chờ xác nhận, Đang chuẩn bị, Hoàn thành): gọi `GET /api/orders?status=…&pageSize=1` rồi lấy `totalCount`; "Tổng giá trị" chưa có API (tính ở FE từ trang hiện tại hoặc chờ §7).
+Tiền mặt được nhân viên nhận tại quầy, nên mỗi lần thu **tạo khoản thanh toán `PAID` ngay**. Một đơn có thể thu **nhiều lần** (đặt cọc rồi trả nốt).
 
-**Bảng trạng thái (thiết kế ↔ API):**
+```http
+POST /api/payments/cash
+{ "paymentContext": "ORDER_PAYMENT", "orderId": "…", "amount": 1250000, "note": "Khách đặt cọc" }
+```
 
-| Nhãn trong thiết kế | `status` của API | Ghi chú |
-|---|---|---|
-| Chờ xác nhận | `PENDING_CONFIRMATION` | sửa được, huỷ được |
-| Đã xác nhận | `CONFIRMED` | đã giữ hàng |
-| Đang chuẩn bị | `PREPARING` | bước tuỳ chọn |
-| *(thiết kế chưa có)* Sẵn sàng giao | `READY_FOR_FULFILLMENT` | bước tuỳ chọn |
-| *(chưa có)* Đã giao một phần | `PARTIALLY_FULFILLED` | giao từng phần |
-| Hoàn thành | `COMPLETED` | đã giao đủ |
-| Đã hủy | `CANCELLED` | huỷ cả đơn |
-| *(chưa có)* Hủy một phần | `PARTIALLY_CANCELLED` | đã giao một phần rồi huỷ phần còn lại |
-| Đang giao hàng, Chờ giao lại, Giao thất bại | *(không thuộc quầy)* | trạng thái **giao tận nơi** (luồng 2) — ẩn ở màn bán tại quầy |
+Giao diện bắt buộc (hộp thoại "Thu tiền" mở từ M9 hoặc M10):
+- Hiển thị **Tổng đơn · Đã thu · Còn phải thu** (lấy từ `GET /api/orders/{id}/payments`: `orderTotal`, `paidAmount`, `remainingToPay`).
+- Ô số tiền, kèm các nút nhanh **"Thu hết số còn lại"** (điền `remainingToPay`) và **"Đặt cọc 50%"** (điền 50% tổng). Đặt cọc **không phải loại thanh toán riêng**, chỉ là thu một phần.
+- `amount` > 0 và **không vượt `remainingToPay`** (vượt → `422`). Không thu được cho đơn `CANCELLED`, `PARTIALLY_CANCELLED`, `COMPLETED`.
+- Sau khi thu, cập nhật lại ba số trên bằng dữ liệu server trả.
+- Phương thức duy nhất hiện nay là **tiền mặt** (`CASH`). VietQR/payOS chưa có (§8) — đừng hiển thị lựa chọn này.
+- **Cổng chặn phía FE:** nút **Xác nhận đơn** (M5) chỉ bật khi `paidAmount ≥ orderTotal`. Server chưa tự kiểm tra việc này (§0, điều 5).
 
-### 2.5 Chi tiết đơn và các nút hành động [S][A]
+Trạng thái thanh toán của một đơn (FE tự tính): `paidAmount = 0` → *Chưa thanh toán*; `0 < paidAmount < orderTotal` → *Thanh toán 1 phần*; `paidAmount ≥ orderTotal` → *Đã thanh toán*.
 
-`GET /api/orders/{id}` cho toàn bộ chi tiết (khách, ghi chú, từng dòng với giá gợi ý/giá bán/lý do ghi đè, số lượng đã giao/đã huỷ/còn lại).
-Thiết kế dùng một máy trạng thái tuyến tính (`NEXT_STATUS`); với đơn tại quầy máy trạng thái thật như sau — **hiển thị nút theo bảng, đừng tự suy ra**:
+`POST /api/payments/{id}/cancel` chỉ huỷ khoản đang `PENDING`; tiền mặt tạo ra là `PAID` luôn nên thực tế **chưa dùng** (dành cho chuyển khoản/payOS sau này).
 
-| `status` | Nút hiển thị | API |
-|---|---|---|
-| `PENDING_CONFIRMATION` | Sửa đơn / Thu tiền / **Xác nhận** / Hủy đơn | §2.3 / `POST /api/payments/cash` / `POST /api/orders/{id}/confirm` / `POST /api/orders/{id}/cancel` |
-| `CONFIRMED` | Thu tiền (nếu còn thiếu) / *Bắt đầu chuẩn bị* / *Sẵn sàng giao* / **Giao hàng tại quầy** / Hủy đơn / Hủy phần còn lại | `…/start-preparing` / `…/mark-ready` / `…/pickup` / `…/cancel` / `…/items/{itemId}/cancel-remaining` |
-| `PREPARING` | *Sẵn sàng giao* / **Giao hàng tại quầy** / Hủy đơn / Hủy phần còn lại | `…/mark-ready` / `…/pickup` / `…/cancel` |
-| `READY_FOR_FULFILLMENT` | **Giao hàng tại quầy** / Hủy đơn / Hủy phần còn lại | `…/pickup` / `…/cancel` |
-| `PARTIALLY_FULFILLED` | Giao tiếp phần còn lại / **Hủy phần còn lại** (từng dòng). *Không* có "Hủy đơn" | `…/pickup` / `…/items/{itemId}/cancel-remaining` |
-| `COMPLETED`, `CANCELLED`, `PARTIALLY_CANCELLED` | Chỉ xem (+ xem thanh toán, khoản hoàn tiền) | — |
+Tham khảo thiết kế: `PaymentsPage` có form "Tạo thanh toán" gõ tay mã đơn, tên khách, tổng đơn — thay bằng **chọn một đơn có sẵn** rồi nhập số tiền; mọi thông tin khác lấy từ đơn.
 
-*Bắt đầu chuẩn bị* và *Sẵn sàng giao* là **tuỳ chọn** (bỏ qua vẫn giao được). Nếu thiết kế muốn giữ bước "Đang chuẩn bị" thì dùng `start-preparing`.
+### M5. Xác nhận đơn và giữ hàng
 
-Các nút `confirm`, `start-preparing`, `mark-ready` **không có body** và trả `OrderResponse` mới.
-
-**Xác nhận** (`POST /api/orders/{id}/confirm`) trước hết nên cho nhân viên xem lô sẽ bị giữ:
+Màn bắt buộc **trước** khi bấm Xác nhận: cho nhân viên thấy lô sẽ bị giữ.
 
 ```http
 GET /api/orders/{id}/fefo-suggestions
@@ -249,44 +287,40 @@ GET /api/orders/{id}/fefo-suggestions
       { "inventoryLotId": "…", "lotNumber": "L02", "expiryDate": "2027-03-31", "availableBaseQuantity": 80,  "suggestedBaseQuantity": 25 } ] } ] }
 ```
 
-- Đơn còn chờ xác nhận: gợi ý FEFO (lô hết hạn sớm nhất trước). Đã xác nhận: các dòng giữ hàng còn mở.
-- `shortageBaseQuantity > 0` → thiếu hàng: tô đỏ dòng và **khoá nút Xác nhận** (nếu vẫn gọi, server trả `422` kèm `errors["items[i]"]`, **không giữ gì**).
-- Sau khi xác nhận, `GET /api/orders/{id}/reservation` cho biết hàng đang giữ ở lô nào.
+- Mỗi dòng đơn hiển thị các lô sẽ giữ: số lô, hạn dùng, số lượng (đơn vị cơ sở).
+- `shortageBaseQuantity > 0` → thiếu hàng: tô đỏ dòng, ghi "Thiếu N", **khoá nút Xác nhận** (nếu vẫn gọi, server trả `422` kèm `errors["items[i]"]` và **không giữ gì**).
+- Nút **Xác nhận** → `POST /api/orders/{id}/confirm` (không body) → `CONFIRMED`. Bật nút khi: đơn `PENDING_CONFIRMATION`, có ít nhất một dòng, đã thu đủ tiền (M4), không thiếu hàng.
+- Lô được **giữ theo FEFO tự động**; nhân viên **không chọn lô ở bước này** (chọn lô thực tế ở M6).
+- Sản phẩm bị ngừng bán sau khi tạo đơn: xác nhận trả `422` (`can no longer be sold`) kèm dòng sai → cho xoá dòng đó hoặc huỷ đơn.
+- Sau khi xác nhận: `GET /api/orders/{id}/reservation` cho biết hàng đang giữ ở lô nào.
+- *Bắt đầu chuẩn bị* (`POST …/start-preparing`) và *Sẵn sàng giao* (`POST …/mark-ready`) là **bước tuỳ chọn**; bỏ qua vẫn giao được. Hiển thị chúng như nút phụ nếu cửa hàng muốn theo dõi soạn hàng.
 
-### 2.6 Thanh toán [S][A]
+Tham khảo thiết kế: chưa có màn tương ứng; thêm hộp thoại/ngăn xác nhận trong chi tiết đơn của `OrdersPage`.
 
-Thiết kế có một bảng "giao dịch thanh toán" mỗi hàng là **một đơn** với: Tổng đơn, Đã thu, Còn lại, phương thức, trạng thái (Chưa thanh toán / Thanh toán 1 phần / Đã thanh toán),
-kèm lịch sử và nút "Thu số dư còn lại". Trong API **một đơn có nhiều khoản thanh toán**, mỗi khoản là một bản ghi riêng. Cách ghép:
+### M6. Giao hàng tại quầy
 
-| Thiết kế | API |
-|---|---|
-| Mỗi hàng = một đơn | lấy từ `GET /api/orders` (đơn chưa huỷ), mỗi hàng gọi `GET /api/orders/{id}/payments` (tóm tắt) |
-| Tổng đơn / Đã thu / Còn lại | `orderTotal` / `paidAmount` / `remainingToPay` |
-| Trạng thái | `paidAmount = 0` → *Chưa thanh toán*; `0 < paidAmount < orderTotal` → *Thanh toán 1 phần*; `paidAmount ≥ orderTotal` → *Đã thanh toán* (tự tính ở FE) |
-| Lịch sử thanh toán | `payments[]` trong tóm tắt (hoặc `GET /api/payments?orderId=`): `paymentNumber, paymentMethod, amount, status, confirmedAt, initiatedAt` |
-| Chi tiết một khoản | `GET /api/payments/{id}` (kèm `allocations`) |
-| "Ghi nhận Cash" / "Thu số dư còn lại" | `POST /api/payments/cash` |
-| "Cọc 50%" | không phải một loại riêng: là **thu tiền mặt một phần**, gửi `amount` = 50% tổng (FE điền sẵn) |
-| Xuất CSV | FE tự xuất từ dữ liệu đã tải |
+Mở từ đơn `CONFIRMED`, `PREPARING`, `READY_FOR_FULFILLMENT` hoặc `PARTIALLY_FULFILLED`. Nhân viên nhập **lô thực tế lấy ra**.
+Mặc định điền từ `GET /api/orders/{id}/fefo-suggestions` (đơn đã xác nhận trả các lô đang giữ hàng; `suggestedBaseQuantity` = số còn lại), cho phép sửa lô và số lượng.
 
 ```http
-POST /api/payments/cash
-{ "paymentContext": "ORDER_PAYMENT", "orderId": "…", "amount": 1250000, "note": "Khách đặt cọc" }
+POST /api/orders/{id}/pickup
+{ "items": [ { "orderItemId": "…", "lots": [ { "inventoryLotId": "…", "baseQuantity": 100 }, { "inventoryLotId": "…", "baseQuantity": 25 } ] } ],
+  "note": "Khách lấy tại quầy" }
 ```
 
-- Thu tiền mặt **tạo khoản thanh toán `PAID` ngay** (tiền mặt do nhân viên nhận tại quầy). Trả `201` + `PaymentResponse`.
-- `amount` phải > 0 và **không vượt quá số còn phải trả** (`remainingToPay`), nếu vượt → `422`. Không thể trả dư.
-- Không thu được cho đơn `CANCELLED`, `PARTIALLY_CANCELLED`, `COMPLETED`.
-- Có thể thu **nhiều lần** cho một đơn; số tiền sẽ được dùng dần khi giao hàng.
-- `POST /api/payments/{id}/cancel` chỉ huỷ khoản đang `PENDING` (tiền mặt tạo ra là `PAID` luôn nên thực tế **chưa dùng**; dành cho thanh toán chuyển khoản/payOS sau này).
-- Thiết kế có phương thức **VietQR**: tương ứng payOS, **chưa có** (§8). Phương thức duy nhất hiện nay là `CASH`.
-- Form "Tạo thanh toán" của thiết kế gõ tay mã đơn, tên khách, tổng đơn: đổi thành **chọn một đơn** trong danh sách rồi nhập số tiền; mọi thông tin khác lấy từ đơn.
-- Người ghi nhận chỉ có `confirmedBy` là **id người dùng**; hiện **không có API tra tên** nhân viên cho vai trò bán hàng (§7). Tạm hiển thị "Nhân viên" hoặc tên người đang đăng nhập khi chính họ vừa ghi nhận.
+- Mỗi dòng: **tổng** `baseQuantity` các lô ≤ số còn lại của dòng và **là bội số của quy cách** (hộp 6 chai: tổng phải chia hết cho 6). Một lô riêng lẻ không cần chia hết.
+- Cho phép **giao từng phần**: đơn thành `PARTIALLY_FULFILLED`; giao nốt hoặc *Hủy phần còn lại* (M8).
+- Lô hết hạn, bị khoá, hoặc thuộc sản phẩm khác → `422` với `errors["items[i]"]`.
+- Trả `OrderResponse` mới; giao đủ → `COMPLETED` và có `pickupCompletedAt/By`.
+- Kho tự giảm và phiếu xuất kho tạo ở server; FE không làm gì thêm.
+- Khi nhân viên lấy lô khác lô đã giữ, vẫn được (miễn lô đó còn hàng trống); server tự chuyển phần giữ sang lô thực tế.
 
-### 2.7 Bán nhanh — "Hoàn tất ngay (bán trực tiếp tại quầy)" [S]
+Tham khảo thiết kế: chưa có (thiết kế dùng trạng thái "Đang giao hàng" cho đơn giao tận nơi, **không phải** việc này).
 
-Đây chính là tuỳ chọn *Hoàn tất ngay = Có* trong form tạo đơn của thiết kế. Khách trả **tiền mặt đủ** và lấy hàng ngay → **một lần gọi** tạo đơn, thu tiền, giữ hàng và giao hàng.
-Luôn gọi `preview` trước để cho nhân viên xác nhận lô hàng.
+### M7. Bán nhanh
+
+Dành cho trường hợp phổ biến nhất: khách **trả tiền mặt đủ và lấy hàng ngay**. Một lần gọi tạo đơn, thu tiền, giữ hàng và giao hàng.
+Luôn gọi `preview` trước để nhân viên xác nhận lô.
 
 ```http
 POST /api/counter-sales/preview        // không lưu gì; trường lots bị bỏ qua
@@ -302,8 +336,7 @@ POST /api/counter-sales/preview        // không lưu gì; trường lots bị b
                "shortageBaseQuantity": 0 } ] }
 ```
 
-Hiển thị bảng xác nhận: từng dòng, đơn giá, **lô sẽ xuất** (số lô, hạn dùng, số lượng), tổng tiền phải thu. `shortageBaseQuantity > 0` → khoá nút bán.
-Khi nhân viên bấm **Bán**:
+Giao diện bắt buộc: bảng xác nhận có từng dòng, đơn giá, **lô sẽ xuất** (số lô, hạn dùng, số lượng), tổng tiền phải thu, và nút **Bán**. `shortageBaseQuantity > 0` → khoá nút. Khi bấm **Bán**:
 
 ```http
 POST /api/counter-sales
@@ -312,32 +345,17 @@ POST /api/counter-sales
                "lots": [ { "inventoryLotId": "…", "baseQuantity": 10 } ] } ] }
 ```
 
-- `lots` **bắt buộc** khi bán (thiếu → `400`, khoá `items[i].lots`). Tổng `baseQuantity` của các lô một dòng **phải bằng đúng** `baseQuantity` của dòng (xem `preview`). Mặc định điền lô `preview` đề xuất; cho phép nhân viên đổi lô nếu thực tế lấy lô khác.
-- Phản hồi `201`: `{ "order": OrderResponse (status COMPLETED), "payment": PaymentResponse (status PAID) }`.
-- **Tất cả hoặc không gì cả**: nếu lỗi (hết hàng, lô bị khoá giữa chừng…) thì không có đơn, thanh toán hay thay đổi kho nào được lưu. Hiển thị lỗi và cho thử lại từ `preview`.
-- Có thể ghi đè giá: gửi `unitPrice` + `overrideReason` trong dòng, như lúc tạo đơn.
-- Khách quen / bán nợ / giao tận nơi **không** dùng route này.
+- `lots` **bắt buộc** khi bán (thiếu → `400`, khoá `items[i].lots`). Tổng `baseQuantity` các lô một dòng **phải bằng đúng** `baseQuantity` của dòng. Mặc định dùng lô `preview` đề xuất; cho đổi lô nếu thực tế lấy lô khác.
+- Phản hồi `201`: `{ "order": OrderResponse (COMPLETED), "payment": PaymentResponse (PAID) }`. Hiển thị phiếu bán từ `order` (mã, dòng, `totalAmount`) và `payment.paymentNumber`.
+- **Tất cả hoặc không gì cả:** lỗi (hết hàng, lô bị khoá giữa chừng…) thì không có đơn, thanh toán hay thay đổi kho nào được lưu → hiện lỗi và cho thử lại từ `preview`.
+- Có thể ghi đè giá: gửi `unitPrice` + `overrideReason` trong dòng, như M3.
+- Khách quen, bán nợ, giao tận nơi **không** dùng route này (dùng luồng nhiều bước, và hiện chưa hỗ trợ).
 
-### 2.8 Giao hàng tại quầy (pickup) [S][A]
+Tham khảo thiết kế: tuỳ chọn "Hoàn tất ngay" trong form tạo đơn tương ứng chức năng này, nhưng cần màn xem trước lô như trên.
 
-Mở hộp thoại "Giao hàng" từ đơn `CONFIRMED`/`PREPARING`/`READY_FOR_FULFILLMENT`/`PARTIALLY_FULFILLED`. Nhân viên nhập **lô thực tế lấy ra**. Mặc định điền từ
-`GET /api/orders/{id}/fefo-suggestions` (với đơn đã xác nhận trả các lô đang giữ hàng, `suggestedBaseQuantity` = số còn lại). Cho phép sửa lô và số lượng.
+### M8. Hủy đơn, hủy phần còn lại, khoản phải hoàn
 
-```http
-POST /api/orders/{id}/pickup
-{ "items": [ { "orderItemId": "…", "lots": [ { "inventoryLotId": "…", "baseQuantity": 100 }, { "inventoryLotId": "…", "baseQuantity": 25 } ] } ],
-  "note": "Khách lấy tại quầy" }
-```
-
-- Mỗi dòng: **tổng** `baseQuantity` các lô ≤ số còn lại của dòng và **là bội số của quy cách** (ví dụ hộp 6 chai thì tổng giao phải chia hết cho 6). Một lô riêng lẻ không cần chia hết.
-- **Giao từng phần được**: đơn thành `PARTIALLY_FULFILLED`; giao nốt hoặc *Hủy phần còn lại* (§2.9) để kết thúc.
-- Lô hết hạn / bị khoá / thuộc sản phẩm khác → `422` với `errors["items[i]"]`.
-- Trả `OrderResponse` mới; khi giao đủ → `COMPLETED`, có `pickupCompletedAt/By`.
-- Kho tự giảm; tồn khả dụng và phiếu xuất kho (`SALE`) tạo ở server, FE không làm gì thêm.
-
-### 2.9 Hủy đơn, hủy phần còn lại, hoàn tiền [S][A]
-
-**Hủy cả đơn** (chỉ khi chưa giao gì: `PENDING_CONFIRMATION` → `READY_FOR_FULFILLMENT`):
+**Hủy cả đơn** — chỉ khi **chưa giao gì** (`PENDING_CONFIRMATION` đến `READY_FOR_FULFILLMENT`):
 
 ```http
 POST /api/orders/{id}/cancel
@@ -348,37 +366,100 @@ POST /api/orders/{id}/cancel
   "refunds": [ { "refundId": "…", "refundNumber": "RF-20261004-0001", "paymentId": "…", "refundMethod": "CASH", "amount": 500000 } ] }
 ```
 
-- `refunds` là **số tiền cửa hàng phải trả lại khách** vì khách đã trả trước nhưng đơn bị huỷ: hiển thị nổi bật ("Cần hoàn 500.000 ₫ tiền mặt cho khách").
-  Mỗi khoản hoàn ở trạng thái `PENDING` (chờ nhân viên trả tiền rồi ghi nhận). **Route ghi nhận đã hoàn tiền thuộc luồng 4, chưa có** (§8).
-- Lịch sử khoản hoàn của một đơn: trường `refunds` trong `GET /api/orders/{id}/payments`.
-- Đơn đã giao một phần mà gọi huỷ cả đơn → `422` (hãy dùng "Hủy phần còn lại").
+- Bắt buộc có hộp thoại nhập **lý do** trước khi gọi.
+- `refunds` là **số tiền cửa hàng phải trả lại khách** (khách đã trả trước nhưng đơn bị huỷ): hiển thị nổi bật *"Cần hoàn 500.000 ₫ tiền mặt cho khách"*.
+  Mỗi khoản hoàn ở trạng thái `PENDING` (chờ nhân viên trả tiền rồi ghi nhận; **route ghi nhận đã hoàn tiền thuộc luồng 4, chưa có** — §8).
+- Lịch sử khoản hoàn của đơn: trường `refunds` trong `GET /api/orders/{id}/payments`; hiển thị trong chi tiết đơn.
+- Đơn đã giao một phần mà gọi huỷ cả đơn → `422`. Với đơn `PARTIALLY_FULFILLED` **ẩn nút "Hủy đơn"**, chỉ có "Hủy phần còn lại".
 
-**Hủy phần còn lại** của một dòng (đơn đã giao một phần, hoặc muốn bỏ riêng một dòng sau khi đã xác nhận):
+**Hủy phần còn lại** của một dòng (đơn đã giao một phần, hoặc bỏ riêng một dòng sau khi đã xác nhận):
 
 ```http
 POST /api/orders/{id}/items/{itemId}/cancel-remaining
 { "reason": "Khách không lấy nữa" }
 ```
 
-- Hủy hết phần chưa giao của dòng, trả lại hàng đã giữ. Nếu sau đó đơn không còn gì mở: `CANCELLED` (chưa giao gì) hoặc `PARTIALLY_CANCELLED` (đã giao một phần).
-- Khi đơn kết thúc theo cách này, phần tiền trả trước chưa dùng cũng được hoàn như trên; **response chỉ trả `OrderResponse`**, nên hiển thị khoản hoàn bằng cách gọi lại `GET /api/orders/{id}/payments` (trường `refunds`).
+- Hủy phần chưa giao của dòng và trả lại hàng đã giữ. Nếu sau đó đơn không còn gì mở: `CANCELLED` (chưa giao gì) hoặc `PARTIALLY_CANCELLED` (đã giao một phần).
+- Khi đơn kết thúc theo cách này, phần tiền trả trước chưa dùng cũng được hoàn như trên. **Response chỉ trả `OrderResponse`**, nên sau khi gọi hãy gọi lại `GET /api/orders/{id}/payments` để hiển thị khoản hoàn (trường `refunds`).
 
-### 2.10 Kho [S][A]
+Tham khảo thiết kế: nút "Hủy đơn" ở bảng đơn — giữ, nhưng bổ sung hộp thoại lý do, nhánh "Hủy phần còn lại", và phần hiển thị khoản hoàn.
 
-| Thiết kế | API |
+### M9. Danh sách đơn và chi tiết đơn (trung tâm điều hướng)
+
+`GET /api/orders?status=&search=&fromDate=&toDate=&customerType=&source=&page=&pageSize=` (mới nhất trước).
+
+- `search` tìm theo **mã đơn, tên khách, số điện thoại**. `status` nhận **một** giá trị; muốn gộp nhiều trạng thái (ví dụ "Đang xử lý" = `CONFIRMED` + `PREPARING`) thì gọi nhiều lần hoặc lọc ở FE.
+- Mỗi hàng (`OrderListItem`): `id, orderNumber, source, customerType, customerName, customerPhone, settlementType, fulfillmentType, status, totalAmount, itemCount, createdAt, confirmedAt`.
+  Danh sách **không có tên sản phẩm** (chỉ `itemCount`): hiển thị "3 sản phẩm" hoặc nạp chi tiết khi mở.
+- Cột/Nhãn **thanh toán** của từng hàng: chưa có trong danh sách (§7); tạm gọi `GET /api/orders/{id}/payments` cho các hàng đang hiển thị (≤ `pageSize` lần), rồi tự tính trạng thái thanh toán (M4).
+- Thẻ KPI: `GET /api/orders?status=…&pageSize=1` lấy `totalCount`; "Tổng giá trị" chưa có API (tính ở FE từ trang đang xem, hoặc chờ §7).
+- Chi tiết đơn: `GET /api/orders/{id}` (khách, ghi chú, từng dòng với giá gợi ý/giá bán/lý do ghi đè, số lượng đã giao/đã huỷ/còn lại, `cancelReason`) cộng tóm tắt thanh toán và các khoản hoàn.
+
+**Bảng trạng thái đơn** (hiển thị nhãn tiếng Việt do FE đặt tên, giá trị API là cột giữa):
+
+| Nhãn gợi ý | `status` | Ghi chú |
+|---|---|---|
+| Chờ xác nhận | `PENDING_CONFIRMATION` | sửa được, huỷ được |
+| Đã xác nhận (đã giữ hàng) | `CONFIRMED` | |
+| Đang chuẩn bị | `PREPARING` | bước tuỳ chọn |
+| Sẵn sàng giao | `READY_FOR_FULFILLMENT` | bước tuỳ chọn |
+| Đã giao một phần | `PARTIALLY_FULFILLED` | giao từng phần |
+| Hoàn thành | `COMPLETED` | đã giao đủ |
+| Đã hủy | `CANCELLED` | huỷ cả đơn |
+| Hủy một phần | `PARTIALLY_CANCELLED` | đã giao một phần rồi huỷ phần còn lại |
+
+**Nút hành động theo trạng thái — hiển thị đúng bảng này, đừng tự suy ra bước kế tiếp:**
+
+| `status` | Nút hiển thị | API |
+|---|---|---|
+| `PENDING_CONFIRMATION` | Sửa đơn (M3) · Thu tiền (M4) · **Xác nhận** (M5) · Hủy đơn (M8) | §M3 / `POST /api/payments/cash` / `POST …/confirm` / `POST …/cancel` |
+| `CONFIRMED` | Thu tiền (nếu còn thiếu) · *Bắt đầu chuẩn bị* · *Sẵn sàng giao* · **Giao hàng tại quầy** (M6) · Hủy đơn · Hủy phần còn lại | `…/start-preparing` · `…/mark-ready` · `…/pickup` · `…/cancel` · `…/items/{itemId}/cancel-remaining` |
+| `PREPARING` | *Sẵn sàng giao* · **Giao hàng tại quầy** · Hủy đơn · Hủy phần còn lại | `…/mark-ready` · `…/pickup` · `…/cancel` |
+| `READY_FOR_FULFILLMENT` | **Giao hàng tại quầy** · Hủy đơn · Hủy phần còn lại | `…/pickup` · `…/cancel` |
+| `PARTIALLY_FULFILLED` | Giao tiếp phần còn lại · **Hủy phần còn lại** (từng dòng). *Không* có "Hủy đơn" | `…/pickup` · `…/items/{itemId}/cancel-remaining` |
+| `COMPLETED`, `CANCELLED`, `PARTIALLY_CANCELLED` | Chỉ xem (+ lịch sử thanh toán, khoản hoàn) | — |
+
+Các nút `confirm`, `start-preparing`, `mark-ready` **không có body** và trả `OrderResponse` mới.
+
+Tham khảo thiết kế: `OrdersPage` có sẵn bảng, bộ lọc, KPI, hộp chi tiết, ngăn phân trang — dùng làm khung. Phải thay: máy trạng thái tuyến tính (`NEXT_STATUS`) bằng bảng trên;
+các trạng thái giao tận nơi (Đang giao hàng, Chờ giao lại, Giao thất bại) ẩn khỏi màn quầy.
+
+### M10. Thanh toán: theo dõi tiền thu theo đơn
+
+Mỗi hàng là **một đơn** với Tổng đơn · Đã thu · Còn lại · Trạng thái thanh toán, kèm lịch sử các lần thu và nút "Thu tiền" (M4). Trong API một đơn có nhiều khoản thanh toán, nên ghép như sau:
+
+| Cần hiển thị | API |
 |---|---|
-| Bảng tồn kho theo sản phẩm | chưa có API tổng hợp (§7); tạm lấy từ `GET /api/inventory/lots` rồi gộp theo `storeProductId` |
-| Chi tiết lô của một sản phẩm | `GET /api/inventory/lots?storeProductId=&hasStock=&status=&expiringBefore=&search=` — mỗi lô: `lotNumber`, `expiryDate`, `isExpired`, `status`, `quantityOnHand`, `quantityReserved`, `quantityAvailable`, `averageUnitCost` |
+| Danh sách đơn | `GET /api/orders` (bỏ đơn huỷ nếu muốn), mỗi hàng gọi `GET /api/orders/{id}/payments` |
+| Tổng đơn / Đã thu / Còn lại | `orderTotal` / `paidAmount` / `remainingToPay` |
+| Lịch sử thanh toán | `payments[]` (`paymentNumber, paymentMethod, amount, status, confirmedAt, initiatedAt`), hoặc `GET /api/payments?orderId=` |
+| Chi tiết một khoản | `GET /api/payments/{id}` (kèm `allocations`) |
+| Khoản hoàn tiền của đơn đã huỷ | `refunds[]` trong tóm tắt |
+| Xuất CSV | FE tự xuất từ dữ liệu đã tải |
+
+Người ghi nhận chỉ có `confirmedBy` là **id người dùng**; hiện **không có API tra tên** nhân viên cho vai trò bán hàng (§7). Tạm hiển thị "Nhân viên" (hoặc tên người đang đăng nhập khi chính họ vừa ghi nhận).
+
+Tham khảo thiết kế: `PaymentsPage` (bảng, KPI, hộp chi tiết, lịch sử) dùng được làm khung; đổi form "Tạo thanh toán" theo M4, bỏ VietQR và "Cọc 50%" như loại phương thức, bỏ "Gối nợ vụ mùa".
+
+### M11. Kho: tra cứu lô, hạn dùng, biến động
+
+| Cần hiển thị | API |
+|---|---|
+| Tồn theo sản phẩm | chưa có API tổng hợp (§7); tạm lấy `GET /api/inventory/lots` rồi gộp theo `storeProductId` |
+| Các lô của một sản phẩm | `GET /api/inventory/lots?storeProductId=&hasStock=&status=&expiringBefore=&search=` — mỗi lô: `lotNumber`, `expiryDate`, `isExpired`, `status`, `quantityOnHand`, `quantityReserved`, `quantityAvailable`, `averageUnitCost` |
 | Lịch sử biến động kho | `GET /api/inventory/stock-movements?type=&fromDate=&toDate=` (type: `STOCK_IN, SALE, RETURN_IN, ADJUSTMENT_IN, ADJUSTMENT_OUT, REVERSAL`) và `GET /api/inventory/stock-movements/{id}` (từng dòng lô, số âm = xuất) |
-| Đổi trạng thái lô (khoá/cách ly) | `POST /api/inventory/lots/{id}/status` `{ "status": "BLOCKED" }` — chỉ Chủ cửa hàng/Admin |
-| "Ghi nhận biến động kho" (nhập kho tay, điều chỉnh kiểm kê) | **chưa có API cho điều chỉnh** (thuộc luồng 4). Nhập hàng dùng phiếu nhập kho: `/api/goods-receipts` (Excel: `/api/goods-receipts/import`) |
+| Khoá/cách ly một lô | `POST /api/inventory/lots/{id}/status` `{ "status": "BLOCKED" }` — chỉ Đại lý/Admin |
+| Nhập hàng | phiếu nhập kho `/api/goods-receipts` (tạo → thêm dòng → `POST …/{id}/confirm`; nhập Excel: `/api/goods-receipts/import`) |
+| Điều chỉnh/kiểm kê tay | **chưa có API** (thuộc luồng 4) — không dựng nút "Điều chỉnh" |
 
-Hiển thị "Sắp hết" khi tổng `quantityAvailable` ≤ `minStockLevelBase` của sản phẩm; "Hết hàng" khi bằng 0.
-`quantityAvailable = quantityOnHand − quantityReserved` (hàng đã giữ cho đơn chưa giao không bán thêm được).
+Quy tắc hiển thị: `quantityAvailable = quantityOnHand − quantityReserved` (hàng đã giữ cho đơn chưa giao không bán thêm được). "Sắp hết" khi tổng khả dụng ≤ `minStockLevelBase`; "Hết hàng" khi bằng 0. Lô `isExpired` hoặc `BLOCKED`/`QUARANTINED` hiển thị cảnh báo và **không bán được**.
+Tồn kho chỉ thay đổi bằng **phiếu kho**: không có thao tác "sửa số tồn trực tiếp".
 
-### 2.11 Bảng giá [A] — thiết kế chưa có màn hình
+Tham khảo thiết kế: `InventoryPage` có form "Ghi nhận biến động kho" cho phép nhập số lượng tự do — **bỏ phần nhập tay**; chỉ giữ tra cứu và lịch sử.
 
-Cần một màn hình mới cho Chủ cửa hàng (`STORE_OWNER`/`ADMIN`); nhân viên bán hàng chỉ được **đọc**. Tối thiểu:
+### M12. Bảng giá (Đại lý)
+
+Chưa có thiết kế; cần một màn mới cho Chủ cửa hàng/Admin (nhân viên bán hàng chỉ **đọc**).
 
 | Chức năng | API |
 |---|---|
@@ -391,13 +472,13 @@ Cần một màn hình mới cho Chủ cửa hàng (`STORE_OWNER`/`ADMIN`); nhâ
 | Kích hoạt / ngưng | `POST /api/price-lists/{id}/activate`, `…/deactivate` |
 | Xoá bảng giá | `DELETE /api/price-lists/{id}` (chỉ bảng nháp chưa từng dùng) |
 
-Quy tắc: chỉ **một** bảng giá khách lẻ (`isWalkInDefault`) được ở trạng thái `ACTIVE`; muốn thay thì ngưng bảng cũ trước. Chỉ định giá cho **quy cách bán**
-đang hoạt động (`isSaleUnit`). Một dòng sai thì **cả lần nhập bị từ chối** (`422`, `errors["items[i]"]` cho từng dòng sai). Không có bảng giá khách lẻ đang hoạt động → tạo đơn trả `422`.
-Gợi ý: màn nhập giá dạng lưới (sản phẩm × quy cách) có nút "Lưu tất cả", và import từ Excel ở phía FE rồi gọi API này.
+Quy tắc: chỉ **một** bảng giá khách lẻ (`isWalkInDefault`) được `ACTIVE`; muốn thay thì ngưng bảng cũ trước. Chỉ định giá cho **quy cách bán** đang hoạt động. Một dòng sai thì **cả lần nhập bị từ chối**
+(`422`, `errors["items[i]"]` cho từng dòng sai). Không có bảng giá khách lẻ đang hoạt động → mọi lần tạo đơn trả `422`: hãy hiện cảnh báo rõ trên màn Bảng giá và màn M3.
+Gợi ý: lưới nhập giá (sản phẩm × quy cách) với nút "Lưu tất cả", đọc Excel ở FE rồi gọi API này.
 
-### 2.12 Báo cáo và Dashboard
+### M13. Báo cáo bán hàng và dashboard (Đại lý)
 
-**Báo cáo bán hàng** (Chủ cửa hàng/Admin): `GET /api/reports/sales?fromDate=2026-10-01&toDate=2026-10-31&groupBy=DAY`
+`GET /api/reports/sales?fromDate=2026-10-01&toDate=2026-10-31&groupBy=DAY`
 
 ```json
 { "fromDate": "2026-10-01", "toDate": "2026-10-31", "groupBy": "DAY",
@@ -408,25 +489,24 @@ Gợi ý: màn nhập giá dạng lưới (sản phẩm × quy cách) có nút "
 
 - `groupBy`: `DAY` (mặc định, khoá là ngày), `PRODUCT` (nhãn `Tên (SKU)`), `STAFF` (nhãn tên nhân viên tạo đơn), `CUSTOMER_GROUP` (nhãn tên nhóm; khách lẻ là `WALK_IN` "Khách lẻ"; khách chưa có nhóm là `UNGROUPED`).
 - `fromDate` và `toDate` **bắt buộc**, khoảng tối đa **366 ngày**; sai → `400`.
-- **Doanh thu tính lúc giao hàng**, không phải lúc tạo đơn: đơn huỷ hoặc chưa giao không có doanh thu. Một đơn giao hai ngày xuất hiện ở hai hàng ngày nhưng `totals.orderCount` đếm một lần.
+- **Doanh thu tính lúc giao hàng**, không phải lúc tạo đơn: đơn huỷ hoặc chưa giao không có doanh thu. Một đơn giao hai ngày xuất hiện ở hai hàng ngày nhưng `totals.orderCount` đếm một lần. Ghi chú này nên hiện thành chú thích trên màn hình.
 - `grossProfit = fulfilledValue − costOfGoods` (trước trả hàng); `netSales = fulfilledValue − returnValue`. `returnValue` là 0 cho tới khi luồng 4 hoàn tất trả hàng.
-- Dùng cho Dashboard Đại lý: *Doanh thu theo ngày* = `DAY` (`fulfilledValue` hoặc `netSales`); *Top sản phẩm* = `PRODUCT`; *Theo nhân viên* = `STAFF`.
+- Dashboard Đại lý: *Doanh thu theo ngày* = `DAY`; *Top sản phẩm* = `PRODUCT`; *Theo nhân viên* = `STAFF`; *Theo nhóm khách* = `CUSTOMER_GROUP`.
 
-**Dashboard app Bán hàng** (`Doanh số hôm nay`, `Đơn cần xử lý`…): vai trò bán hàng **không được** gọi báo cáo (`403`).
-Tạm thời: *Đơn cần xử lý* = `GET /api/orders?status=PENDING_CONFIRMATION&pageSize=1` + `status=CONFIRMED`… lấy `totalCount`; *Doanh số hôm nay* tính ở FE từ
-`GET /api/orders?fromDate=hôm-nay&toDate=hôm-nay` (cộng `totalAmount` các đơn không huỷ — lưu ý đây là doanh số **tạo đơn**, khác doanh thu báo cáo). Nếu muốn cùng số với báo cáo, cần BE mở quyền (§7).
-Các thẻ **Công nợ quá hạn** và **Mua chịu chờ duyệt** chưa có API (luồng 3).
+**Dashboard của nhân viên bán hàng:** vai trò này **không được** gọi báo cáo (`403`). Chỉ hiển thị số liệu việc-cần-làm lấy từ danh sách đơn: *Đơn cần xử lý* =
+`totalCount` của `GET /api/orders?status=PENDING_CONFIRMATION&pageSize=1` cộng `status=CONFIRMED`; *Đơn tạo hôm nay* từ `GET /api/orders?fromDate=hôm-nay&toDate=hôm-nay`.
+**Không** hiển thị "doanh số/doanh thu" ở dashboard bán hàng (số cộng từ đơn tạo ra khác doanh thu báo cáo). Các thẻ **Công nợ quá hạn** và **Mua chịu chờ duyệt** chưa có API (luồng 3) — bỏ khỏi bản này.
 
-### 2.13 Các màn khác trong thiết kế chưa nối được
+### 2.2 Màn hình trong thiết kế tham khảo chưa thuộc luồng 1
 
-Màn **Nông dân** [S][A], **Công nợ** và **Công nợ theo vụ mùa**, **Yêu cầu mua chịu**, **Giao hàng**, **AI**, **Hoạt động**: thuộc các luồng khác hoặc chưa có API ở luồng 1 — xem §8. Đừng nối vào API của luồng 1.
+**Nông dân**, **Công nợ**, **Công nợ theo vụ mùa**, **Yêu cầu mua chịu**, **Giao hàng**, **AI**, **Hoạt động**: thuộc luồng khác hoặc chưa có API ở luồng 1 — xem §8. Đừng nối chúng vào API của luồng 1.
 
 ---
 
 ## 3. Kịch bản đầu–cuối có JSON mẫu
 
 ### S1. Bán nhanh cho khách lẻ (1 dòng, 2 lô)
-1. `POST /api/counter-sales/preview` (§2.7) → xem lô và tổng tiền.
+1. `POST /api/counter-sales/preview` (M7) → xem lô và tổng tiền.
 2. Nhân viên xác nhận → `POST /api/counter-sales` với `lots`.
 3. Nhận `{order(COMPLETED), payment(PAID)}` → in/hiển thị hoá đơn bằng dữ liệu `order` (mã `orderNumber`, từng dòng, `totalAmount`) và `payment.paymentNumber`.
 
@@ -435,7 +515,7 @@ Màn **Nông dân** [S][A], **Công nợ** và **Công nợ theo vụ mùa**, **
 2. `POST /api/payments/cash` `{ orderId, amount: 3425000 }` → tóm tắt: `paidAmount 3425000`, `remainingToPay 3425000`.
 3. Hôm sau khách trả nốt: `POST /api/payments/cash` `{ amount: 3425000 }` → `remainingToPay 0`.
 4. `GET …/fefo-suggestions` → `POST …/confirm` → `CONFIRMED`.
-5. Khách đến lấy: mở hộp thoại giao (§2.8) → `POST …/pickup` → `COMPLETED`.
+5. Khách đến lấy: mở hộp thoại giao (M6) → `POST …/pickup` → `COMPLETED`.
 
 ### S3. Giao từng phần rồi hủy phần còn lại
 1. Đơn 50 bao, đã trả đủ, đã xác nhận.
@@ -574,40 +654,51 @@ Các tình huống thường gặp:
 
 ---
 
-## 6. Chỗ thiết kế UI khác với API (cần chỉnh UI)
+## 6. Thay đổi UI bắt buộc so với thiết kế tham khảo
 
-| # | Thiết kế hiện có | Thực tế API | Cách xử lý |
-|---|---|---|---|
-| 1 | Form tạo đơn: **một dòng**, gõ tay tên sản phẩm và đơn giá | Nhiều dòng; chọn từ catalog; giá do server; sửa giá cần lý do | Đổi form theo §2.3 |
-| 2 | Phương thức **"Gối nợ vụ mùa"**, màn **Mua chịu theo vụ mùa**, "hạn mức theo vụ" | **Đã bỏ khái niệm vụ mùa.** Thời hạn nợ phụ thuộc loại khách (nhóm khách → hạng tín dụng), thuộc luồng 3, chưa có | Ẩn khỏi màn bán tại quầy; đổi chữ "vụ mùa" khi luồng 3 xong |
-| 3 | Phương thức **VietQR** + hành động "Xác nhận VietQR" | payOS thuộc luồng 2, **chưa có** | Ẩn; chỉ còn "Tiền mặt tại quầy" |
-| 4 | **"Cọc 50%"** là một phương thức | Không có loại này; là thu tiền mặt **một phần** | Bỏ khỏi danh sách phương thức; nút "Đặt cọc" điền sẵn 50% rồi gọi `POST /api/payments/cash` |
-| 5 | Trạng thái **Đang giao hàng / Chờ giao lại / Giao thất bại** và nút "Giao cho shipper", "Xác nhận đã giao" | Thuộc **giao tận nơi** (luồng 2) | Ẩn ở luồng bán tại quầy; đơn tại quầy kết thúc bằng "Giao hàng tại quầy" |
-| 6 | Máy trạng thái tuyến tính `Chờ xác nhận → Đã xác nhận → Đang chuẩn bị → … → Hoàn thành` | Có bước giữ hàng; *Đang chuẩn bị/Sẵn sàng giao* tuỳ chọn; **giao hàng** là bước kết thúc; có `PARTIALLY_FULFILLED`, `PARTIALLY_CANCELLED` | Dùng bảng §2.5; bổ sung 3 trạng thái thiết kế chưa có |
-| 7 | "Hoàn thành" = đã bán và thanh toán | `COMPLETED` = **đã giao đủ**; thanh toán là việc riêng | Hiển thị hai nhãn riêng: trạng thái đơn và trạng thái thanh toán |
-| 8 | Thiết kế không có bước **chọn lô** | Giao hàng và bán nhanh cần lô thực tế | Thêm bước/hộp thoại xác nhận lô, mặc định theo FEFO (§2.7, §2.8) |
-| 9 | Số lượng và tồn dùng chung một đơn vị | `quantity` = quy cách; lô và tồn = đơn vị cơ sở | Luôn ghi rõ đơn vị; đổi qua lại bằng `conversionToBase` |
-| 10 | Trang Thanh toán: mỗi hàng là một đơn có tổng/đã thu/còn lại | API tách đơn và từng khoản thanh toán | Ghép theo §2.6 |
-| 11 | Cột "Sản phẩm" ở danh sách đơn hiện tên + số lượng × giá của dòng đầu | Danh sách chỉ có `itemCount` | Hiển thị số dòng hoặc nạp chi tiết khi mở |
-| 12 | Hiển thị tên người tạo đơn / ghi nhận thanh toán | API chỉ trả id người dùng | Tạm hiển thị "Nhân viên"; xem §7 |
-| 13 | Dashboard bán hàng có biểu đồ doanh thu | Báo cáo chỉ dành cho Chủ cửa hàng/Admin; doanh thu tính khi giao | Xem §2.12 |
-| 14 | Màn Bảng giá và Báo cáo bán hàng | Chưa có thiết kế | Thiết kế bổ sung theo §2.11, §2.12 |
-| 15 | "Quên mật khẩu" | Chưa có API | Tạm ẩn; Admin/Chủ cửa hàng đặt lại mật khẩu cho nhân viên |
-| 16 | Phát hành đơn tự động mã `DH-3012`, `TT-…` | Mã do server: đơn `OD-yyyyMMdd-NNNN`, thanh toán `PM-…`, hoàn tiền `RF-…`, phiếu kho `SM-…` | Dùng mã server trả về, không tự sinh |
+Thiết kế UI/UX hiện có chỉ để tham khảo; **luồng ở §2 là chuẩn**, nên UI đổi theo luồng. Bảng dưới liệt kê những gì phải đổi.
+Cột *Mức*: **Bắt buộc** = giữ nguyên thì sai luồng; **Nên** = để dùng trơn tru; **Bỏ** = bỏ khỏi bản này.
+
+| # | Mức | Thiết kế tham khảo hiện có | Theo luồng | UI phải làm |
+|---|---|---|---|---|
+| 1 | Bắt buộc | Form tạo đơn **một dòng**, gõ tay tên sản phẩm và đơn giá | Đơn nhiều dòng; hàng chọn từ catalog (sản phẩm + quy cách); giá do server tính; sửa giá cần lý do | Thay bằng bố cục M2 + M3 |
+| 2 | Bắt buộc | Chọn **phương thức thanh toán** ngay khi tạo đơn | Tiền thu ở bước riêng (M4), nhiều lần, tiền mặt | Bỏ ô chọn phương thức khỏi form tạo đơn; thêm hộp thoại Thu tiền |
+| 3 | Bắt buộc | Máy trạng thái tuyến tính `Chờ xác nhận → Đã xác nhận → Đang chuẩn bị → Đang giao hàng → Hoàn thành` và nút "bước kế tiếp" | Có bước **giữ hàng** khi xác nhận; *Đang chuẩn bị/Sẵn sàng giao* tuỳ chọn; kết thúc bằng **Giao hàng tại quầy**; có `PARTIALLY_FULFILLED`, `PARTIALLY_CANCELLED` | Dùng bảng trạng thái và bảng nút ở M9; thêm 3 trạng thái còn thiếu |
+| 4 | Bắt buộc | Không có bước **chọn/xem lô** | Giao hàng và bán nhanh cần lô thực tế; xác nhận giữ hàng theo FEFO | Thêm M5 (xem lô sẽ giữ), M6 (chọn lô khi giao), bảng lô trong M7 |
+| 5 | Bắt buộc | "Hoàn thành" nghĩa là đã bán và đã thanh toán | `COMPLETED` = **đã giao đủ**; thanh toán là trạng thái riêng | Luôn hiển thị hai nhãn tách biệt: trạng thái đơn và trạng thái thanh toán |
+| 6 | Bắt buộc | Chặn "Xác nhận" không phụ thuộc tiền | Đơn trả tiền ngay phải **thu đủ trước khi xác nhận** (server chưa chặn) | FE tự khoá nút Xác nhận khi `paidAmount < orderTotal` |
+| 7 | Bắt buộc | Số lượng và tồn dùng chung một đơn vị | `quantity` = quy cách; lô và tồn = đơn vị cơ sở | Luôn ghi rõ đơn vị, đổi qua lại bằng `conversionToBase` |
+| 8 | Bắt buộc | Form "Ghi nhận biến động kho" nhập số lượng tự do; nút "Điều chỉnh" | Tồn chỉ đổi bằng **phiếu kho** (nhập hàng, giao hàng, điều chỉnh có lý do); điều chỉnh/kiểm kê thuộc luồng 4 | Bỏ nhập tay; chỉ tra cứu lô và lịch sử; nhập hàng qua phiếu nhập |
+| 9 | Bắt buộc | Mã đơn `DH-…`, thanh toán `TT-…` tự sinh ở FE | Mã do server: đơn `OD-yyyyMMdd-NNNN`, thanh toán `PM-…`, hoàn tiền `RF-…`, phiếu kho `SM-…` | Hiển thị mã server trả về; không tự sinh |
+| 10 | Bắt buộc | Hủy đơn là đổi nhãn trạng thái, không lý do | Hủy cần **lý do**; kết quả có **khoản phải hoàn tiền**; đơn đã giao một phần chỉ hủy được phần còn lại | Hộp thoại lý do, khối hiển thị khoản hoàn, nhánh "Hủy phần còn lại" (M8) |
+| 11 | Bắt buộc | Form "Tạo thanh toán" gõ tay mã đơn, tên khách, tổng đơn | Thanh toán gắn với một đơn có sẵn; không vượt số còn phải thu | Chọn đơn rồi nhập số tiền (M4) |
+| 12 | Bỏ | Phương thức **"Gối nợ vụ mùa"**, màn **Mua chịu theo vụ mùa**, "hạn mức theo vụ" | **Đã bỏ khái niệm vụ mùa.** Thời hạn nợ phụ thuộc loại khách (nhóm khách → hạng tín dụng), thuộc luồng 3, chưa có | Ẩn khỏi bản này; đổi chữ "vụ mùa" khi luồng 3 xong |
+| 13 | Bỏ | Phương thức **VietQR** và hành động "Xác nhận VietQR" | payOS thuộc luồng 2, chưa có | Ẩn; hiện tại chỉ có tiền mặt |
+| 14 | Bỏ | **"Cọc 50%"** là một phương thức | Không có loại này; đặt cọc = thu tiền mặt **một phần** | Bỏ khỏi danh sách phương thức; giữ nút nhanh "Đặt cọc 50%" ở M4 |
+| 15 | Bỏ | Trạng thái **Đang giao hàng / Chờ giao lại / Giao thất bại**, nút "Giao cho shipper", "Xác nhận đã giao" | Thuộc **giao tận nơi** (luồng 2) | Ẩn khỏi màn bán tại quầy |
+| 16 | Bỏ | Dashboard bán hàng có thẻ doanh số, công nợ quá hạn, mua chịu chờ duyệt | Báo cáo chỉ dành cho Đại lý; công nợ/mua chịu thuộc luồng 3 | Dashboard bán hàng chỉ có việc-cần-làm (M13) |
+| 17 | Bỏ | "Quên mật khẩu" | Chưa có API | Tạm ẩn |
+| 18 | Nên | Bước chọn vai trò trên màn đăng nhập | Vai trò do server trả (`user.role`) | Bỏ bước chọn; điều hướng theo `role` |
+| 19 | Nên | Cột "Sản phẩm" của bảng đơn hiện tên và số lượng × giá của dòng đầu | Danh sách chỉ có `itemCount` | Hiển thị số dòng, hoặc nạp chi tiết khi mở |
+| 20 | Nên | Mỗi hàng ở trang Thanh toán là một đơn | API tách đơn và từng khoản thanh toán | Ghép theo M10 |
+| 21 | Nên | Hiển thị tên người tạo đơn/ghi nhận thanh toán | API chỉ trả id người dùng | Tạm hiển thị "Nhân viên"; xem §7 |
+| 22 | Nên | Thông báo lỗi chung chung | Lỗi 422 có `errors` theo từng dòng hàng | Gắn lỗi vào đúng dòng (§5) |
+| 23 | Bắt buộc (mới) | Chưa có màn **Bảng giá** và **Báo cáo bán hàng** | Chủ cửa hàng phải có bảng giá khách lẻ đang `ACTIVE` thì mới tạo được đơn | Thiết kế bổ sung M12, M13 |
 
 ---
 
-## 7. Đề xuất bổ sung phía BE (chưa có)
+## 7. Đề xuất bổ sung phía BE (chưa có, không chặn việc dựng UI)
 
-Các điểm dưới đây làm UI khó hơn mức cần thiết; **chưa làm**, chờ lead BE quyết định. FE đã có cách tạm ở các mục trên.
+Các điểm dưới đây giúp FE bớt công; **chưa làm**, chờ lead BE quyết định. FE đã có cách tạm ở các mục trên. Tài liệu này **không** đòi API đổi theo thiết kế UI;
+chỉ những bổ sung giúp thể hiện đúng luồng cho gọn mới được đề xuất.
 
-1. `OrderListItem` thêm `paidAmount`, `remainingToPay`, `paymentStatus` (tránh gọi tóm tắt cho từng hàng ở trang Thanh toán và Đơn hàng).
+1. `OrderListItem` thêm `paidAmount`, `remainingToPay`, `paymentStatus` (tránh gọi tóm tắt cho từng hàng ở M9 và M10).
 2. `PaymentListItem` thêm `orderId`, `orderNumber`.
-3. API **tổng hợp tồn theo sản phẩm** (có `quantityOnHand/Reserved/Available`, trạng thái *Còn hàng/Sắp hết/Hết hàng*) — thuộc luồng 4, đã có trong kế hoạch (`stock-summary`).
+3. API **tổng hợp tồn theo sản phẩm** (`quantityOnHand/Reserved/Available`, trạng thái *Còn hàng/Sắp hết/Hết hàng*) — thuộc luồng 4, đã có trong kế hoạch (`stock-summary`).
 4. Danh sách sản phẩm cho nhân viên có sẵn **quy cách + giá + tồn** trong một lần gọi (hiện phải gọi catalog + chi tiết + lô).
 5. API tra **tên người dùng** theo id cho vai trò bán hàng (hoặc trả `createdByName`, `confirmedByName`).
 6. Mã lỗi ổn định `code` trong lỗi 400/422/409 để FE ánh xạ tiếng Việt chắc chắn.
-7. Cho phép Nhân viên bán hàng xem báo cáo ngày của **chính mình** (nếu dashboard bán hàng cần doanh thu khớp báo cáo).
+7. Cho phép Nhân viên bán hàng xem báo cáo ngày của **chính mình** (nếu cần doanh thu khớp báo cáo trên dashboard bán hàng).
 8. Tìm/tạo **khách hàng** (luồng 2, F2.1) — cần cho khách quen.
 
 ---
@@ -632,7 +723,7 @@ Các điểm dưới đây làm UI khó hơn mức cần thiết; **chưa làm**
 2. Cần có sẵn để màn bán hàng chạy được:
    - **tài khoản nhân viên** (Admin/Chủ cửa hàng tạo bằng `POST /api/staff`);
    - **sản phẩm đang bán** có quy cách bán (`/api/products`, `/api/store-products`, đánh dấu *sellable*);
-   - **một bảng giá khách lẻ đang `ACTIVE`** có giá cho các quy cách (§2.11) — thiếu thì mọi lần tạo đơn trả `422`;
+   - **một bảng giá khách lẻ đang `ACTIVE`** có giá cho các quy cách (M12) — thiếu thì mọi lần tạo đơn trả `422`;
    - **lô hàng có tồn**: nhập kho bằng phiếu nhập `/api/goods-receipts` (rồi *confirm*) hoặc nhập Excel.
 3. Thử nhanh bằng Swagger trước khi viết UI. BE có sẵn script PowerShell chạy cả chuỗi (tạo đơn → ghi đè giá → thu tiền → huỷ → thu đồng thời) làm ví dụ về thứ tự gọi.
 4. Dữ liệu thử có tiền tố `TEST-` trong DB dev là của BE; đừng dựa vào nó. Hỏi BE trước khi xoá hoặc sửa.
