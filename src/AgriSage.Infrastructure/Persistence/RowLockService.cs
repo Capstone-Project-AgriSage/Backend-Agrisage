@@ -5,6 +5,39 @@ namespace AgriSage.Infrastructure.Persistence;
 
 public sealed class RowLockService(AgriSageDbContext context) : IRowLockService
 {
+    public async Task LockSalesReturnAsync(Guid salesReturnId, CancellationToken cancellationToken) =>
+        await context.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT 1 FROM sales_returns WHERE id = {salesReturnId} FOR UPDATE", cancellationToken);
+
+    public async Task LockStocktakeAsync(Guid stocktakeId, CancellationToken cancellationToken) =>
+        await context.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT 1 FROM stocktakes WHERE id = {stocktakeId} FOR UPDATE", cancellationToken);
+
+    public async Task ShareLockLotBalancesAsync(IReadOnlyCollection<Guid> inventoryLotIds, CancellationToken cancellationToken)
+    {
+        if (inventoryLotIds.Count == 0)
+        {
+            return;
+        }
+
+        var ids = inventoryLotIds.Distinct().ToArray();
+        await context.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT 1 FROM inventory_lot_balances WHERE inventory_lot_id = ANY({ids}) ORDER BY inventory_lot_id FOR SHARE",
+            cancellationToken);
+    }
+
+    public async Task LockInventoryLotsAsync(IReadOnlyCollection<Guid> inventoryLotIds, CancellationToken cancellationToken)
+    {
+        if (inventoryLotIds.Count == 0)
+        {
+            return;
+        }
+
+        var ids = inventoryLotIds.Distinct().ToArray();
+        await context.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT 1 FROM inventory_lots WHERE id = ANY({ids}) ORDER BY id FOR UPDATE", cancellationToken);
+    }
+
     public async Task LockStoreAsync(Guid storeId, CancellationToken cancellationToken) =>
         await context.Database.ExecuteSqlInterpolatedAsync(
             $"SELECT 1 FROM stores WHERE id = {storeId} FOR UPDATE", cancellationToken);

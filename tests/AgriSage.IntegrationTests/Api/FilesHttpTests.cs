@@ -341,9 +341,16 @@ public class FilesHttpTests : IClassFixture<FilesHttpTests.FilesApiFactory>
             {
                 services.RemoveAll<IFileStorageService>();
                 services.AddSingleton<IFileStorageService>(Storage);
+                services.RemoveAll<AgriSage.Application.Features.Files.IProofPhotoUsage>();
+                services.AddSingleton<AgriSage.Application.Features.Files.IProofPhotoUsage>(new NoProofUsage());
                 services.RemoveAll<AgriSage.Application.Features.Auth.Interfaces.IUserAccessValidator>();
                 services.AddSingleton<AgriSage.Application.Features.Auth.Interfaces.IUserAccessValidator>(new StaffHttpTests.FakeAccounts());
             });
         }
+    }
+
+    private sealed class NoProofUsage : AgriSage.Application.Features.Files.IProofPhotoUsage
+    {
+        public Task<bool> IsUsedAsync(string storageKey, CancellationToken cancellationToken) => Task.FromResult(false);
     }
 }

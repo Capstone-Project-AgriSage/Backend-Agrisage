@@ -91,6 +91,12 @@ public sealed record StockMovementResponse(
 
 public interface IInventoryService
 {
+    Task<PagedResult<StockSummaryItem>> GetStockSummaryAsync(StockSummaryRequest request, CancellationToken cancellationToken);
+
+    Task<PagedResult<InventoryAlertItem>> GetAlertsAsync(InventoryAlertsRequest request, CancellationToken cancellationToken);
+
+    Task<ExpireDueLotsResponse> ExpireDueLotsAsync(CancellationToken cancellationToken);
+
     Task<PagedResult<InventoryLotResponse>> ListLotsAsync(InventoryLotListRequest request, CancellationToken cancellationToken);
 
     Task<InventoryLotResponse> GetLotAsync(Guid id, CancellationToken cancellationToken);

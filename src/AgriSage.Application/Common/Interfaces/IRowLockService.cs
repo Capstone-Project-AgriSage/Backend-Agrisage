@@ -24,4 +24,14 @@ public interface IRowLockService
     // Serializes changes of one delivery note (assign, lots, dispatch, attempts, cancel). Callers that also lock the
     // order lock the order first.
     Task LockDeliveryAsync(Guid deliveryId, CancellationToken cancellationToken);
+
+    // Serializes lot status transitions; callers re-read the eligible rows after acquiring the locks.
+    Task LockInventoryLotsAsync(IReadOnlyCollection<Guid> inventoryLotIds, CancellationToken cancellationToken);
+
+    Task LockStocktakeAsync(Guid stocktakeId, CancellationToken cancellationToken);
+
+    // Snapshot readers use FOR SHARE so a balance writer cannot change the quantity before snapshot_at is taken.
+    Task ShareLockLotBalancesAsync(IReadOnlyCollection<Guid> inventoryLotIds, CancellationToken cancellationToken);
+
+    Task LockSalesReturnAsync(Guid salesReturnId, CancellationToken cancellationToken);
 }

@@ -76,7 +76,7 @@ public class ReceivingDatabaseTests
             var confirmer = new GoodsReceiptConfirmer(Context, Locks, user, clock, errors);
             Receipts = new GoodsReceiptService(Context, user, clock, errors, confirmer);
             Import = new GoodsReceiptImportService(Context, clock, new ClosedXmlReceiptSpreadsheet(), Receipts);
-            Inventory = new InventoryService(Context, clock);
+            Inventory = new InventoryService(Context, clock, Locks);
             Products = new ProductService(Context, errors);
             StoreProducts = new StoreProductService(Context, errors);
             Categories = new CategoryService(Context, errors);

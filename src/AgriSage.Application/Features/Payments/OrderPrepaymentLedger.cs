@@ -55,7 +55,7 @@ public sealed class OrderPrepaymentLedger(IAgriSageDbContext context) : IOrderPr
         payments.AddRange(context.Payments.Local.Where(p => p.OrderId == orderId && !p.IsDeleted && known.Add(p.Id)));
 
         return payments
-            .Where(p => p.Status == PaymentStatus.Paid && !p.IsDeleted)
+            .Where(p => !p.IsDeleted && p.Status is PaymentStatus.Paid or PaymentStatus.PartiallyRefunded or PaymentStatus.Refunded)
             .SelectMany(p => p.Allocations
                 .Where(a => !a.IsDeleted && a.IsActive && a.AllocationType == PaymentAllocationType.Order && a.OrderId == orderId)
                 .Select(a => (Payment: p, Allocation: a)))

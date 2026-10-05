@@ -13,6 +13,21 @@ namespace AgriSage.Api.Features.Inventory;
 [Authorize(Roles = ApiRoles.Operate)]
 public sealed class InventoryController(IInventoryService service) : ControllerBase
 {
+    [HttpGet("stock-summary")]
+    public async Task<ActionResult<PagedResult<StockSummaryItem>>> GetStockSummary(
+        [FromQuery] StockSummaryRequest request, CancellationToken cancellationToken) =>
+        await service.GetStockSummaryAsync(request, cancellationToken);
+
+    [HttpGet("alerts")]
+    public async Task<ActionResult<PagedResult<InventoryAlertItem>>> GetAlerts(
+        [FromQuery] InventoryAlertsRequest request, CancellationToken cancellationToken) =>
+        await service.GetAlertsAsync(request, cancellationToken);
+
+    [HttpPost("lots/expire-due")]
+    [Authorize(Roles = ApiRoles.Manage)]
+    public async Task<ActionResult<ExpireDueLotsResponse>> ExpireDueLots(CancellationToken cancellationToken) =>
+        await service.ExpireDueLotsAsync(cancellationToken);
+
     [HttpGet("lots")]
     public async Task<ActionResult<PagedResult<InventoryLotResponse>>> ListLots(
         [FromQuery] InventoryLotListRequest request, CancellationToken cancellationToken) =>

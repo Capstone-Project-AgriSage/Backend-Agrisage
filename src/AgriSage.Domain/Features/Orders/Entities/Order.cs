@@ -314,11 +314,21 @@ public sealed class Order : SoftDeletableEntity, IHasConcurrencyVersion
         Guid completedBy,
         DateTimeOffset completedAt,
         string? externalReference = null,
-        string? proofFileUrl = null) =>
-        GetCancellationRefund(refundId).Complete(completedBy, completedAt, externalReference, proofFileUrl);
+        string? proofFileUrl = null,
+        string? note = null)
+    {
+        var refund = GetCancellationRefund(refundId);
+        refund.SetPendingDetails(null, note);
+        refund.Complete(completedBy, completedAt, externalReference, proofFileUrl);
+    }
 
     // A failed refund is retried with a new one.
-    public void FailCancellationRefund(Guid refundId) => GetCancellationRefund(refundId).Fail();
+    public void FailCancellationRefund(Guid refundId, string? note = null)
+    {
+        var refund = GetCancellationRefund(refundId);
+        refund.SetPendingDetails(null, note);
+        refund.Fail();
+    }
 
     public void CancelCancellationRefund(Guid refundId, Guid cancelledBy, DateTimeOffset cancelledAt, string? reason = null) =>
         GetCancellationRefund(refundId).Cancel(cancelledBy, cancelledAt, reason);

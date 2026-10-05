@@ -51,7 +51,7 @@ public class DeliveryProofServiceTests
         return (new DeliveryProofService(storage, new FakeClock(), new FakeUsage(usedKeys)), storage);
     }
 
-    // Decision C-D3: a photo saved on an attempt or incident stays.
+    // Decision C-D3: a photo saved on a delivery or refund record stays.
     [Fact]
     public async Task A_photo_used_as_proof_cannot_be_deleted()
     {

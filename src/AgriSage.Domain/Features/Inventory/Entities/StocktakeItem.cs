@@ -57,8 +57,16 @@ public sealed class StocktakeItem : SoftDeletableChildEntity
         Guid countedBy,
         DateTimeOffset countedAt,
         string? reasonCode,
-        string? note)
+        string? note,
+        decimal? unitCost = null)
     {
+        // A zero-stock snapshot has no average cost. Staff may supply its valuation while counting;
+        // an existing stock snapshot's cost remains fixed. A refresh clears this supplied value too.
+        if (SystemQuantitySnapshot == 0)
+        {
+            UnitCostSnapshot = unitCost is null ? null : Guard.UnitCost(unitCost.Value);
+        }
+
         CountedQuantity = Guard.NotNegative(countedQuantity);
         DifferenceQuantity = countedQuantity - SystemQuantitySnapshot;
         DifferenceCostValue = UnitCostSnapshot is null ? null : DifferenceQuantity * UnitCostSnapshot;

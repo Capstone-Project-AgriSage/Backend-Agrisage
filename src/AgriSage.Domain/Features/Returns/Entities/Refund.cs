@@ -130,7 +130,7 @@ public sealed class Refund : SoftDeletableChildEntity
         Status = RefundStatus.Completed;
         CompletedBy = completedBy;
         CompletedAt = completedAt;
-        ExternalReference = externalReference;
+        ExternalReference = externalReference ?? ExternalReference;
         ProofFileUrl = proofFileUrl;
     }
 
@@ -139,6 +139,13 @@ public sealed class Refund : SoftDeletableChildEntity
     {
         EnsurePending();
         Status = RefundStatus.Failed;
+    }
+
+    internal void SetPendingDetails(string? externalReference, string? note)
+    {
+        EnsurePending();
+        ExternalReference = externalReference ?? ExternalReference;
+        Note = note ?? Note;
     }
 
     internal void Cancel(Guid cancelledBy, DateTimeOffset cancelledAt, string? reason)

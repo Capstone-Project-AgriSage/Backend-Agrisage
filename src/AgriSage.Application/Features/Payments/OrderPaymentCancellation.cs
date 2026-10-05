@@ -68,7 +68,7 @@ public sealed class OrderPaymentCancellation(
         }
 
         var allocations = payments
-            .Where(p => p.Status == PaymentStatus.Paid && !p.IsDeleted)
+            .Where(p => !p.IsDeleted && p.Status is PaymentStatus.Paid or PaymentStatus.PartiallyRefunded or PaymentStatus.Refunded)
             .SelectMany(p => p.Allocations
                 .Where(a => !a.IsDeleted && a.IsActive && a.AllocationType == PaymentAllocationType.Order && a.OrderId == order.Id)
                 .Select(a => (Payment: p, Allocation: a)))
@@ -84,6 +84,7 @@ public sealed class OrderPaymentCancellation(
 
         // Newest first, never more than an allocation still holds unconsumed.
         var released = new Dictionary<Guid, decimal>();
+        var planned = new List<(Payment Payment, PaymentAllocation Allocation, decimal Amount)>();
         foreach (var (payment, allocation) in allocations
                      .OrderByDescending(x => x.Allocation.AllocatedAt).ThenByDescending(x => x.Allocation.Id))
         {
@@ -93,9 +94,28 @@ public sealed class OrderPaymentCancellation(
                 continue;
             }
 
-            payment.ReleaseUnconsumedPrepayment(allocation.Id, take, actorId, now, reason);
+            planned.Add((payment, allocation, take));
             released[payment.Id] = released.GetValueOrDefault(payment.Id) + take;
             refundable -= take;
+        }
+
+        // F4.5's return refunds may already reserve or consume this payment's capacity. Check the same
+        // global cap before requesting cancellation refunds, even when this payment is now REFUNDED.
+        var committed = await context.Refunds.AsNoTracking()
+            .Where(r => r.OriginalPaymentId != null && paymentIds.Contains(r.OriginalPaymentId.Value)
+                && (r.Status == RefundStatus.Pending || r.Status == RefundStatus.Completed))
+            .GroupBy(r => r.OriginalPaymentId!.Value)
+            .Select(g => new { PaymentId = g.Key, Amount = g.Sum(r => r.Amount) })
+            .ToDictionaryAsync(r => r.PaymentId, r => r.Amount, cancellationToken);
+        foreach (var payment in payments.Where(p => released.ContainsKey(p.Id)))
+        {
+            if (released[payment.Id] > payment.Amount - committed.GetValueOrDefault(payment.Id))
+                throw new BusinessRuleException(
+                    $"Payment '{payment.PaymentNumber}' already has return refunds that consume its cancellation refund capacity. Resolve those refunds before cancelling.");
+        }
+        foreach (var (payment, allocation, amount) in planned)
+        {
+            payment.ReleaseUnconsumedPrepayment(allocation.Id, amount, actorId, now, reason);
         }
 
         var storeId = order.StoreId;

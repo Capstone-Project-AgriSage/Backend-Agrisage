@@ -260,7 +260,8 @@ public sealed class SalesReturn : SoftDeletableEntity
         Guid requestedBy,
         DateTimeOffset requestedAt,
         Guid? originalPaymentId = null,
-        string? note = null)
+        string? note = null,
+        string? externalReference = null)
     {
         EnsureResolving();
 
@@ -273,6 +274,7 @@ public sealed class SalesReturn : SoftDeletableEntity
         }
 
         var refund = new Refund(Id, StoreId, refundNumber, refundMethod, amount, requestedBy, requestedAt, originalPaymentId, note);
+        refund.SetPendingDetails(externalReference, null);
         _refunds.Add(refund);
 
         return refund;
@@ -283,17 +285,22 @@ public sealed class SalesReturn : SoftDeletableEntity
         Guid completedBy,
         DateTimeOffset completedAt,
         string? externalReference = null,
-        string? proofFileUrl = null)
+        string? proofFileUrl = null,
+        string? note = null)
     {
         EnsureResolving();
-        GetRefund(refundId).Complete(completedBy, completedAt, externalReference, proofFileUrl);
+        var refund = GetRefund(refundId);
+        refund.SetPendingDetails(null, note);
+        refund.Complete(completedBy, completedAt, externalReference, proofFileUrl);
         MarkResolutionStep();
     }
 
-    public void FailRefund(Guid refundId)
+    public void FailRefund(Guid refundId, string? note = null)
     {
         EnsureResolving();
-        GetRefund(refundId).Fail();
+        var refund = GetRefund(refundId);
+        refund.SetPendingDetails(null, note);
+        refund.Fail();
     }
 
     public void CancelRefund(Guid refundId, Guid cancelledBy, DateTimeOffset cancelledAt, string? reason = null)
@@ -325,6 +332,20 @@ public sealed class SalesReturn : SoftDeletableEntity
     }
 
     protected override void EnsureCanBeDeleted() => EnsureStatus(SalesReturnStatus.Requested);
+
+    // Called once the inspection's stock/debt steps are linked. Remaining money is handled by the refund flow.
+    public void FinishInspectionResolution(DateTimeOffset at)
+    {
+        EnsureResolving();
+        if (ActiveItems.Any(i => i.InventoryDisposition == InventoryDisposition.Restock && i.ReturnStockMovementId is null))
+        {
+            throw new DomainException("Every RESTOCK line must be linked before finishing inspection resolution.");
+        }
+        if (TotalRefundAmount == 0)
+            Complete(at);
+        else
+            Status = SalesReturnStatus.PartiallyResolved;
+    }
 
     private IEnumerable<SalesReturnItem> ActiveItems => _items.Where(i => !i.IsDeleted);
 
