@@ -1034,6 +1034,11 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                     b.HasIndex("DebtAccountId", "Status", "DueDate")
                         .HasDatabaseName("ix_debt_entries_debt_account_id_status_due_date");
 
+                    b.HasIndex(new[] { "SourceStockMovementId" }, "ux_debt_entries_fulfillment_source")
+                        .IsUnique()
+                        .HasDatabaseName("ux_debt_entries_fulfillment_source")
+                        .HasFilter("source_stock_movement_id IS NOT NULL");
+
                     b.ToTable("debt_entries", null, t =>
                         {
                             t.HasCheckConstraint("ck_debt_entries_fulfillment_value", "fulfillment_value >= 0");
@@ -1241,6 +1246,11 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                     b.HasIndex("DebtEntryId", "OccurredAt")
                         .IsDescending(false, true)
                         .HasDatabaseName("ix_debt_transactions_debt_entry_id_occurred_at");
+
+                    b.HasIndex(new[] { "PaymentAllocationId" }, "ux_debt_transactions_payment_source")
+                        .IsUnique()
+                        .HasDatabaseName("ux_debt_transactions_payment_source")
+                        .HasFilter("payment_allocation_id IS NOT NULL");
 
                     b.ToTable("debt_transactions", null, t =>
                         {
@@ -4662,7 +4672,7 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_payments_payment_context", "payment_context IN ('ORDER_PAYMENT', 'DEBT_REPAYMENT')");
 
-                            t.HasCheckConstraint("ck_payments_payment_method", "payment_method IN ('CASH', 'PAYOS')");
+                            t.HasCheckConstraint("ck_payments_payment_method", "payment_method IN ('CASH', 'PAYOS', 'BANK_TRANSFER')");
 
                             t.HasCheckConstraint("ck_payments_status", "status IN ('PENDING', 'PAID', 'FAILED', 'CANCELLED', 'PARTIALLY_REFUNDED', 'REFUNDED')");
                         });

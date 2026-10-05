@@ -1,7 +1,7 @@
 using AgriSage.Application.Common;
 using AgriSage.Application.Common.Exceptions;
 using AgriSage.Application.Common.Interfaces;
-using AgriSage.Application.Common.Placeholders;
+using AgriSage.Tests.TestDoubles;
 using AgriSage.Application.Features.Carts;
 using AgriSage.Application.Features.Customers;
 using AgriSage.Application.Features.Orders;
@@ -38,7 +38,7 @@ public class PayOsPaymentDatabaseTests
         private RowLockService Locks => new(Data.Context);
 
         public PayOsPaymentService PayOs => new(Data.Context, Gateway, Locks, new OrderPrepaymentLedger(Data.Context),
-            new PaymentAllocator(_clock, new TemporaryCreditReservationAdjuster(), new TemporaryDebtRepaymentPosting()),
+            new PaymentAllocator(_clock, new StubCreditReservationAdjuster(), new StubDebtRepaymentPosting()),
             new PaymentQueries(Data.Context), new CurrentFarmer(Data.Context, Data.User), Data.User, _clock, _errors, Audit);
 
         public CartService Carts => new(Data.Context, new CurrentFarmer(Data.Context, Data.User), new PriceResolver(Data.Context),
@@ -48,11 +48,11 @@ public class PayOsPaymentDatabaseTests
         {
             get
             {
-                var builder = new OrderBuilder(Data.Context, new PriceResolver(Data.Context), Data.User, _clock, Audit);
+                var builder = new OrderBuilder(Data.Context, new PriceResolver(Data.Context), Data.User, _clock, Audit, new AgriSage.Application.Features.Credit.CreditEligibilityService(Data.Context, _clock, Microsoft.Extensions.Options.Options.Create(new AgriSage.Application.Features.Credit.CreditPolicy())));
                 var queries = new OrderQueries(Data.Context);
                 return new MeOrderService(Data.Context, new CurrentFarmer(Data.Context, Data.User), builder, queries,
                     new OrderService(Data.Context, builder, queries, Data.User, _clock, _errors, Audit),
-                    new OrderCanceller(Data.Context, Locks, new TemporaryOrderSettlementGuard(),
+                    new OrderCanceller(Data.Context, Locks, new StubOrderSettlementGuard(),
                         new OrderPaymentCancellation(Data.Context, Locks, Gateway, _clock, Audit)),
                     Locks, _clock, _errors, Audit);
             }

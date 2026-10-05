@@ -30,6 +30,8 @@ internal sealed class DebtTransactionConfiguration : EntityConfiguration<DebtTra
 
         builder.HasIndex(transaction => new { transaction.DebtAccountId, transaction.OccurredAt }).IsDescending(false, true);
         builder.HasIndex(transaction => new { transaction.DebtEntryId, transaction.OccurredAt }).IsDescending(false, true);
+        builder.HasIndex(transaction => transaction.PaymentAllocationId, "ux_debt_transactions_payment_source")
+            .HasDatabaseName("ux_debt_transactions_payment_source").IsUnique().HasFilter("payment_allocation_id IS NOT NULL");
 
         builder.HasCheck("amount_delta", "amount_delta <> 0");
         builder.HasCheck("balance_after", "balance_after >= 0");

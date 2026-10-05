@@ -3,15 +3,14 @@ using AgriSage.Application.Features.Credit;
 using AgriSage.Domain.Features.Orders.Entities;
 using AgriSage.Domain.Features.Orders.Enums;
 
-namespace AgriSage.Application.Common.Placeholders;
+namespace AgriSage.Tests.TestDoubles;
 
-// TEMPORARY until task F3.3 registers the real IOrderSettlementGuard (then delete this file and its registration).
-// FULL_PAYMENT orders pass without the payment check of decision D3; CREDIT orders are refused (422).
-public sealed class TemporaryOrderSettlementGuard : IOrderSettlementGuard
+// Test-only isolation for inventory/order tests: funding is outside their scope; credit is refused.
+public sealed class StubOrderSettlementGuard : IOrderSettlementGuard
 {
     public Task<SettlementResult> EnsureCanConfirmAsync(Order order, Guid actorId, CancellationToken cancellationToken) =>
         order.SettlementType == SettlementType.Credit
-            ? throw new BusinessRuleException("Credit sales are not available yet: credit arrives with task F3.3.")
+            ? throw new BusinessRuleException("This isolated order test does not support credit.")
             : Task.FromResult(new SettlementResult(null));
 
     public Task ReleaseAsync(Order order, Guid actorId, string? reason, CancellationToken cancellationToken) =>

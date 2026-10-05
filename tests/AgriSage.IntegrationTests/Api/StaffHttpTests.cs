@@ -153,6 +153,8 @@ public class StaffHttpTests : IClassFixture<StaffHttpTests.StaffApiFactory>
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Development");
+            // The in-process HTTP test host does not write machine-wide Windows event logs.
+            builder.UseSetting("Logging:EventLog:LogLevel:Default", "None");
             // Test-only key; real keys come from User Secrets / environment variables.
             builder.UseSetting("Jwt:SigningKey", "integration-test-signing-key-not-a-secret-000000");
             builder.ConfigureServices(services =>

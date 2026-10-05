@@ -88,10 +88,7 @@ public sealed class OrderPickupService(
         order.CancelItemRemaining(itemId, actorId, now, reason);
         await ReleaseReservationOfItemAsync(order, itemId, actorId, now, reason, cancellationToken);
 
-        if (order.Status is OrderStatus.Cancelled or OrderStatus.PartiallyCancelled or OrderStatus.Completed)
-        {
-            await settlementGuard.ReleaseAsync(order, actorId, reason, cancellationToken);
-        }
+        await settlementGuard.ReleaseAsync(order, actorId, reason, cancellationToken);
 
         if (order.Status is OrderStatus.Cancelled or OrderStatus.PartiallyCancelled)
         {
@@ -140,8 +137,10 @@ public sealed class OrderPickupService(
         var storeId = await ActiveStore.GetIdAsync(context, cancellationToken);
         await locks.LockOrderAsync(orderId, cancellationToken);
 
-        return await context.Orders.Include(o => o.Items)
+        var order = await context.Orders.Include(o => o.Items)
             .FirstOrDefaultAsync(o => o.Id == orderId && o.StoreId == storeId, cancellationToken)
             ?? throw new NotFoundException("Order", orderId);
+        if (order.FarmerProfileId is { } farmer) await locks.LockFarmerProfileAsync(farmer, cancellationToken);
+        return order;
     }
 }

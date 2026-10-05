@@ -1,6 +1,6 @@
 using AgriSage.Application.Common;
 using AgriSage.Application.Common.Exceptions;
-using AgriSage.Application.Common.Placeholders;
+using AgriSage.Tests.TestDoubles;
 using AgriSage.Application.Features.Orders;
 using AgriSage.Application.Features.Payments;
 using AgriSage.Application.Features.Pricing;
@@ -54,10 +54,10 @@ public class CounterSaleDatabaseTests
             var queries = new OrderQueries(context);
             Sales = new CounterSaleService(
                 context,
-                new OrderBuilder(context, new PriceResolver(context), user, clock, audit),
-                new PaymentAllocator(clock, new TemporaryCreditReservationAdjuster(), new TemporaryDebtRepaymentPosting()),
-                new OrderConfirmer(context, locks, new TemporaryOrderSettlementGuard(), user, clock, audit),
-                new FulfillmentPostingService(context, locks, new TemporaryFulfillmentFinancialPosting(Ledger)),
+                new OrderBuilder(context, new PriceResolver(context), user, clock, audit, new AgriSage.Application.Features.Credit.CreditEligibilityService(context, clock, Microsoft.Extensions.Options.Options.Create(new AgriSage.Application.Features.Credit.CreditPolicy()))),
+                new PaymentAllocator(clock, new StubCreditReservationAdjuster(), new StubDebtRepaymentPosting()),
+                new OrderConfirmer(context, locks, new StubOrderSettlementGuard(), user, clock, audit),
+                new FulfillmentPostingService(context, locks, new StubFulfillmentFinancialPosting(Ledger)),
                 queries,
                 new PaymentQueries(context),
                 user,
@@ -65,7 +65,7 @@ public class CounterSaleDatabaseTests
                 errors,
                 audit);
             Confirmation = new OrderConfirmationService(
-                context, locks, new OrderConfirmer(context, locks, new TemporaryOrderSettlementGuard(), user, clock, audit), queries, clock, errors, audit);
+                context, locks, new OrderConfirmer(context, locks, new StubOrderSettlementGuard(), user, clock, audit), queries, clock, errors, audit);
         }
 
         public AgriSageDbContext Context { get; }

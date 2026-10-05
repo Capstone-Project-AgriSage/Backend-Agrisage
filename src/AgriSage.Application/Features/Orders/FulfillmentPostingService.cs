@@ -40,6 +40,8 @@ public sealed class FulfillmentPostingService(
         CancellationToken cancellationToken)
     {
         var today = BusinessCalendar.Today(at);
+        // Global lock order: order -> customer -> inventory lots. Confirmation uses the same order.
+        if (order.FarmerProfileId is { } farmer) await locks.LockFarmerProfileAsync(farmer, cancellationToken);
 
         if (order.Status is not (OrderStatus.Confirmed or OrderStatus.Preparing or OrderStatus.ReadyForFulfillment or OrderStatus.PartiallyFulfilled))
         {

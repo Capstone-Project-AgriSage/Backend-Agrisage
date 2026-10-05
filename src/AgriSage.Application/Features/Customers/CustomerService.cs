@@ -312,7 +312,7 @@ public sealed class CustomerService(IAgriSageDbContext context, IPasswordHashSer
     private static CustomerResponse Map(Row r, Dictionary<Guid, CustomerReference> groups) => new(
         r.Id, r.UserId, null, r.FullName, r.Phone, r.Email, "REGISTERED", r.GroupId is { } id ? groups.GetValueOrDefault(id) : null,
         EnumText.Format(r.Status), r.Notes, r.Orders, r.Purchases, r.Debt, r.Limit, r.CreditEnabled,
-        r.Reserved, r.Limit - r.Debt - r.Reserved, r.Term, r.CreatedAt, r.UpdatedAt);
+        r.Reserved, Math.Max(0, r.Limit - r.Debt - r.Reserved), r.Term, r.CreatedAt, r.UpdatedAt);
 
     private async Task<CustomerDebtSummaryResponse> SummaryAsync(Guid id, Guid storeId, Row row, CancellationToken token)
     {
@@ -325,7 +325,10 @@ public sealed class CustomerService(IAgriSageDbContext context, IPasswordHashSer
             .Where(t => accounts.Contains(t.DebtAccountId)
                 && t.TransactionType == DebtTransactionType.Payment && t.Status == DebtTransactionStatus.Posted)
             .SumAsync(t => (decimal?)-t.AmountDelta, token) ?? 0m;
-        return new CustomerDebtSummaryResponse(row.Debt, row.Debt, null, overdue, paid, row.Limit, row.Reserved, row.Limit - row.Debt - row.Reserved);
+        var open = context.DebtEntries.AsNoTracking().Where(e => accounts.Contains(e.DebtAccountId) && e.OutstandingAmount > 0);
+        return new CustomerDebtSummaryResponse(row.Debt, row.Debt, null, overdue, paid, row.Limit, row.Reserved,
+            Math.Max(0, row.Limit - row.Debt - row.Reserved), await open.CountAsync(token),
+            await open.Select(e => (DateOnly?)e.DueDate).MinAsync(token), overdue > 0);
     }
 
     private async Task ApplyDetailsAsync(FarmerProfile farmer, Guid storeId, CustomerRequest request, CancellationToken token)

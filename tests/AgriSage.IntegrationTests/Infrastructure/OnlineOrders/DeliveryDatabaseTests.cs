@@ -1,7 +1,7 @@
 using AgriSage.Application.Common;
 using AgriSage.Application.Common.Exceptions;
 using AgriSage.Application.Common.Interfaces;
-using AgriSage.Application.Common.Placeholders;
+using AgriSage.Tests.TestDoubles;
 using AgriSage.Application.Features.Customers;
 using AgriSage.Application.Features.Deliveries;
 using AgriSage.Application.Features.Orders;
@@ -63,17 +63,17 @@ public class DeliveryDatabaseTests
 
         private DeliveryQueries Queries => new(Context);
 
-        public OrderService Orders => new(Context, new OrderBuilder(Context, new PriceResolver(Context), Data.User, _clock, Audit),
+        public OrderService Orders => new(Context, new OrderBuilder(Context, new PriceResolver(Context), Data.User, _clock, Audit, new AgriSage.Application.Features.Credit.CreditEligibilityService(Context, _clock, Microsoft.Extensions.Options.Options.Create(new AgriSage.Application.Features.Credit.CreditPolicy()))),
             OrderQueries, Data.User, _clock, _errors, Audit);
 
         public OrderConfirmationService Confirmation => new(Context, Locks,
-            new OrderConfirmer(Context, Locks, new TemporaryOrderSettlementGuard(), Data.User, _clock, Audit), OrderQueries, _clock,
+            new OrderConfirmer(Context, Locks, new StubOrderSettlementGuard(), Data.User, _clock, Audit), OrderQueries, _clock,
             _errors, Audit);
 
         public DeliveryService Deliveries => new(Context, Access, Queries, Locks, _clock, _errors, Audit);
 
         public DeliveryAttemptService Attempts => new(Context, Access, Queries, new DeliveryProofUrls(new FakeStorage()),
-            new FulfillmentPostingService(Context, Locks, new TemporaryFulfillmentFinancialPosting(new OrderPrepaymentLedger(Context))),
+            new FulfillmentPostingService(Context, Locks, new StubFulfillmentFinancialPosting(new OrderPrepaymentLedger(Context))),
             Locks, _clock, Audit);
 
         public DeliveryIncidentService Incidents => new(Context, Access, new DeliveryProofUrls(new FakeStorage()), Locks, _clock, Audit);

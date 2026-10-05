@@ -1,6 +1,6 @@
 using AgriSage.Application.Common;
 using AgriSage.Application.Common.Exceptions;
-using AgriSage.Application.Common.Placeholders;
+using AgriSage.Tests.TestDoubles;
 using AgriSage.Application.Features.Debt;
 using AgriSage.Application.Features.Payments;
 using AgriSage.Domain.Features.Orders.Entities;
@@ -11,7 +11,7 @@ using static AgriSage.UnitTests.Domain.Features.Orders.OrderTestData;
 
 namespace AgriSage.UnitTests.Application.CrossModule;
 
-// Behavior of the temporary cross-module implementations until their owner tasks deliver the real ones.
+// Isolation doubles for tests that intentionally exclude credit/debt posting; not registered by the API.
 public class TemporaryImplementationTests
 {
     private static CancellationToken Token => TestContext.Current.CancellationToken;
@@ -19,7 +19,7 @@ public class TemporaryImplementationTests
     [Fact]
     public async Task Full_payment_orders_pass_the_settlement_guard_and_credit_orders_are_refused()
     {
-        var guard = new TemporaryOrderSettlementGuard();
+        var guard = new StubOrderSettlementGuard();
 
         var result = await guard.EnsureCanConfirmAsync(CreateOrder(), StaffId, Token);
 
@@ -48,7 +48,7 @@ public class TemporaryImplementationTests
     public async Task Fulfillment_posting_consumes_prepayment_for_full_payment_and_fails_loudly_for_credit()
     {
         var ledger = new RecordingLedger();
-        var posting = new TemporaryFulfillmentFinancialPosting(ledger);
+        var posting = new StubFulfillmentFinancialPosting(ledger);
         var order = CreateOrder();
         FulfillmentPostingContext Context(Order target, params FulfilledLine[] lines) => new(
             target, lines, FulfillmentSource.Pickup, null, null, Guid.NewGuid(), StaffId, Now);
@@ -67,9 +67,9 @@ public class TemporaryImplementationTests
     {
         var payment = new Payment(Guid.NewGuid(), "PM-1", PaymentContext.DebtRepayment, PaymentMethod.Cash, 1m, Now);
 
-        await new TemporaryCreditReservationAdjuster().OnOrderPrepaymentAsync(Guid.NewGuid(), 1m, StaffId, Token);
-        Assert.Equal(0m, await new TemporaryDebtReturnPosting().ApplyReturnAsync(Guid.NewGuid(), Guid.NewGuid(), 5m, StaffId, null, Token));
-        await Assert.ThrowsAsync<BusinessRuleException>(() => new TemporaryDebtRepaymentPosting().ApplyAsync(payment, null, StaffId, Token));
+        await new StubCreditReservationAdjuster().OnOrderPrepaymentAsync(Guid.NewGuid(), 1m, StaffId, Token);
+        Assert.Equal(0m, await new StubDebtReturnPosting().ApplyReturnAsync(Guid.NewGuid(), Guid.NewGuid(), 5m, StaffId, null, Token));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => new StubDebtRepaymentPosting().ApplyAsync(payment, null, StaffId, Token));
     }
 
     [Fact]

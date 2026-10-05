@@ -16,6 +16,7 @@ if (commands.Count > 0)
 builder.AddLocalSettingsFile();
 
 builder.Services.AddApplication();
+builder.Services.Configure<AgriSage.Application.Features.Credit.CreditPolicy>(builder.Configuration.GetSection("Credit"));
 builder.Services.AddInfrastructure(builder.Configuration);
 
 builder.Services.AddControllers(options => options.Filters.Add<ValidationFilter>());

@@ -1,6 +1,6 @@
 using AgriSage.Application.Common;
 using AgriSage.Application.Common.Interfaces;
-using AgriSage.Application.Common.Placeholders;
+using AgriSage.Tests.TestDoubles;
 using AgriSage.Application.Features.Orders;
 using AgriSage.Application.Features.Payments;
 using AgriSage.Application.Features.Pricing;
@@ -64,14 +64,14 @@ public class SalesReportDatabaseTests
             PriceLists = new PriceListService(context, realClock, errors, new AuditTrail(context, user, realClock));
             var ledger = new OrderPrepaymentLedger(context);
             var queries = new OrderQueries(context);
-            var builder = new OrderBuilder(context, new PriceResolver(context), user, Clock, audit);
-            var confirmer = new OrderConfirmer(context, locks, new TemporaryOrderSettlementGuard(), user, Clock, audit);
-            var posting = new FulfillmentPostingService(context, locks, new TemporaryFulfillmentFinancialPosting(ledger));
+            var builder = new OrderBuilder(context, new PriceResolver(context), user, Clock, audit, new AgriSage.Application.Features.Credit.CreditEligibilityService(context, Clock, Microsoft.Extensions.Options.Options.Create(new AgriSage.Application.Features.Credit.CreditPolicy())));
+            var confirmer = new OrderConfirmer(context, locks, new StubOrderSettlementGuard(), user, Clock, audit);
+            var posting = new FulfillmentPostingService(context, locks, new StubFulfillmentFinancialPosting(ledger));
             Orders = new OrderService(context, builder, queries, user, Clock, errors, audit);
             Confirmation = new OrderConfirmationService(context, locks, confirmer, queries, Clock, errors, audit);
-            Pickup = new OrderPickupService(context, locks, posting, new TemporaryOrderSettlementGuard(), new OrderPaymentCancellation(context, locks, new FakePaymentGateway(), Clock, audit), queries, user, Clock, audit);
+            Pickup = new OrderPickupService(context, locks, posting, new StubOrderSettlementGuard(), new OrderPaymentCancellation(context, locks, new FakePaymentGateway(), Clock, audit), queries, user, Clock, audit);
             Sales = new CounterSaleService(
-                context, builder, new PaymentAllocator(Clock, new TemporaryCreditReservationAdjuster(), new TemporaryDebtRepaymentPosting()),
+                context, builder, new PaymentAllocator(Clock, new StubCreditReservationAdjuster(), new StubDebtRepaymentPosting()),
                 confirmer, posting, queries, new PaymentQueries(context), user, Clock, errors, audit);
             Report = new SalesReportService(context);
         }
