@@ -2324,7 +2324,12 @@ DEBT_REPAYMENT
 ```text
 CASH
 PAYOS
+BANK_TRANSFER
 ```
+
+2026-10-04 additive receipt policy: BANK_TRANSFER is a manually reviewed debt repayment.
+It remains PENDING until Manage staff confirms (PAID, STAFF) or rejects (FAILED, reason in audit_logs).
+No pending/rejected money reduces debt. Existing payOS confirmation remains webhook-only.
 
 Statuses:
 
@@ -3311,6 +3316,10 @@ This makes credit-limit checks efficient without losing ledger traceability.
 Represents one concrete Accounts Receivable obligation.
 
 Normally one Debt Entry is created per successful credit fulfillment event.
+
+2026-10-04 posting safety: `source_stock_movement_id` is unique when non-null, so retrying the same
+fulfillment cannot create duplicate debt. Orders with distinct partial fulfillments retain distinct entries.
+Likewise, PAYMENT debt transactions have a unique non-null `payment_allocation_id`.
 
 ```text
 debt_entries

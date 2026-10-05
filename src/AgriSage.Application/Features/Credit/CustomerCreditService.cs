@@ -9,13 +9,25 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AgriSage.Application.Features.Credit;
 
-// F3.2 only: profile/tier administration; no order reservation or fulfillment/debt posting implementation.
+// Profile/tier administration; order eligibility and postings use the shared credit/debt steps.
 public sealed class CustomerCreditService(IAgriSageDbContext context, IRowLockService locks,
-    IDatabaseErrorClassifier databaseErrors, CustomerWrites writes, AuditTrail audit) : ICustomerCreditService
+    IDatabaseErrorClassifier databaseErrors, CustomerWrites writes, AuditTrail audit, IDateTimeProvider clock) : ICustomerCreditService
 {
     public async Task<CreditSummaryResponse> GetAsync(Guid farmerId, CancellationToken token)
     {
         writes.Actor();
+        return await GetCoreAsync(farmerId, token);
+    }
+
+    public async Task<MyCreditSummaryResponse> GetOwnAsync(CancellationToken token)
+    {
+        var p = await GetCoreAsync(await writes.OwnCustomerAsync(token), token);
+        return new(p.ProfileId, p.FarmerProfileId, p.Status, p.CreditTier, p.CreditLimit, p.PaymentTermDays,
+            p.OutstandingReceivable, p.ReservedCredit, p.AvailableCredit);
+    }
+
+    private async Task<CreditSummaryResponse> GetCoreAsync(Guid farmerId, CancellationToken token)
+    {
         var store = await ActiveStore.GetIdAsync(context, token);
         var p = await context.FarmerCreditProfiles.AsNoTracking().Include(p => p.CreditTier)
             .FirstOrDefaultAsync(p => p.StoreId == store && p.FarmerProfileId == farmerId
@@ -26,9 +38,21 @@ public sealed class CustomerCreditService(IAgriSageDbContext context, IRowLockSe
         var reserved = await context.CreditReservations.AsNoTracking().Where(r => r.StoreId == store && r.FarmerCreditProfileId == p.Id
             && (r.Status == CreditReservationStatus.Active || r.Status == CreditReservationStatus.PartiallyConsumed))
             .SumAsync(r => (decimal?)(r.AmountReserved - r.AmountConsumed - r.AmountReleased), token) ?? 0m;
+        var accounts = context.DebtAccounts.AsNoTracking().Where(a => a.StoreId == store && a.FarmerProfileId == farmerId).Select(a => a.Id);
+        var open = context.DebtEntries.AsNoTracking().Where(e => accounts.Contains(e.DebtAccountId) && e.OutstandingAmount > 0);
+        var today = BusinessCalendar.Today(clock.UtcNow);
+        var overdue = await open.Where(e => e.DueDate < today).SumAsync(e => (decimal?)e.OutstandingAmount, token) ?? 0;
+        var enabled = p.Status == FarmerCreditProfileStatus.Active
+            && await context.FarmerProfiles.AnyAsync(f => f.Id == farmerId && f.User.Status == AgriSage.Domain.Features.Identity.Enums.UserStatus.Active, token)
+            && await context.DebtAccounts.AnyAsync(a => a.StoreId == store && a.FarmerProfileId == farmerId
+                && a.Status == AgriSage.Domain.Features.Debt.Enums.DebtAccountStatus.Active, token);
+        var paid = await context.DebtTransactions.AsNoTracking().Where(t => accounts.Contains(t.DebtAccountId)
+            && t.TransactionType == AgriSage.Domain.Features.Debt.Enums.DebtTransactionType.Payment
+            && t.Status == AgriSage.Domain.Features.Debt.Enums.DebtTransactionStatus.Posted).SumAsync(t => (decimal?)-t.AmountDelta, token) ?? 0;
         return new CreditSummaryResponse(p.Id, farmerId, EnumText.Format(p.Status), p.CreditTier is { } tier
             ? new CustomerReference(tier.Id, tier.Code, tier.Name) : null, p.CreditLimit, p.CreditTier?.DefaultPaymentTermDays,
-            outstanding, reserved, p.CalculateAvailableCredit(outstanding, reserved), p.ApprovedBy, p.ApprovedAt, p.Note, p.Version);
+            outstanding, reserved, Math.Max(0, p.CalculateAvailableCredit(outstanding, reserved)), p.ApprovedBy, p.ApprovedAt, p.Note, p.Version,
+            enabled, overdue, overdue > 0, paid, await open.CountAsync(token), await open.Select(e => (DateOnly?)e.DueDate).MinAsync(token));
     }
 
     public Task<CreditSummaryResponse> CreateAsync(Guid farmerId, CreateCustomerCreditRequest request, CancellationToken token) =>

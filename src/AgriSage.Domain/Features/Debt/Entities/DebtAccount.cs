@@ -160,6 +160,17 @@ public sealed class DebtAccount : SoftDeletableEntity, IHasConcurrencyVersion
             debtEntryActionId: action.Id);
     }
 
+    public DebtTransaction ApplyReturn(DebtEntry entry, decimal amount, Guid salesReturnId,
+        DateTimeOffset occurredAt, Guid createdBy)
+    {
+        EnsureOwns(entry);
+        Guard.PositiveMoney(amount);
+        if (salesReturnId == Guid.Empty) throw new DomainException("A return posting requires a sales return.");
+        EnsureCanPost(-amount);
+        entry.ApplyPayment(amount);
+        return Post(DebtTransactionType.Return, -amount, entry.Id, occurredAt, createdBy, salesReturnId: salesReturnId);
+    }
+
     public DebtTransaction CancelEntry(DebtEntry entry, string reason, Guid createdBy, DateTimeOffset occurredAt)
     {
         EnsureOwns(entry);
@@ -210,7 +221,8 @@ public sealed class DebtAccount : SoftDeletableEntity, IHasConcurrencyVersion
         Guid? createdBy,
         Guid? paymentAllocationId = null,
         Guid? debtEntryActionId = null,
-        string? note = null)
+        string? note = null,
+        Guid? salesReturnId = null)
     {
         EnsureCanPost(amountDelta);
 
@@ -229,6 +241,7 @@ public sealed class DebtAccount : SoftDeletableEntity, IHasConcurrencyVersion
             createdBy,
             paymentAllocationId,
             debtEntryActionId,
-            note);
+            note,
+            salesReturnId);
     }
 }

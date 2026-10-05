@@ -22,7 +22,8 @@ public sealed class DebtTransaction : SoftDeletableChildEntity
         Guid? createdBy,
         Guid? paymentAllocationId = null,
         Guid? debtEntryActionId = null,
-        string? note = null)
+        string? note = null,
+        Guid? salesReturnId = null)
     {
         DebtAccountId = debtAccountId;
         DebtEntryId = debtEntryId;
@@ -34,6 +35,7 @@ public sealed class DebtTransaction : SoftDeletableChildEntity
         PaymentAllocationId = paymentAllocationId;
         DebtEntryActionId = debtEntryActionId;
         Note = note;
+        SalesReturnId = salesReturnId;
         Status = DebtTransactionStatus.Posted;
     }
 

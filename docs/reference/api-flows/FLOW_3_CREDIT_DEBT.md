@@ -1,6 +1,33 @@
 # Flow L3 — Customer Groups, Credit Sale and Debt Collection (owner: Teammate 3)
 
 Version 2.0 — 2026-10-03. Conventions, shared shapes, interfaces and ownership rules: [README.md](README.md).
+
+### Additive credit/debt contract (2026-10-04 user request)
+
+- `POST /api/customers/{id}/credit-eligibility` (Operate), `{ orderAmount }`: eligibility,
+  reasonCode/message, limit, debt, reserved credit, available/after-order credit, overdue figures.
+  Eligibility is checked when building CREDIT drafts, and rechecked under the customer row lock when
+  confirming/reserving. Drafts remain editable and consume no credit; only confirmed commitments reserve.
+- Existing credit administration routes remain authoritative. Term selection uses `creditTierId`;
+  AllowCreditPurchase is derived from profile/customer/account ACTIVE status.
+- `Credit:BlockCreditWhenOverdue` is an optional server policy (default false), using Vietnam dates.
+- All exposure/ledger changes lock FarmerProfile first (also used by customer administration), then
+  read profile/account/reservations. Shared steps never save. One debt per successful stock movement,
+  protected by a filtered unique index, retains partial delivery/pickup support.
+- Debt list adds search (name/phone/entry/order), created-date filters and sort
+  (`CreatedAt`, `DueDate`, `OutstandingAmount`, `DaysOverdue`) with `descending`.
+- Debt detail adds confirmed totalPaid, customer credit figures, order products and payment history.
+- `GET /api/debt-entries/{id}/payments`, `/ledger` (Operate) expose histories.
+- `POST /api/payments/bank-transfer` (Operate), `{ farmerProfileId, amount, paymentDate?, note?, reference? }`
+  creates a DEBT_REPAYMENT Payment PENDING; no allocation or debt reduction yet.
+  `POST /api/payments/{id}/confirm` and `/reject` (Manage); reject requires `{ reason }` and maps to FAILED.
+  Confirmation allocates oldest due first under the customer lock. Repeated confirmation returns the
+  PAID receipt without reposting. Staff-recorded cash continues through `/api/payments/cash`.
+- `GET /api/debt-entries/dashboard` (Manage) returns outstanding/overdue/collections and top/recent lists.
+- `GET /api/reports/debt-aging`, `/debt-collections` remain F3.6 routes.
+- Return posting is idempotent per sales return, validates its order/store/source and posts RETURN ledger
+  rows without modifying original debt. The return owner refunds any remainder.
+- Migration CreditDebtPostingSafety extends only the payment enum check and adds unique source indexes.
 Sources: `DATABASE_DESIGN.md` §7–8, §20, §44–51, §XVI, §XIX, §35.6–35.7, §35.20; `BUSINESS_RULES.md` rules 1–5,
 22–29, 32.
 

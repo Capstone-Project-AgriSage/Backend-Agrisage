@@ -32,6 +32,8 @@ internal sealed class DebtEntryConfiguration : EntityConfiguration<DebtEntry>
         builder.HasMany(entry => entry.Actions).WithOne().HasForeignKey(action => action.DebtEntryId);
 
         builder.HasIndex(entry => entry.EntryNumber).IsUnique();
+        builder.HasIndex(entry => entry.SourceStockMovementId, "ux_debt_entries_fulfillment_source")
+            .HasDatabaseName("ux_debt_entries_fulfillment_source").IsUnique().HasFilter("source_stock_movement_id IS NOT NULL");
         builder.HasIndex(entry => new { entry.DebtAccountId, entry.Status, entry.DueDate });
         builder.HasIndex(entry => new { entry.Status, entry.DueDate });
 

@@ -52,7 +52,8 @@ public sealed record CustomerResponse(Guid Id, Guid UserId, string? CustomerCode
 // There is no pending-confirmation AR state in §49; reserved credit is reported separately.
 public sealed record CustomerDebtSummaryResponse(decimal TotalOutstandingDebt, decimal ConfirmedDebt,
     decimal? PendingConfirmationDebt, decimal OverdueDebt, decimal TotalPaid, decimal CreditLimit,
-    decimal ReservedCredit, decimal AvailableCredit);
+    decimal ReservedCredit, decimal AvailableCredit, int OpenDebtCount = 0, DateOnly? OldestDueDate = null,
+    bool HasOverdueDebt = false);
 
 public sealed record CustomerOrderListRequest : PaginationRequest
 {

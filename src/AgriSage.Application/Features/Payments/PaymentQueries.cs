@@ -80,7 +80,7 @@ public sealed class PaymentQueries(IAgriSageDbContext context)
                 a.AllocatedAmount,
                 a.PrepaymentConsumedAmount,
                 EnumText.Format(a.Status),
-                a.AllocatedAt)).ToList());
+                a.AllocatedAt)).ToList(), payment.ProviderTransactionId);
     }
 
     public async Task<PagedResult<PaymentListItem>> ListAsync(

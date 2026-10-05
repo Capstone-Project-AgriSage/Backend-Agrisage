@@ -27,6 +27,13 @@ public sealed class CustomerWrites(IAgriSageDbContext context, ICurrentUserServi
         return id;
     }
 
+    public async Task<Guid> OwnCustomerAsync(CancellationToken token)
+    {
+        var id = currentUser.UserId ?? throw new AuthenticationFailedException("Authentication is required.");
+        return await context.FarmerProfiles.AsNoTracking().Where(f => f.UserId == id && f.User.Role.Code == RoleCode.Farmer)
+            .Select(f => (Guid?)f.Id).SingleOrDefaultAsync(token) ?? throw new ForbiddenException();
+    }
+
     public async Task<FarmerProfile> FindAsync(Guid id, CancellationToken token) =>
         await context.FarmerProfiles.Include(f => f.User).ThenInclude(u => u.Role)
             .FirstOrDefaultAsync(f => f.Id == id && f.User.Role.Code == RoleCode.Farmer, token)

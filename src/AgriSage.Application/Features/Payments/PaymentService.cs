@@ -73,6 +73,7 @@ public sealed class PaymentService(
         else
         {
             var farmerId = request.FarmerProfileId ?? throw new BusinessRuleException("A DEBT_REPAYMENT needs a farmerProfileId.");
+            await locks.LockFarmerProfileAsync(farmerId, cancellationToken);
             if (!await context.FarmerProfiles.AsNoTracking().AnyAsync(f => f.Id == farmerId, cancellationToken))
             {
                 throw new NotFoundException("Farmer profile", farmerId);

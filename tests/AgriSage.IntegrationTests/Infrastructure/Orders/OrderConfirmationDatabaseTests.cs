@@ -1,6 +1,6 @@
 using AgriSage.Application.Common;
 using AgriSage.Application.Common.Exceptions;
-using AgriSage.Application.Common.Placeholders;
+using AgriSage.Tests.TestDoubles;
 using AgriSage.Application.Features.Orders;
 using AgriSage.Application.Features.Pricing;
 using AgriSage.Application.Features.Products.Dtos.Requests;
@@ -50,9 +50,9 @@ public class OrderConfirmationDatabaseTests
             StoreProducts = new StoreProductService(context, errors);
             PriceLists = new PriceListService(context, clock, errors, audit);
             Orders = new OrderService(
-                context, new OrderBuilder(context, new PriceResolver(context), user, clock, audit), new OrderQueries(context),
+                context, new OrderBuilder(context, new PriceResolver(context), user, clock, audit, new AgriSage.Application.Features.Credit.CreditEligibilityService(context, clock, Microsoft.Extensions.Options.Options.Create(new AgriSage.Application.Features.Credit.CreditPolicy()))), new OrderQueries(context),
                 user, clock, errors, audit);
-            Confirmer = new OrderConfirmer(context, new RowLockService(context), new TemporaryOrderSettlementGuard(), user, clock, audit);
+            Confirmer = new OrderConfirmer(context, new RowLockService(context), new StubOrderSettlementGuard(), user, clock, audit);
             Confirmation = new OrderConfirmationService(
                 context, new RowLockService(context), Confirmer, new OrderQueries(context), clock, errors, audit);
         }

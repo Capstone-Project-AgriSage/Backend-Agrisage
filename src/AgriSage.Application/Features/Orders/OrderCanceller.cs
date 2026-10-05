@@ -24,6 +24,7 @@ public sealed class OrderCanceller(
         Order order, Guid actorId, DateTimeOffset at, string reason, CancellationToken cancellationToken)
     {
         order.Cancel(actorId, at, reason);
+        if (order.FarmerProfileId is { } farmer) await locks.LockFarmerProfileAsync(farmer, cancellationToken);
 
         await ReleaseReservationAsync(order, actorId, at, reason, cancellationToken);
         await settlementGuard.ReleaseAsync(order, actorId, reason, cancellationToken);

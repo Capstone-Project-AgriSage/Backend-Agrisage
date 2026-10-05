@@ -116,6 +116,13 @@ public sealed class Payment : SoftDeletableEntity
 
     public decimal UnallocatedAmount => Amount - ActiveAllocations.Sum(a => a.AllocatedAmount);
 
+    public void SetBankTransferReference(string? reference)
+    {
+        EnsureStatus(PaymentStatus.Pending);
+        if (PaymentMethod != PaymentMethod.BankTransfer) throw new DomainException("Only a bank receipt has a manual transfer reference.");
+        ProviderTransactionId = string.IsNullOrWhiteSpace(reference) ? null : reference.Trim();
+    }
+
     public void SetProviderLink(
         string provider,
         long providerOrderCode,
@@ -147,9 +154,9 @@ public sealed class Payment : SoftDeletableEntity
     {
         EnsureStatus(PaymentStatus.Pending);
 
-        var expectedSource = PaymentMethod == PaymentMethod.Cash
-            ? PaymentConfirmationSource.Staff
-            : PaymentConfirmationSource.PayOsWebhook;
+        var expectedSource = PaymentMethod == PaymentMethod.PayOs
+            ? PaymentConfirmationSource.PayOsWebhook
+            : PaymentConfirmationSource.Staff;
 
         if (confirmationSource != expectedSource)
         {

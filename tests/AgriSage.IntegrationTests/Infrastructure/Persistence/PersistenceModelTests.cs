@@ -259,7 +259,7 @@ public class PersistenceModelTests
             "status IN ('PENDING_CONFIRMATION', 'CONFIRMED', 'PREPARING', 'READY_FOR_FULFILLMENT', "
             + "'PARTIALLY_FULFILLED', 'COMPLETED', 'CANCELLED', 'PARTIALLY_CANCELLED')",
             Check("orders", "status").Sql);
-        Assert.Equal("payment_method IN ('CASH', 'PAYOS')", Check("payments", "payment_method").Sql);
+        Assert.Equal("payment_method IN ('CASH', 'PAYOS', 'BANK_TRANSFER')", Check("payments", "payment_method").Sql);
         Assert.Equal("confirmation_source IN ('STAFF', 'PAYOS_WEBHOOK')", Check("payments", "confirmation_source").Sql);
     }
 
@@ -359,7 +359,7 @@ public class PersistenceModelTests
     [Fact]
     public void Enum_database_values_use_documented_upper_snake_case()
     {
-        Assert.Equal(["CASH", "PAYOS"], EnumDbValue.AllValues(typeof(PaymentMethod)));
+        Assert.Equal(["CASH", "PAYOS", "BANK_TRANSFER"], EnumDbValue.AllValues(typeof(PaymentMethod)));
         Assert.Equal(["STAFF", "PAYOS_WEBHOOK"], EnumDbValue.AllValues(typeof(PaymentConfirmationSource)));
     }
 }

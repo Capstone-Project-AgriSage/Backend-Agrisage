@@ -1,5 +1,4 @@
 using AgriSage.Application.Common;
-using AgriSage.Application.Common.Placeholders;
 using AgriSage.Application.Features.Auth.Interfaces;
 using AgriSage.Application.Features.Auth.Services;
 using AgriSage.Application.Features.Credit;
@@ -37,6 +36,10 @@ public static class DependencyInjection
         services.AddScoped<ICustomerService, CustomerService>();
         services.AddScoped<ICustomerGroupService, CustomerGroupService>();
         services.AddScoped<ICustomerCreditService, CustomerCreditService>();
+        services.AddOptions<CreditPolicy>();
+        services.AddScoped<ICreditEligibilityService, CreditEligibilityService>();
+        services.AddScoped<IDebtService, DebtService>();
+        services.AddScoped<IBankDebtPaymentService, BankDebtPaymentService>();
 
         services.AddScoped<ICategoryService, CategoryService>();
         services.AddScoped<IBrandService, BrandService>();
@@ -70,20 +73,20 @@ public static class DependencyInjection
         services.AddScoped<ICounterSaleService, CounterSaleService>();
 
         services.AddScoped<ISalesReportService, SalesReportService>();
+        services.AddScoped<IDebtReportService, DebtReportService>();
 
         services.AddScoped<PaymentAllocator>();
         services.AddScoped<PaymentQueries>();
         services.AddScoped<IPaymentService, PaymentService>();
         services.AddScoped<IMyPaymentService, MyPaymentService>();
 
-        // Cross-flow interfaces (docs/reference/api-flows/README.md §4). Each line is replaced by its owner task with
-        // the real implementation; the Temporary* class is then deleted (Common/Placeholders).
+        // Real shared steps (docs/reference/api-flows/README.md §4); the caller owns SaveChanges and commit.
         services.AddScoped<IPriceResolver, PriceResolver>();                                      // F1.1 (real)
-        services.AddScoped<IOrderSettlementGuard, TemporaryOrderSettlementGuard>();               // F3.3
-        services.AddScoped<ICreditReservationAdjuster, TemporaryCreditReservationAdjuster>();     // F3.3
-        services.AddScoped<IFulfillmentFinancialPosting, TemporaryFulfillmentFinancialPosting>(); // F3.4
-        services.AddScoped<IDebtRepaymentPosting, TemporaryDebtRepaymentPosting>();               // F3.5
-        services.AddScoped<IDebtReturnPosting, TemporaryDebtReturnPosting>();                     // F3.5
+        services.AddScoped<IOrderSettlementGuard, OrderSettlementGuard>();
+        services.AddScoped<ICreditReservationAdjuster, CreditReservationAdjuster>();
+        services.AddScoped<IFulfillmentFinancialPosting, FulfillmentFinancialPosting>();
+        services.AddScoped<IDebtRepaymentPosting, DebtRepaymentPosting>();
+        services.AddScoped<IDebtReturnPosting, DebtReturnPosting>();
         services.AddScoped<IOrderPrepaymentLedger, OrderPrepaymentLedger>();                      // F1.3 (real)
         services.AddScoped<IOrderPaymentCancellation, OrderPaymentCancellation>();                // F1.6 (real)
 
