@@ -163,7 +163,8 @@ public sealed class PaymentQueries(IAgriSageDbContext context)
 
         var allocations = await context.PaymentAllocations.AsNoTracking()
             .Where(a => a.OrderId == orderId && a.Status == PaymentAllocationStatus.Active)
-            .Join(context.Payments.Where(p => p.Status == PaymentStatus.Paid), a => a.PaymentId, p => p.Id, (a, p) => a)
+            .Join(context.Payments.Where(p => p.Status == PaymentStatus.Paid || p.Status == PaymentStatus.PartiallyRefunded
+                || p.Status == PaymentStatus.Refunded), a => a.PaymentId, p => p.Id, (a, p) => a)
             .Select(a => new { a.AllocatedAmount, a.PrepaymentConsumedAmount })
             .ToListAsync(cancellationToken);
         var paid = allocations.Sum(a => a.AllocatedAmount);

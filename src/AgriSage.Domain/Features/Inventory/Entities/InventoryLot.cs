@@ -45,6 +45,18 @@ public sealed class InventoryLot : SoftDeletableEntity
     // No automatic Expired/Depleted transitions; status changes are explicit.
     public void ChangeStatus(InventoryLotStatus status) => Status = status;
 
+    // Align the status with the business date without changing stock or overriding a manual hold.
+    public bool ExpireIfDue(DateOnly today)
+    {
+        if (Status != InventoryLotStatus.Active || ExpiryDate is null || ExpiryDate >= today)
+        {
+            return false;
+        }
+
+        Status = InventoryLotStatus.Expired;
+        return true;
+    }
+
     // Expired (expiry_date < today), quarantined, blocked or depleted Lots cannot be reserved, allocated or sold.
     public bool IsEligibleForSale(DateOnly today) =>
         Status == InventoryLotStatus.Active && (ExpiryDate is null || ExpiryDate >= today);

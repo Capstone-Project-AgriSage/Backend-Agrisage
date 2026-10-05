@@ -83,14 +83,15 @@ public sealed class Stocktake : SoftDeletableEntity
         Guid countedBy,
         DateTimeOffset countedAt,
         string? reasonCode = null,
-        string? note = null)
+        string? note = null,
+        decimal? unitCost = null)
     {
         EnsureStatus(StocktakeStatus.InProgress);
 
         var item = ActiveItems.SingleOrDefault(i => i.Id == itemId)
             ?? throw new DomainException($"Line '{itemId}' was not found on stocktake '{StocktakeNumber}'.");
 
-        item.RecordCount(countedQuantity, countedBy, countedAt, reasonCode, note);
+        item.RecordCount(countedQuantity, countedBy, countedAt, reasonCode, note, unitCost);
     }
 
     // A stale line (a movement for its Lot was posted between snapshot and count, decided by the use case) is

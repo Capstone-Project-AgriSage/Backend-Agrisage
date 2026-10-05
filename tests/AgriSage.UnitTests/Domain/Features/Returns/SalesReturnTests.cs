@@ -21,6 +21,27 @@ public class SalesReturnTests
 
     private SalesReturn CreateReturn() => new(_order, "SR-0001", StaffId, Now);
 
+    [Fact]
+    public void Finishing_inspection_requires_restock_links_and_waits_for_remaining_refund()
+    {
+        var (salesReturn, line) = CreateInspectedReturn(ReturnConditionStatus.Resellable, 3, 0);
+        Assert.Throws<DomainException>(() => salesReturn.FinishInspectionResolution(Now));
+        salesReturn.LinkReturnStockMovement(line.Id, Guid.NewGuid());
+        salesReturn.FinishInspectionResolution(Now);
+        Assert.Equal(SalesReturnStatus.PartiallyResolved, salesReturn.Status);
+        Assert.Null(salesReturn.CompletedAt);
+    }
+
+    [Fact]
+    public void Finishing_write_off_inspection_without_refund_completes_the_return_once()
+    {
+        var (salesReturn, _) = CreateInspectedReturn(ReturnConditionStatus.Damaged, 3, 60_000m);
+        salesReturn.FinishInspectionResolution(Now);
+        Assert.Equal(SalesReturnStatus.Completed, salesReturn.Status);
+        Assert.Equal(Now, salesReturn.CompletedAt);
+        Assert.Throws<DomainException>(() => salesReturn.FinishInspectionResolution(Now));
+    }
+
     private SalesReturnItem AddLine(SalesReturn salesReturn, long quantity, long alreadyReturned = 0) =>
         salesReturn.AddItem(
             _order,

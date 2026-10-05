@@ -26,6 +26,35 @@ public class PaymentTests
     }
 
     [Fact]
+    public void Completed_refund_total_sets_partial_or_full_status_and_preserves_payment_details()
+    {
+        var payment = CreatePaidCashPayment();
+        var allocation = payment.AllocateToOrder(OrderId, 50_000_000m, Now, StaffId);
+        payment.RecordCompletedRefundTotal(10_000_000m);
+        Assert.Equal(PaymentStatus.PartiallyRefunded, payment.Status);
+        Assert.Equal(50_000_000m, payment.Amount);
+        Assert.Equal(50_000_000m, allocation.AllocatedAmount);
+        Assert.Equal(Now, payment.ConfirmedAt);
+        payment.RecordCompletedRefundTotal(50_000_000m);
+        Assert.Equal(PaymentStatus.Refunded, payment.Status);
+        payment.RecordCompletedRefundTotal(50_000_000m);
+        Assert.Throws<DomainException>(() => payment.RecordCompletedRefundTotal(1));
+    }
+
+    [Fact]
+    public void Refund_total_rejects_unpaid_negative_excess_and_fractional_money()
+    {
+        Assert.Throws<DomainException>(() => CreatePayment().RecordCompletedRefundTotal(1));
+        var payment = CreatePaidCashPayment();
+        foreach (var amount in new[] { -1m, 50_000_001m, 0.001m })
+            Assert.Throws<DomainException>(() => payment.RecordCompletedRefundTotal(amount));
+        payment.RecordCompletedRefundTotal(0);
+        Assert.Equal(PaymentStatus.Paid, payment.Status);
+        payment.RecordCompletedRefundTotal(1);
+        Assert.Throws<DomainException>(() => payment.RecordCompletedRefundTotal(0));
+    }
+
+    [Fact]
     public void Amount_must_be_positive_money()
     {
         Assert.Throws<DomainException>(() => CreatePayment(amount: 0));

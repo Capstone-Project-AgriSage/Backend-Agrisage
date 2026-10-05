@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 namespace AgriSage.Application.Features.Inventory;
 
 // Read side of lots and stock movements, plus the manual lot status change.
-public sealed class InventoryService(IAgriSageDbContext context, IDateTimeProvider clock) : IInventoryService
+public sealed partial class InventoryService(IAgriSageDbContext context, IDateTimeProvider clock, IRowLockService locks) : IInventoryService
 {
     private sealed record LotRow(
         Guid Id, Guid StoreProductId, Guid ProductId, string Sku, string ProductName, string? LotNumber,
@@ -122,7 +122,13 @@ public sealed class InventoryService(IAgriSageDbContext context, IDateTimeProvid
             .Skip(request.Skip).Take(request.PageSize)
             .Select(m => new
             {
-                m.Id, m.MovementNumber, m.MovementType, m.Status, m.OccurredAt, m.GoodsReceiptId, ItemCount = m.Items.Count
+                m.Id,
+                m.MovementNumber,
+                m.MovementType,
+                m.Status,
+                m.OccurredAt,
+                m.GoodsReceiptId,
+                ItemCount = m.Items.Count
             })
             .ToListAsync(cancellationToken);
 

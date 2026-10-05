@@ -5,6 +5,28 @@ using FluentValidation;
 
 namespace AgriSage.Application.Features.Inventory;
 
+public sealed class StockSummaryRequestValidator : AbstractValidator<StockSummaryRequest>
+{
+    public StockSummaryRequestValidator()
+    {
+        Include(new PaginationRequestValidator());
+        RuleFor(r => r.Search).MaximumLength(100);
+    }
+}
+
+public sealed class InventoryAlertsRequestValidator : AbstractValidator<InventoryAlertsRequest>
+{
+    public InventoryAlertsRequestValidator()
+    {
+        Include(new PaginationRequestValidator());
+        RuleFor(r => r.WithinDays).InclusiveBetween(1, 365);
+        RuleFor(r => r.Type)
+            .Must(t => t?.Trim().ToUpperInvariant() is "EXPIRING" or "EXPIRED" or "LOW_STOCK")
+            .WithMessage("Type must be EXPIRING, EXPIRED or LOW_STOCK.")
+            .When(r => !string.IsNullOrWhiteSpace(r.Type));
+    }
+}
+
 public sealed class InventoryLotListRequestValidator : AbstractValidator<InventoryLotListRequest>
 {
     public InventoryLotListRequestValidator()

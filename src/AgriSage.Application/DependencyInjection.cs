@@ -10,6 +10,8 @@ using AgriSage.Application.Features.Files;
 using AgriSage.Application.Features.GoodsReceipts;
 using AgriSage.Application.Features.GoodsReceipts.Import;
 using AgriSage.Application.Features.Inventory;
+using AgriSage.Application.Features.Stocktakes;
+using AgriSage.Application.Features.Returns;
 using AgriSage.Application.Features.Payments;
 using AgriSage.Application.Features.Orders;
 using AgriSage.Application.Features.Pricing;
@@ -64,6 +66,10 @@ public static class DependencyInjection
         services.AddScoped<IGoodsReceiptService>(provider => provider.GetRequiredService<GoodsReceiptService>());
         services.AddScoped<IGoodsReceiptImportService, GoodsReceiptImportService>();
         services.AddScoped<IInventoryService, InventoryService>();
+        services.AddScoped<StockAdjustmentPosting>();
+        services.AddScoped<IStockAdjustmentService, StockAdjustmentService>();
+        services.AddScoped<StocktakeQueries>();
+        services.AddScoped<IStocktakeService, StocktakeService>();
 
         services.AddScoped<AuditTrail>();
         services.AddScoped<IPriceListService, PriceListService>();
@@ -82,6 +88,7 @@ public static class DependencyInjection
         services.AddScoped<ICounterSaleService, CounterSaleService>();
 
         services.AddScoped<ISalesReportService, SalesReportService>();
+        services.AddScoped<IInventoryReportService, InventoryReportService>();
         services.AddScoped<IDebtReportService, DebtReportService>();
 
         services.AddScoped<DeliveryAccess>();
@@ -107,6 +114,13 @@ public static class DependencyInjection
         services.AddScoped<IDebtReturnPosting, DebtReturnPosting>();
         services.AddScoped<IOrderPrepaymentLedger, OrderPrepaymentLedger>();                      // F1.3 (real)
         services.AddScoped<IOrderPaymentCancellation, OrderPaymentCancellation>();                // F1.6 (real)
+
+        services.AddScoped<ReturnSources>();
+        services.AddScoped<SalesReturnQueries>();
+        services.AddScoped<SalesReturnService>();
+        services.AddScoped<ISalesReturnService>(sp => sp.GetRequiredService<SalesReturnService>());
+        services.AddScoped<IMySalesReturnService, MySalesReturnService>();
+        services.AddScoped<IRefundService, RefundService>();
 
         // Further feature application services are registered here by later tasks.
 

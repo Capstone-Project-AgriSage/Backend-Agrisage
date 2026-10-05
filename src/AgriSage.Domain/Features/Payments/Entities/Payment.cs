@@ -209,6 +209,22 @@ public sealed class Payment : SoftDeletableEntity
         CancelledAt = cancelledAt;
     }
 
+    // The caller locks this payment and sums COMPLETED refunds across both sources. Refund rows are the ledger;
+    // the payment records only the resulting status, without changing its amount, confirmation or allocations.
+    public void RecordCompletedRefundTotal(decimal completedRefundTotal)
+    {
+        if (Status is not (PaymentStatus.Paid or PaymentStatus.PartiallyRefunded or PaymentStatus.Refunded))
+            throw new DomainException("Only a paid payment can be refunded.");
+        Guard.NonNegativeMoney(completedRefundTotal);
+        if (completedRefundTotal > Amount)
+            throw new DomainException("Completed refunds cannot exceed the original payment amount.");
+        if ((Status == PaymentStatus.Refunded && completedRefundTotal != Amount)
+            || (Status == PaymentStatus.PartiallyRefunded && completedRefundTotal == 0))
+            throw new DomainException("Completed refunds cannot be undone by changing the payment status.");
+        Status = completedRefundTotal == Amount ? PaymentStatus.Refunded
+            : completedRefundTotal > 0 ? PaymentStatus.PartiallyRefunded : PaymentStatus.Paid;
+    }
+
     public PaymentAllocation AllocateToOrder(
         Guid orderId,
         decimal amount,
