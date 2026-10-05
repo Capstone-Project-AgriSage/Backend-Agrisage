@@ -13,7 +13,8 @@ Version 2.0 — 2026-10-03. Replaces the three module contracts (`API_CONTRACT_S
 
 **For the front-end team:** [FE_GUIDE_FLOW_1.md](FE_GUIDE_FLOW_1.md) maps the designed screens of the Sales, Agent and Admin apps to the
 routes of flow L1 (Vietnamese; examples, errors, TypeScript types, gaps between the design and the API). Update it in the same PR
-whenever a flow L1 route or DTO changes.
+whenever a flow L1 route or DTO changes. [FE_GUIDE_FLOW_2.md](FE_GUIDE_FLOW_2.md) does the same for flow L2 (Farmer web/mobile:
+profile, cart, checkout, payOS, delivery tracking; Management web: delivery notes, assignment, attempts, incidents, report).
 
 Every route and DTO of the old contracts is kept unchanged (moved into one flow file); flows only **add**
 endpoints and fields. Business rules come from `DATABASE_DESIGN.md`; when a flow file and the design disagree,
