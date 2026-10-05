@@ -46,4 +46,7 @@ public sealed class CustomersController(ICustomerService service) : ControllerBa
 
     [HttpGet("{farmerProfileId:guid}/payments")]
     public Task<PagedResult<CustomerPaymentResponse>> Payments(Guid farmerProfileId, [FromQuery] PaymentListRequest request, CancellationToken token) => service.PaymentsAsync(farmerProfileId, request, token);
+
+    [HttpGet("{farmerProfileId:guid}/addresses")]
+    public Task<IReadOnlyList<AddressResponse>> Addresses(Guid farmerProfileId, CancellationToken token) => service.AddressesAsync(farmerProfileId, token);
 }

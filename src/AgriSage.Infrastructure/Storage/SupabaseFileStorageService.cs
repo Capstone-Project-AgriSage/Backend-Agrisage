@@ -93,6 +93,22 @@ public sealed class SupabaseFileStorageService(
         }
     }
 
+    // Without configuration no URL can be recognized, so none is accepted.
+    public string? KeyFromPublicUrl(string url, StorageArea area)
+    {
+        var settings = options.Value;
+        var bucket = settings.BucketFor(area);
+        if (string.IsNullOrWhiteSpace(settings.Url) || string.IsNullOrWhiteSpace(bucket))
+        {
+            return null;
+        }
+
+        var prefix = PublicUrl(settings, bucket, "");
+        return url.StartsWith(prefix, StringComparison.Ordinal) && url.Length > prefix.Length
+            ? Uri.UnescapeDataString(url[prefix.Length..])
+            : null;
+    }
+
     private StorageOptions RequireConfigured(StorageArea area)
     {
         var settings = options.Value;

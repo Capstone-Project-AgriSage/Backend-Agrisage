@@ -46,7 +46,7 @@ public class CustomersDatabaseTests
             var writes = new CustomerWrites(Context, User, clock, audit);
             var errors = new NpgsqlErrorClassifier();
             var locks = new RowLockService(Context);
-            Customers = new CustomerService(Context, new PasswordHashService(), clock, errors, locks, audit, writes, new PaymentQueries(Context));
+            Customers = new CustomerService(Context, new PasswordHashService(), clock, errors, locks, audit, writes, new PaymentQueries(Context), new CustomerAddresses(Context));
             Groups = new CustomerGroupService(Context, clock, errors, locks, new CustomerGroupDefaultSwitcher(Context), writes, audit);
             Credit = new CustomerCreditService(Context, locks, errors, writes, audit);
         }

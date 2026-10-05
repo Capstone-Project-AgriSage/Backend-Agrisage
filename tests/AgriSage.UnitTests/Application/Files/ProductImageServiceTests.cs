@@ -41,6 +41,9 @@ public class ProductImageServiceTests
             Deleted = storageKey;
             return Task.CompletedTask;
         }
+
+        public string? KeyFromPublicUrl(string url, StorageArea area) =>
+            url.StartsWith("https://cdn.example.com/", StringComparison.Ordinal) ? url["https://cdn.example.com/".Length..] : null;
     }
 
     private static (ProductImageService Service, FakeStorage Storage) Create()

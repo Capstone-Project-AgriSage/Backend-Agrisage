@@ -39,4 +39,8 @@ public sealed class RowLockService(AgriSageDbContext context) : IRowLockService
             $"SELECT 1 FROM inventory_lot_balances WHERE inventory_lot_id = ANY({ids}) ORDER BY inventory_lot_id FOR UPDATE",
             cancellationToken);
     }
+
+    public async Task LockDeliveryAsync(Guid deliveryId, CancellationToken cancellationToken) =>
+        await context.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT 1 FROM deliveries WHERE id = {deliveryId} FOR UPDATE", cancellationToken);
 }

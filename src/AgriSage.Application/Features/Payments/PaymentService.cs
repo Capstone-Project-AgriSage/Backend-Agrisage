@@ -123,7 +123,9 @@ public sealed class PaymentService(
 
         if (payment.PaymentMethod == PaymentMethod.PayOs)
         {
-            throw new BusinessRuleException("A payOS payment is cancelled through payOS (POST /api/payments/payos/{id}/cancel).");
+            throw new BusinessRuleException(
+                "A payOS payment is closed through payOS: the customer cancels it (POST /api/me/payments/{id}/cancel) or it expires; "
+                + "update it with POST /api/payments/{id}/sync.");
         }
 
         payment.Cancel(clock.UtcNow);

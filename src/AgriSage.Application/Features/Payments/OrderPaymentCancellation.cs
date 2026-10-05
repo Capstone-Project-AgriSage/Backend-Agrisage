@@ -12,8 +12,8 @@ namespace AgriSage.Application.Features.Payments;
 
 // Real IOrderPaymentCancellation (task F1.6, FLOW_1 §8; database design §35.18 and §35.21). Called when an order ended
 // CANCELLED or PARTIALLY_CANCELLED; runs inside the caller's transaction and never saves.
-//  - PENDING cash payments are cancelled. A PENDING payOS payment is refused (422): its link is closed through payOS first
-//    (task F2.4 replaces this refusal with the gateway call).
+//  - PENDING payments are cancelled; a PENDING payOS payment's link is closed at payOS first (task F2.4). This one gateway
+//    call runs inside the caller's transaction, so the order cannot change meanwhile.
 //  - The money that was paid for this order and will never be used goes back: every PAID payment gives up its unconsumed
 //    ORDER prepayment (Payment.ReleaseUnconsumedPrepayment) and one PENDING cancelled-order refund is requested per payment
 //    (CASH for cash, BANK_TRANSFER for payOS). Staff hand the money back and record it (no automatic payOS refund).
@@ -23,6 +23,7 @@ namespace AgriSage.Application.Features.Payments;
 public sealed class OrderPaymentCancellation(
     IAgriSageDbContext context,
     IRowLockService locks,
+    IPaymentGateway gateway,
     IDateTimeProvider clock,
     AuditTrail audit) : IOrderPaymentCancellation
 {
@@ -45,10 +46,21 @@ public sealed class OrderPaymentCancellation(
 
         foreach (var pending in payments.Where(p => p.Status == PaymentStatus.Pending).OrderBy(p => p.Id))
         {
-            if (pending.PaymentMethod == PaymentMethod.PayOs)
+            if (pending.PaymentMethod == PaymentMethod.PayOs && pending.ProviderOrderCode is { } orderCode)
             {
-                throw new BusinessRuleException(
-                    $"Payment '{pending.PaymentNumber}' is still waiting on payOS: cancel the online payment first.");
+                // F2.4: the link is closed at payOS before the payment is cancelled here. A link payOS already reports
+                // PAID is not cancelled: the money arrived, so it is applied first (sync) and the cancel is retried.
+                var link = await gateway.GetPaymentLinkAsync(orderCode, cancellationToken);
+                if (link.Status == PaymentLinkStatus.Paid)
+                {
+                    throw new BusinessRuleException(
+                        $"Payment '{pending.PaymentNumber}' was just paid online: sync it (POST /api/payments/{pending.Id}/sync), then cancel again.");
+                }
+
+                if (link.Status is PaymentLinkStatus.Pending or PaymentLinkStatus.Processing or PaymentLinkStatus.Underpaid)
+                {
+                    await gateway.CancelPaymentLinkAsync(orderCode, reason, cancellationToken);
+                }
             }
 
             pending.Cancel(now);

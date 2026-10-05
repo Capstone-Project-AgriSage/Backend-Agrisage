@@ -20,4 +20,8 @@ public interface IRowLockService
     // Serializes reservation and issue of stock: locks the balances of the given lots in id order (no deadlock between
     // two orders that share lots). Nothing to lock for an empty list.
     Task LockLotBalancesAsync(IReadOnlyCollection<Guid> inventoryLotIds, CancellationToken cancellationToken);
+
+    // Serializes changes of one delivery note (assign, lots, dispatch, attempts, cancel). Callers that also lock the
+    // order lock the order first.
+    Task LockDeliveryAsync(Guid deliveryId, CancellationToken cancellationToken);
 }

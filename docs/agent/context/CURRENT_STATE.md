@@ -226,6 +226,25 @@ setup documentation
 - Done (branch `feature/f1-6-cancel-orders`, task F1.6) — `POST /api/orders/{id}/cancel` (FLOW_1 §8; `OrderCancellationService`, shared `OrderCanceller`) and the real `IOrderPaymentCancellation` (`OrderPaymentCancellation`, replaces `TemporaryOrderPaymentCancellation`; also used by cancel-remaining). Domain: `Payment.ReleaseUnconsumedPrepayment` / `PaymentAllocation.ReleaseUnconsumed` (design §35.21). No schema change, no migration.
 - Done (branch `feature/f1-7-counter-sales`, task F1.7) — Quick counter sale: `POST /api/counter-sales/preview` and `POST /api/counter-sales` (FLOW_1 §9; `CounterSaleService`, shared `CashPayments`, `FefoProposals`). The order, cash payment, reservation and pickup are one atomic operation. Fixed on the way: the whole-package check of a pickup is on the line total, not per lot (FEFO splits a line at any base quantity). `TemporaryFulfillmentFinancialPosting` now consumes prepayment for FULL_PAYMENT. No schema change, no migration.
 - Done (branch `feature/f1-8-sales-report`, task F1.8) — Sales report: `GET /api/reports/sales` (FLOW_1 §10; `Api/Features/Reports/ReportsController`, `Application/Features/Reports/SalesReportService`). Flow L1 (F1.1–F1.8) is complete. No schema change, no migration.
+- Done (branch `feature/f2-1-farmer-profile-addresses`, task F2.1 remaining part) — Farmer profile and addresses: 7 routes `/api/me/profile`, `/api/me/addresses` (FLOW_2 §3.1; `Api/Features/Customers/MeProfileController`, `Application/Features/Customers/MyProfileService`, shared `CustomerAddresses` read) and `GET /api/customers/{farmerProfileId}/addresses`. First address = default; `isDefault: true` / `set-default` move the flag in one transaction (`IUserAddressDefaultSwitcher` pre-clears the old flag like `ICustomerGroupDefaultSwitcher`); `isDefault: false` never removes it; deleting the default leaves none; max 10 active addresses (422). No schema change, no migration. The staff customer routes of §3.2 came from the Customer management PR (`CUSTOMER_MANAGEMENT.md`), whose create contract differs from FLOW_2 §3.2 (password required, no store-managed account without a usable password).
+- Done (same branch, tasks F2.2–F2.7) — Flow L2 complete except the F2.1 staff-contract difference above:
+  F2.2 cart (`Api/Features/Carts/MeCartController`, `Application/Features/Carts/CartService`; prices recalculated through
+  `IPriceResolver` on every read, lines flagged NOT_SELLABLE / NO_PRICE), F2.3 checkout and my orders
+  (`MeOrdersController`, `MeOrderService`: L1's `OrderBuilder` without overrides, cart CONVERTED in the same transaction,
+  Farmer cancel only while PENDING_CONFIRMATION through `OrderCanceller`), shared `Customers/CurrentFarmer`.
+  F2.4 payOS: `IPaymentGateway` reshaped (async webhook verification, status query, cancel, whole-VND amounts, QR code,
+  expiry), adapter `Infrastructure/Payments/PayOsPaymentGateway` (official SDK `payOS` 2.1.0, decision C-D7, no known
+  vulnerabilities; `PayOsOptions`, 503 `PaymentGatewayUnavailableException` when not configured), `PayOsPaymentService`
+  (payOS never called inside an open DB transaction; webhook idempotent under the order → payment locks; outcomes logged by the
+  controller with the order code only), Domain `Payment.AssignProviderOrderCode` (code stored before the link is requested),
+  `OrderPaymentCancellation` now closes a PENDING payOS link at payOS instead of refusing (F2.4 part of F1.6).
+  F2.5–F2.7 deliveries (`Application/Features/Deliveries`, `Api/Features/Deliveries`): notes allocated FEFO from the
+  order's reservation minus what other notes hold, planned limit across active notes, lot change keeps the released allocation
+  and moves the reservation (new lots reserved before the old ones are released), DELIVERY_STAFF scope (`DeliveryAccess`),
+  attempts post through L1's `FulfillmentPostingService`, proof photos accepted only from the `delivery-proofs` bucket
+  (`IFileStorageService.KeyFromPublicUrl`) and protected from deletion (`IProofPhotoUsage`, decision C-D3), incidents link only
+  posted ADJUSTMENT movements, Farmer tracking, `Reports/DeliveryReportService`. `IRowLockService.LockDeliveryAsync` added.
+  No schema change, no migration. Verified with the real-DB suite (`AGRISAGE_DB_TESTS=1`).
 - Done (branch `feature/cors-allowed-origins`) — CORS for the web client: `Api/Extensions/CorsExtensions` (`Cors:AllowedOrigins`, validated at start-up), `UseCors` first in `Program.cs`, local dev origins in `appsettings.Development.json`. Set the production origin(s) with environment variables `Cors__AllowedOrigins__0` … when the web app is deployed. No schema change.
 
 ## Not Yet Implied by Foundation Completion

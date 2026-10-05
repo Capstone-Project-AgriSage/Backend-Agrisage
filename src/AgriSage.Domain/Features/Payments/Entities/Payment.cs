@@ -137,6 +137,25 @@ public sealed class Payment : SoftDeletableEntity
         ProviderMetadata = providerMetadata;
     }
 
+    // payOS (F2.4): the order code is stored before the link is requested, so a webhook can always find the payment.
+    public void AssignProviderOrderCode(string provider, long providerOrderCode)
+    {
+        EnsureStatus(PaymentStatus.Pending);
+
+        if (PaymentMethod != PaymentMethod.PayOs)
+        {
+            throw new DomainException("Only a PAYOS payment has a provider order code.");
+        }
+
+        if (ProviderOrderCode is not null)
+        {
+            throw new DomainException("The payment already has a provider order code.");
+        }
+
+        Provider = Guard.NotNullOrWhiteSpace(provider);
+        ProviderOrderCode = Guard.Positive(providerOrderCode);
+    }
+
     // Cash is confirmed by staff; payOS is confirmed by its webhook (the source of truth).
     public void MarkPaid(
         PaymentConfirmationSource confirmationSource,

@@ -243,6 +243,39 @@ change lot status; suppliers are managed by Admin/Store Owner (Sales read only).
 
 A confirmed receipt cannot be edited or deleted; reversal and Excel import are later tasks.
 
+### Online orders, payOS and deliveries (flow L2)
+
+Contract: `docs/reference/api-flows/FLOW_2_ONLINE_ORDER_DELIVERY.md`. Farmer routes (`/api/me/...`) take the Farmer from the token.
+
+| Endpoints | Who | Purpose |
+|---|---|---|
+| `GET/PUT /api/me/profile`, `/api/me/addresses` (+ `/{id}`, `/{id}/set-default`) | Farmer | Profile and up to 10 addresses (first = default) |
+| `GET /api/customers/{farmerProfileId}/addresses` | Operate | A customer's addresses |
+| `/api/me/cart` (+ `/items`, `/items/{itemId}`) | Farmer | Cart; prices recalculated on every read |
+| `POST/GET /api/me/orders`, `GET /{id}`, `POST /{id}/cancel` | Farmer | Checkout from the cart, own orders, cancel while PENDING_CONFIRMATION |
+| `POST /api/me/payments/payos`, `POST /api/me/payments/{id}/cancel` | Farmer | payOS link for own order / debt, cancel own pending link |
+| `POST /api/payments/payos`, `POST /api/payments/{id}/sync` | Operate (sync: also Farmer, own) | Staff payOS link, status query |
+| `POST /api/payments/payos/webhook` | anonymous | payOS webhook (signature verified, idempotent) |
+| `/api/deliveries` (+ `/{id}/assign`, `/items/{itemId}/lots`, `/dispatch`, `/cancel`), `GET /api/orders/{id}/deliveries` | Read / Operate | Delivery notes; DELIVERY_STAFF see only theirs |
+| `/api/deliveries/{id}/attempts` (+ `/complete`, `/cancel`), `/api/deliveries/{id}/incidents` (+ `/resolve`) | Assigned delivery staff / Operate | Trips, proof of delivery, incidents |
+| `GET /api/me/orders/{id}/deliveries` · `GET /api/reports/deliveries` | Farmer · Manage | Delivery tracking · delivery report |
+
+payOS setup (official SDK `payOS` 2.1.0, used only in `Infrastructure/Payments/PayOsPaymentGateway`):
+
+```bash
+dotnet user-secrets set "PayOS:ClientId" "<client id>" --project src/AgriSage.Api        # env: PayOS__ClientId
+dotnet user-secrets set "PayOS:ApiKey" "<api key>" --project src/AgriSage.Api            # env: PayOS__ApiKey
+dotnet user-secrets set "PayOS:ChecksumKey" "<checksum key>" --project src/AgriSage.Api  # env: PayOS__ChecksumKey
+```
+
+- `PayOS:ReturnUrl`, `PayOS:CancelUrl` (where the buyer's browser goes back to; the client only reads `orderCode` and asks the
+  API) and `PayOS:LinkExpiryMinutes` (30) are not secret and are committed in `appsettings.Development.json`.
+- Register the webhook URL `https://<public host>/api/payments/payos/webhook` once in the payOS dashboard. In development the
+  API needs a public HTTPS tunnel (ngrok, cloudflared). payOS calls it with a test payload; the endpoint answers 200.
+- A missing configuration makes only the payOS endpoints answer `503`. payOS amounts are whole VND (a fraction is paid in cash).
+- Proof photos of deliveries go to the public bucket `delivery-proofs` (see Image upload); attempts and incidents accept only
+  URLs of that bucket, and a photo they use can no longer be deleted.
+
 ### First Admin
 
 Needs the reference seed first (the `ADMIN` role). Password only from User Secrets / environment, never appsettings:

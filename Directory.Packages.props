@@ -19,6 +19,8 @@
   <ItemGroup Label="Infrastructure">
     <!-- Goods receipt Excel import/template (F4.3, decision F-D7, MIT). Used only in Infrastructure/Spreadsheets. -->
     <PackageVersion Include="ClosedXML" Version="0.105.1" />
+    <!-- Official payOS .NET SDK (F2.4, decision C-D7). Used only in Infrastructure/Payments/PayOsPaymentGateway. -->
+    <PackageVersion Include="payOS" Version="2.1.0" />
   </ItemGroup>
 
   <ItemGroup Label="Application">

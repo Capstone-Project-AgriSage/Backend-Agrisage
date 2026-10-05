@@ -136,7 +136,7 @@ but must be REGISTERED customers (customer group prices, credit, debt):
 
 ---
 
-## 4. F2.2 — Farmer cart (`FARMER`)
+## 4. F2.2 — Farmer cart (`FARMER`) — done
 
 The cart never stores prices: every response recalculates them through `IPriceResolver` (README §4.1).
 One ACTIVE cart per Farmer per store; it is created on first use. Walk-in customers have no cart.
@@ -178,7 +178,7 @@ the cart (it is only reserved at confirmation, F1.4).
 
 ---
 
-## 5. F2.3 — Online checkout and my orders (`FARMER`)
+## 5. F2.3 — Online checkout and my orders (`FARMER`) — done
 
 | Method | Route | Body | Response |
 |---|---|---|---|
@@ -213,7 +213,7 @@ the cart (it is only reserved at confirmation, F1.4).
 
 ---
 
-## 6. F2.4 — payOS
+## 6. F2.4 — payOS — done
 
 Verified against the payOS .NET SDK `payOS` 2.1.0 and its earlier use in the team's NutriPlan project
 (2026-10-02). Items marked *(verify)* come from the payOS documentation and must be checked against the
@@ -312,7 +312,7 @@ webhooks, returning raw exception messages to clients.
 
 ---
 
-## 7. F2.5 — Delivery notes
+## 7. F2.5 — Delivery notes — done
 
 | Method | Route | Roles | Body | Response |
 |---|---|---|---|---|
@@ -397,7 +397,7 @@ recipientName, province, scheduledAt, dispatchedAt, completedAt, itemCount, crea
 
 ---
 
-## 8. F2.6 — Delivery attempts and incidents
+## 8. F2.6 — Delivery attempts and incidents — done
 
 | Method | Route | Roles | Body | Response |
 |---|---|---|---|---|
@@ -489,7 +489,7 @@ evidenceImageUrl, relatedStockMovementId, reportedBy, reportedAt, resolvedBy, re
 
 ---
 
-## 9. F2.7 — Delivery tracking and delivery report (new)
+## 9. F2.7 — Delivery tracking and delivery report (new) — done
 
 | Method | Route | Roles | Query | Response |
 |---|---|---|---|---|

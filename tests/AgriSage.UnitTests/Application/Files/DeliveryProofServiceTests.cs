@@ -34,12 +34,33 @@ public class DeliveryProofServiceTests
             Deleted = (storageKey, area);
             return Task.CompletedTask;
         }
+
+        public string? KeyFromPublicUrl(string url, StorageArea area) =>
+            url.StartsWith("https://cdn.example.com/", StringComparison.Ordinal) ? url["https://cdn.example.com/".Length..] : null;
     }
 
-    private static (DeliveryProofService Service, FakeStorage Storage) Create()
+    private sealed class FakeUsage(params string[] used) : IProofPhotoUsage
+    {
+        public Task<bool> IsUsedAsync(string storageKey, CancellationToken cancellationToken) =>
+            Task.FromResult(used.Contains(storageKey));
+    }
+
+    private static (DeliveryProofService Service, FakeStorage Storage) Create(params string[] usedKeys)
     {
         var storage = new FakeStorage();
-        return (new DeliveryProofService(storage, new FakeClock()), storage);
+        return (new DeliveryProofService(storage, new FakeClock(), new FakeUsage(usedKeys)), storage);
+    }
+
+    // Decision C-D3: a photo saved on an attempt or incident stays.
+    [Fact]
+    public async Task A_photo_used_as_proof_cannot_be_deleted()
+    {
+        const string key = "2026/10/0123456789abcdef0123456789abcdef.jpg";
+        var (service, storage) = Create(key);
+
+        await Assert.ThrowsAsync<BusinessRuleException>(
+            () => service.DeleteAsync(key, TestContext.Current.CancellationToken));
+        Assert.Null(storage.Deleted);
     }
 
     private static MemoryStream Jpeg(int total) => new([.. JpegHeader, .. new byte[total - JpegHeader.Length]]);

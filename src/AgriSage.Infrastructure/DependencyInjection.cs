@@ -2,6 +2,7 @@ using AgriSage.Application.Common.Interfaces;
 using AgriSage.Application.Features.Customers;
 using AgriSage.Application.Features.GoodsReceipts.Import;
 using AgriSage.Infrastructure.Authentication;
+using AgriSage.Infrastructure.Payments;
 using AgriSage.Infrastructure.Persistence;
 using AgriSage.Infrastructure.Persistence.Interceptors;
 using AgriSage.Infrastructure.Persistence.Seed;
@@ -11,6 +12,7 @@ using AgriSage.Infrastructure.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace AgriSage.Infrastructure;
 
@@ -62,6 +64,7 @@ public static class DependencyInjection
         services.AddScoped<IAgriSageDbContext>(provider => provider.GetRequiredService<AgriSageDbContext>());
         services.AddScoped<IRowLockService, RowLockService>();
         services.AddScoped<ICustomerGroupDefaultSwitcher, CustomerGroupDefaultSwitcher>();
+        services.AddScoped<IUserAddressDefaultSwitcher, UserAddressDefaultSwitcher>();
 
         services.AddOptions<SeedStoreOptions>().Bind(configuration.GetSection(SeedStoreOptions.SectionName));
         services.AddScoped<DatabaseSeeder>();
@@ -70,10 +73,15 @@ public static class DependencyInjection
         services.AddOptions<StorageOptions>().Bind(configuration.GetSection(StorageOptions.SectionName));
         services.AddHttpClient<IFileStorageService, SupabaseFileStorageService>(client => client.Timeout = TimeSpan.FromSeconds(30));
 
+        // payOS (F2.4): a missing configuration only makes the payOS endpoints answer 503.
+        services.AddOptions<PayOsOptions>().Bind(configuration.GetSection(PayOsOptions.SectionName));
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddHttpClient<IPaymentGateway, PayOsPaymentGateway>(client => client.Timeout = TimeSpan.FromSeconds(30));
+
         // Goods receipt Excel template (ClosedXML, stateless).
         services.AddSingleton<IReceiptSpreadsheet, ClosedXmlReceiptSpreadsheet>();
 
-        // Further provider adapters (payOS, AI) are registered here by later tasks.
+        // Further provider adapters (AI) are registered here by later tasks.
 
         return services;
     }

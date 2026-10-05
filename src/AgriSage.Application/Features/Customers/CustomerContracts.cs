@@ -84,4 +84,5 @@ public interface ICustomerService
     Task<CustomerDebtSummaryResponse> DebtSummaryAsync(Guid id, CancellationToken cancellationToken);
     Task<PagedResult<CustomerOrderResponse>> OrdersAsync(Guid id, CustomerOrderListRequest request, CancellationToken cancellationToken);
     Task<PagedResult<CustomerPaymentResponse>> PaymentsAsync(Guid id, PaymentListRequest request, CancellationToken cancellationToken);
+    Task<IReadOnlyList<AddressResponse>> AddressesAsync(Guid id, CancellationToken cancellationToken);
 }

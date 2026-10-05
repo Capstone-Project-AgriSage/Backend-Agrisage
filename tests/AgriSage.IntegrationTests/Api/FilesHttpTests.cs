@@ -321,6 +321,9 @@ public class FilesHttpTests : IClassFixture<FilesHttpTests.FilesApiFactory>
             DeletedAreas.Add(area);
             return Task.CompletedTask;
         }
+
+        public string? KeyFromPublicUrl(string url, StorageArea area) =>
+            url.StartsWith("https://cdn.example.com/", StringComparison.Ordinal) ? url["https://cdn.example.com/".Length..] : null;
     }
 
     public sealed class FilesApiFactory : WebApplicationFactory<Program>

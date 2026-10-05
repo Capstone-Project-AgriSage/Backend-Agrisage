@@ -26,6 +26,11 @@ public sealed class RealStorageFactAttribute : FactAttribute
 // checks it is gone. The object is removed even when an assertion fails.
 public class RealStorageTests
 {
+    private sealed class NoUsage : IProofPhotoUsage
+    {
+        public Task<bool> IsUsedAsync(string storageKey, CancellationToken cancellationToken) => Task.FromResult(false);
+    }
+
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
     private static readonly byte[] TinyPng = Convert.FromBase64String(
@@ -105,7 +110,7 @@ public class RealStorageTests
         Assert.True(options.IsConfigured, "Storage:Url, Storage:Bucket and Storage:SecretKey must be configured.");
         var storage = new SupabaseFileStorageService(
             new HttpClient(), Options.Create(options), NullLogger<SupabaseFileStorageService>.Instance);
-        var proofs = new DeliveryProofService(storage, new AgriSage.Infrastructure.Services.DateTimeProvider());
+        var proofs = new DeliveryProofService(storage, new AgriSage.Infrastructure.Services.DateTimeProvider(), new NoUsage());
         using var reader = new HttpClient();
         string? key = null;
 
@@ -113,6 +118,9 @@ public class RealStorageTests
         {
             var uploaded = await proofs.UploadAsync(new MemoryStream(TinyPng), Token);
             key = uploaded.StorageKey;
+            // The returned URL is recognized as this bucket's photo (accepted by delivery attempts and incidents).
+            Assert.Equal(key, storage.KeyFromPublicUrl(uploaded.Url, StorageArea.DeliveryProofs));
+            Assert.Null(storage.KeyFromPublicUrl(uploaded.Url, StorageArea.ProductImages));
 
             Assert.StartsWith($"{options.Url!.TrimEnd('/')}/storage/v1/object/public/{options.DeliveryProofBucket}/", uploaded.Url);
             var download = await reader.GetAsync(uploaded.Url, Token);

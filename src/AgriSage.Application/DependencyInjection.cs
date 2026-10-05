@@ -2,9 +2,11 @@ using AgriSage.Application.Common;
 using AgriSage.Application.Common.Placeholders;
 using AgriSage.Application.Features.Auth.Interfaces;
 using AgriSage.Application.Features.Auth.Services;
+using AgriSage.Application.Features.Carts;
 using AgriSage.Application.Features.Credit;
 using AgriSage.Application.Features.Customers;
 using AgriSage.Application.Features.Debt;
+using AgriSage.Application.Features.Deliveries;
 using AgriSage.Application.Features.Files;
 using AgriSage.Application.Features.GoodsReceipts;
 using AgriSage.Application.Features.GoodsReceipts.Import;
@@ -37,6 +39,10 @@ public static class DependencyInjection
         services.AddScoped<ICustomerService, CustomerService>();
         services.AddScoped<ICustomerGroupService, CustomerGroupService>();
         services.AddScoped<ICustomerCreditService, CustomerCreditService>();
+        services.AddScoped<CustomerAddresses>();
+        services.AddScoped<IMyProfileService, MyProfileService>();
+        services.AddScoped<CurrentFarmer>();
+        services.AddScoped<ICartService, CartService>();
 
         services.AddScoped<ICategoryService, CategoryService>();
         services.AddScoped<IBrandService, BrandService>();
@@ -47,6 +53,7 @@ public static class DependencyInjection
         services.AddScoped<ICatalogService, CatalogService>();
         services.AddScoped<IProductImageService, ProductImageService>();
         services.AddScoped<IDeliveryProofService, DeliveryProofService>();
+        services.AddScoped<IProofPhotoUsage, DeliveryProofUsage>();
 
         services.AddScoped<ISupplierService, SupplierService>();
         services.AddScoped<GoodsReceiptConfirmer>();
@@ -67,9 +74,20 @@ public static class DependencyInjection
         services.AddScoped<IOrderPickupService, OrderPickupService>();
         services.AddScoped<OrderCanceller>();
         services.AddScoped<IOrderCancellationService, OrderCancellationService>();
+        services.AddScoped<IMeOrderService, MeOrderService>();
+        services.AddScoped<IPayOsPaymentService, PayOsPaymentService>();
         services.AddScoped<ICounterSaleService, CounterSaleService>();
 
         services.AddScoped<ISalesReportService, SalesReportService>();
+
+        services.AddScoped<DeliveryAccess>();
+        services.AddScoped<DeliveryQueries>();
+        services.AddScoped<DeliveryProofUrls>();
+        services.AddScoped<IDeliveryService, DeliveryService>();
+        services.AddScoped<IDeliveryAttemptService, DeliveryAttemptService>();
+        services.AddScoped<IDeliveryIncidentService, DeliveryIncidentService>();
+        services.AddScoped<IMyDeliveryService, MyDeliveryService>();
+        services.AddScoped<IDeliveryReportService, DeliveryReportService>();
 
         services.AddScoped<PaymentAllocator>();
         services.AddScoped<PaymentQueries>();

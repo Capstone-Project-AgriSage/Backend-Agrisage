@@ -19,6 +19,7 @@ using AgriSage.Domain.Features.Stores.Entities;
 using AgriSage.Domain.Features.Stores.Enums;
 using AgriSage.Infrastructure.Persistence;
 using AgriSage.Infrastructure.Services;
+using AgriSage.IntegrationTests.Infrastructure.Payments;
 using AgriSage.IntegrationTests.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -68,7 +69,7 @@ public class SalesReportDatabaseTests
             var posting = new FulfillmentPostingService(context, locks, new TemporaryFulfillmentFinancialPosting(ledger));
             Orders = new OrderService(context, builder, queries, user, Clock, errors, audit);
             Confirmation = new OrderConfirmationService(context, locks, confirmer, queries, Clock, errors, audit);
-            Pickup = new OrderPickupService(context, locks, posting, new TemporaryOrderSettlementGuard(), new OrderPaymentCancellation(context, locks, Clock, audit), queries, user, Clock, audit);
+            Pickup = new OrderPickupService(context, locks, posting, new TemporaryOrderSettlementGuard(), new OrderPaymentCancellation(context, locks, new FakePaymentGateway(), Clock, audit), queries, user, Clock, audit);
             Sales = new CounterSaleService(
                 context, builder, new PaymentAllocator(Clock, new TemporaryCreditReservationAdjuster(), new TemporaryDebtRepaymentPosting()),
                 confirmer, posting, queries, new PaymentQueries(context), user, Clock, errors, audit);

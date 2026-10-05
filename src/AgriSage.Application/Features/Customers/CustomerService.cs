@@ -16,7 +16,7 @@ namespace AgriSage.Application.Features.Customers;
 
 public sealed class CustomerService(IAgriSageDbContext context, IPasswordHashService passwords,
     IDateTimeProvider clock, IDatabaseErrorClassifier databaseErrors, IRowLockService locks,
-    AuditTrail audit, CustomerWrites writes, PaymentQueries paymentQueries) : ICustomerService
+    AuditTrail audit, CustomerWrites writes, PaymentQueries paymentQueries, CustomerAddresses addresses) : ICustomerService
 {
     // Intermediate SQL projection: format API enums only after paging/materialization.
     private sealed class Row
@@ -261,6 +261,16 @@ public sealed class CustomerService(IAgriSageDbContext context, IPasswordHashSer
                 .Select(a => new PaymentAllocationResponse(a.Id, "DEBT", null, null, a.DebtEntryId, a.EntryNumber,
                     a.AllocatedAmount, a.PrepaymentConsumedAmount, EnumText.Format(a.Status), a.AllocatedAt)).ToList())).ToList(),
             page.Page, page.PageSize, page.TotalCount);
+    }
+
+    public async Task<IReadOnlyList<AddressResponse>> AddressesAsync(Guid id, CancellationToken token)
+    {
+        writes.Actor();
+        var userId = await context.FarmerProfiles.AsNoTracking()
+            .Where(f => f.Id == id && f.User.Role.Code == RoleCode.Farmer)
+            .Select(f => (Guid?)f.UserId).FirstOrDefaultAsync(token)
+            ?? throw new NotFoundException("Customer", id);
+        return await addresses.ListAsync(userId, token);
     }
 
     private async Task<IQueryable<Row>> RowsAsync(Guid storeId, CancellationToken token)

@@ -1,4 +1,5 @@
 using AgriSage.Application.Common;
+using AgriSage.Application.Common.Interfaces;
 using AgriSage.Application.Common.Exceptions;
 using AgriSage.Application.Common.Placeholders;
 using AgriSage.Application.Features.Orders;
@@ -18,6 +19,7 @@ using AgriSage.Domain.Features.Stores.Entities;
 using AgriSage.Domain.Features.Stores.Enums;
 using AgriSage.Infrastructure.Persistence;
 using AgriSage.Infrastructure.Services;
+using AgriSage.IntegrationTests.Infrastructure.Payments;
 using AgriSage.IntegrationTests.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -55,7 +57,7 @@ public class OrderCancellationDatabaseTests
                 context, new OrderBuilder(context, new PriceResolver(context), user, clock, audit), queries, user, clock, errors, audit);
             Confirmation = new OrderConfirmationService(
                 context, locks, new OrderConfirmer(context, locks, new TemporaryOrderSettlementGuard(), user, clock, audit), queries, clock, errors, audit);
-            Cancellation = new OrderPaymentCancellation(context, locks, clock, audit);
+            Cancellation = new OrderPaymentCancellation(context, locks, Gateway, clock, audit);
             Pickup = new OrderPickupService(
                 context, locks, new FulfillmentPostingService(context, locks, new TemporaryFulfillmentFinancialPosting(new OrderPrepaymentLedger(context))),
                 new TemporaryOrderSettlementGuard(), Cancellation, queries, user, clock, audit);
@@ -83,6 +85,8 @@ public class OrderCancellationDatabaseTests
         public OrderService Orders { get; }
 
         public OrderConfirmationService Confirmation { get; }
+
+        public FakePaymentGateway Gateway { get; } = new();
 
         public OrderPaymentCancellation Cancellation { get; }
 
@@ -311,26 +315,47 @@ public class OrderCancellationDatabaseTests
         Assert.Equal((96L, 6L), await BalanceAsync(env, lot.Id));
     }
 
+    // F2.4: a pending payOS link is closed at payOS and the order is cancelled; a link payOS already reports PAID stops the
+    // cancellation until it is synced.
     [RealDbFact]
-    public async Task Pending_cash_payments_are_cancelled_and_a_pending_payos_payment_stops_the_cancellation()
+    public async Task Pending_payments_are_cancelled_and_a_pending_payos_link_is_closed_at_payos()
     {
         await using var session = await RealDb.Session.StartAsync();
         await using var env = await PrepareAsync(session);
         var sku = await NewSkuAsync(env);
         var cash = await NewOrderAsync(env, sku, 1);
         var online = await NewOrderAsync(env, sku, 1);
+        var paidOnline = await NewOrderAsync(env, sku, 1);
         var pendingCash = new Payment(env.StoreId, "PM-PENDING-C", PaymentContext.OrderPayment, PaymentMethod.Cash, 10_000m, Now, null, env.Actor.Id, orderId: cash.Id);
-        var pendingOnline = new Payment(env.StoreId, "PM-PENDING-O", PaymentContext.OrderPayment, PaymentMethod.PayOs, 10_000m, Now, null, env.Actor.Id, orderId: online.Id);
-        env.Context.Payments.AddRange(pendingCash, pendingOnline);
+        var pendingOnline = await PayOsLinkAsync(env, "PM-PENDING-O", online.Id, 900_000_000_001);
+        var justPaid = await PayOsLinkAsync(env, "PM-PENDING-P", paidOnline.Id, 900_000_000_002);
+        env.Gateway.SetStatus(900_000_000_002, PaymentLinkStatus.Paid, 10_000);
+        env.Context.Payments.Add(pendingCash);
         await env.Context.SaveChangesAsync(Token);
 
         var done = await env.Canceller.CancelAsync(cash.Id, new CancelOrderRequest("Huỷ"), Token);
         Assert.Equal(("CANCELLED", "CANCELLED"), (done.Order.Status, (await env.Payments.GetAsync(pendingCash.Id, Token)).Status));
         Assert.Empty(done.Refunds);
 
-        var refused = await Assert.ThrowsAsync<BusinessRuleException>(() => env.Canceller.CancelAsync(online.Id, new CancelOrderRequest("Huỷ"), Token));
-        Assert.Contains("payOS", refused.Message);
-        Assert.Equal(("PENDING_CONFIRMATION", "PENDING"), ((await env.Orders.GetAsync(online.Id, Token)).Status, (await env.Payments.GetAsync(pendingOnline.Id, Token)).Status));
+        var closed = await env.Canceller.CancelAsync(online.Id, new CancelOrderRequest("Huỷ"), Token);
+        Assert.Equal(("CANCELLED", "CANCELLED"), (closed.Order.Status, (await env.Payments.GetAsync(pendingOnline.Id, Token)).Status));
+        Assert.Contains(900_000_000_001, env.Gateway.Cancelled);
+
+        var refused = await Assert.ThrowsAsync<BusinessRuleException>(() => env.Canceller.CancelAsync(paidOnline.Id, new CancelOrderRequest("Huỷ"), Token));
+        Assert.Contains("sync", refused.Message);
+        Assert.DoesNotContain(900_000_000_002, env.Gateway.Cancelled);
+        Assert.Equal(("PENDING_CONFIRMATION", "PENDING"), ((await env.Orders.GetAsync(paidOnline.Id, Token)).Status, (await env.Payments.GetAsync(justPaid.Id, Token)).Status));
+    }
+
+    private static async Task<Payment> PayOsLinkAsync(Env env, string number, Guid orderId, long orderCode)
+    {
+        var payment = new Payment(env.StoreId, number, PaymentContext.OrderPayment, PaymentMethod.PayOs, 10_000m, Now, null, env.Actor.Id, orderId: orderId);
+        payment.AssignProviderOrderCode("PAYOS", orderCode);
+        await env.Gateway.CreatePaymentLinkAsync(new CreatePaymentLinkRequest(orderCode, 10_000, number), Token);
+        env.Context.Payments.Add(payment);
+        await env.Context.SaveChangesAsync(Token);
+
+        return payment;
     }
 
     // ----- Cancelling the rest after a partial handover (cancel-remaining) -----

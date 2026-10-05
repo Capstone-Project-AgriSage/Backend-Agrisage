@@ -17,6 +17,7 @@ using AgriSage.Domain.Features.Stores.Entities;
 using AgriSage.Domain.Features.Stores.Enums;
 using AgriSage.Infrastructure.Persistence;
 using AgriSage.Infrastructure.Services;
+using AgriSage.IntegrationTests.Infrastructure.Payments;
 using AgriSage.IntegrationTests.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -55,7 +56,7 @@ public class OrderPickupDatabaseTests
                 context, locks, new OrderConfirmer(context, locks, new TemporaryOrderSettlementGuard(), user, clock, audit), queries, clock, errors, audit);
             Pickup = new OrderPickupService(
                 context, locks, new FulfillmentPostingService(context, locks, new TemporaryFulfillmentFinancialPosting(new OrderPrepaymentLedger(context))),
-                new TemporaryOrderSettlementGuard(), new OrderPaymentCancellation(context, locks, clock, audit), queries, user, clock, audit);
+                new TemporaryOrderSettlementGuard(), new OrderPaymentCancellation(context, locks, new FakePaymentGateway(), clock, audit), queries, user, clock, audit);
         }
 
         public AgriSageDbContext Context { get; }
