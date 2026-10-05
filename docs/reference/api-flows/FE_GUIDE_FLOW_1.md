@@ -453,6 +453,9 @@ Tham khảo thiết kế: `PaymentsPage` (bảng, KPI, hộp chi tiết, lịch 
 | Điều chỉnh/kiểm kê tay | **chưa có API** (thuộc luồng 4) — không dựng nút "Điều chỉnh" |
 
 Quy tắc hiển thị: `quantityAvailable = quantityOnHand − quantityReserved` (hàng đã giữ cho đơn chưa giao không bán thêm được). "Sắp hết" khi tổng khả dụng ≤ `minStockLevelBase`; "Hết hàng" khi bằng 0. Lô `isExpired` hoặc `BLOCKED`/`QUARANTINED` hiển thị cảnh báo và **không bán được**.
+Mọi số lượng kho (`quantityOnHand`, `quantityReserved`, `quantityAvailable`, `suggestedBaseQuantity`, `shortageBaseQuantity`) tính theo **đơn vị cơ sở** của sản phẩm
+(kg, gói, chai...; xem `conversionToBase` của quy cách). Hiển thị cho người dùng phải kèm đơn vị cơ sở, hoặc quy đổi sang quy cách bán lớn nhất
+(số nguyên = `floor(base / conversionToBase)`, phần dư ghi theo đơn vị cơ sở).
 Tồn kho chỉ thay đổi bằng **phiếu kho**: không có thao tác "sửa số tồn trực tiếp".
 
 Tham khảo thiết kế: `InventoryPage` có form "Ghi nhận biến động kho" cho phép nhập số lượng tự do — **bỏ phần nhập tay**; chỉ giữ tra cứu và lịch sử.
@@ -726,11 +729,12 @@ chỉ những bổ sung giúp thể hiện đúng luồng cho gọn mới đư�
    - **một bảng giá khách lẻ đang `ACTIVE`** có giá cho các quy cách (M12) — thiếu thì mọi lần tạo đơn trả `422`;
    - **lô hàng có tồn**: nhập kho bằng phiếu nhập `/api/goods-receipts` (rồi *confirm*) hoặc nhập Excel.
 3. **Dữ liệu mẫu (tiền tố `DEMO-`)** đã được tạo sẵn trên database dev bằng `scripts/SeedDemoData.cs`, nên không cần tự tạo bước 2:
-   - 8 sản phẩm: `DEMO-NPK-168`, `DEMO-KALI`, `DEMO-URE` (lô không có hạn dùng), `DEMO-LUA-ST25`, `DEMO-ACTARA`, `DEMO-FILIA` (đủ quy cách chai/thùng),
-     `DEMO-SOFIT` (**chỉ 5 chai** để thử lỗi không đủ hàng), `DEMO-HUUCO` (**chưa có giá** để thử lỗi thiếu giá);
+   - 8 sản phẩm: `DEMO-NPK-168`, `DEMO-KALI`, `DEMO-URE` (lô không có hạn dùng), `DEMO-LUA-ST25`, `DEMO-ACTARA`, `DEMO-FILIA525` (nhập theo thùng 24 chai, tồn tính bằng chai),
+     `DEMO-SOFIT300` (**chỉ 5 chai** để thử lỗi không đủ hàng), `DEMO-HUUCO` (**chưa có giá** để thử lỗi thiếu giá);
    - bảng giá khách lẻ `DEMO-BANGIA-LE` đang `ACTIVE`; các sản phẩm chính có 2-3 lô với hạn dùng khác nhau để thấy FEFO chia lô;
    - tài khoản: `demo.owner@example.com` (Chủ cửa hàng), `demo.sales@example.com` (Bán hàng), `demo.delivery@example.com` (Giao hàng).
      **Mật khẩu hỏi BE qua kênh riêng**, không đưa vào repo. Đăng nhập bằng email ở `POST /api/auth/login`.
+   - Hai sản phẩm cũ `DEMO-FILIA` và `DEMO-SOFIT` (đơn vị cơ sở là ml) đã **ngừng bán**, tên có tiền tố "(CŨ …)"; bỏ qua chúng, chỉ còn hiện ở màn Kho.
    - Đừng sửa hay xoá dữ liệu `DEMO-`; chạy bán thử sẽ trừ tồn thật. Hết hàng thì nhờ BE nhập thêm bằng phiếu nhập.
 4. Thử nhanh bằng Swagger trước khi viết UI. BE có sẵn script PowerShell chạy cả chuỗi (tạo đơn → ghi đè giá → thu tiền → huỷ → thu đồng thời) làm ví dụ về thứ tự gọi.
 4. Dữ liệu thử có tiền tố `TEST-` trong DB dev là của BE; đừng dựa vào nó. Hỏi BE trước khi xoá hoặc sửa.
