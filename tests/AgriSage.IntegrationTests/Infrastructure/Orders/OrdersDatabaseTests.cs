@@ -46,7 +46,7 @@ public class OrdersDatabaseTests
             Products = new ProductService(context, errors);
             StoreProducts = new StoreProductService(context, errors);
             PriceLists = new PriceListService(context, clock, errors, audit);
-            Builder = new OrderBuilder(context, new PriceResolver(context), user, clock, audit);
+            Builder = new OrderBuilder(context, new PriceResolver(context), user, clock, audit, new AgriSage.Application.Features.Credit.CreditEligibilityService(context, clock, Microsoft.Extensions.Options.Options.Create(new AgriSage.Application.Features.Credit.CreditPolicy())));
             Orders = new OrderService(context, Builder, new OrderQueries(context), user, clock, errors, audit);
         }
 

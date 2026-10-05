@@ -330,6 +330,8 @@ public class FilesHttpTests : IClassFixture<FilesHttpTests.FilesApiFactory>
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Development");
+            // In-process tests do not require machine-wide Windows event log access.
+            builder.UseSetting("Logging:EventLog:LogLevel:Default", "None");
             // Test-only key; real keys come from User Secrets / environment variables.
             builder.UseSetting("Jwt:SigningKey", "integration-test-signing-key-not-a-secret-000000");
             builder.ConfigureServices(services =>

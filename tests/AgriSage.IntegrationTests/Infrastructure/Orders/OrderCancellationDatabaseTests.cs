@@ -1,6 +1,6 @@
 using AgriSage.Application.Common;
 using AgriSage.Application.Common.Exceptions;
-using AgriSage.Application.Common.Placeholders;
+using AgriSage.Tests.TestDoubles;
 using AgriSage.Application.Features.Orders;
 using AgriSage.Application.Features.Payments;
 using AgriSage.Application.Features.Pricing;
@@ -52,20 +52,20 @@ public class OrderCancellationDatabaseTests
             PriceLists = new PriceListService(context, clock, errors, audit);
             var queries = new OrderQueries(context);
             Orders = new OrderService(
-                context, new OrderBuilder(context, new PriceResolver(context), user, clock, audit), queries, user, clock, errors, audit);
+                context, new OrderBuilder(context, new PriceResolver(context), user, clock, audit, new AgriSage.Application.Features.Credit.CreditEligibilityService(context, clock, Microsoft.Extensions.Options.Options.Create(new AgriSage.Application.Features.Credit.CreditPolicy()))), queries, user, clock, errors, audit);
             Confirmation = new OrderConfirmationService(
-                context, locks, new OrderConfirmer(context, locks, new TemporaryOrderSettlementGuard(), user, clock, audit), queries, clock, errors, audit);
+                context, locks, new OrderConfirmer(context, locks, new StubOrderSettlementGuard(), user, clock, audit), queries, clock, errors, audit);
             Cancellation = new OrderPaymentCancellation(context, locks, clock, audit);
             Pickup = new OrderPickupService(
-                context, locks, new FulfillmentPostingService(context, locks, new TemporaryFulfillmentFinancialPosting(new OrderPrepaymentLedger(context))),
-                new TemporaryOrderSettlementGuard(), Cancellation, queries, user, clock, audit);
+                context, locks, new FulfillmentPostingService(context, locks, new StubFulfillmentFinancialPosting(new OrderPrepaymentLedger(context))),
+                new StubOrderSettlementGuard(), Cancellation, queries, user, clock, audit);
             Canceller = new OrderCancellationService(
-                context, locks, new OrderCanceller(context, locks, new TemporaryOrderSettlementGuard(), Cancellation), queries, user, clock, errors, audit);
+                context, locks, new OrderCanceller(context, locks, new StubOrderSettlementGuard(), Cancellation), queries, user, clock, errors, audit);
             Ledger = new OrderPrepaymentLedger(context);
             var paymentQueries = new PaymentQueries(context);
             Payments = new PaymentService(
                 context, locks, Ledger,
-                new PaymentAllocator(clock, new TemporaryCreditReservationAdjuster(), new TemporaryDebtRepaymentPosting()),
+                new PaymentAllocator(clock, new StubCreditReservationAdjuster(), new StubDebtRepaymentPosting()),
                 paymentQueries, user, clock, errors, audit);
             PaymentReads = paymentQueries;
         }

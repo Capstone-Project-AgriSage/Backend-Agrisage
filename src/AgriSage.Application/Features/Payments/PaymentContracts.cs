@@ -77,7 +77,7 @@ public sealed record PaymentResponse(
     DateTimeOffset? CancelledAt,
     string? Note,
     decimal UnallocatedAmount,
-    IReadOnlyList<PaymentAllocationResponse> Allocations);
+    IReadOnlyList<PaymentAllocationResponse> Allocations, string? Reference = null);
 
 public sealed record PaymentListItem(
     Guid Id,
@@ -118,6 +118,9 @@ public static class PaymentText
                 return true;
             case "PAYOS":
                 method = PaymentMethod.PayOs;
+                return true;
+            case "BANK_TRANSFER":
+                method = PaymentMethod.BankTransfer;
                 return true;
             default:
                 method = default;

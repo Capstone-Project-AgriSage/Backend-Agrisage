@@ -1,6 +1,6 @@
 using AgriSage.Application.Common;
 using AgriSage.Application.Common.Exceptions;
-using AgriSage.Application.Common.Placeholders;
+using AgriSage.Tests.TestDoubles;
 using AgriSage.Application.Features.Orders;
 using AgriSage.Application.Features.Payments;
 using AgriSage.Application.Features.Pricing;
@@ -51,10 +51,10 @@ public class PaymentsDatabaseTests
             StoreProducts = new StoreProductService(context, errors);
             PriceLists = new PriceListService(context, clock, errors, audit);
             Orders = new OrderService(
-                context, new OrderBuilder(context, new PriceResolver(context), user, clock, audit), new OrderQueries(context),
+                context, new OrderBuilder(context, new PriceResolver(context), user, clock, audit, new AgriSage.Application.Features.Credit.CreditEligibilityService(context, clock, Microsoft.Extensions.Options.Options.Create(new AgriSage.Application.Features.Credit.CreditPolicy()))), new OrderQueries(context),
                 user, clock, errors, audit);
             Ledger = new OrderPrepaymentLedger(context);
-            Allocator = new PaymentAllocator(clock, new TemporaryCreditReservationAdjuster(), new TemporaryDebtRepaymentPosting());
+            Allocator = new PaymentAllocator(clock, new StubCreditReservationAdjuster(), new StubDebtRepaymentPosting());
             Queries = new PaymentQueries(context);
             Payments = new PaymentService(context, new RowLockService(context), Ledger, Allocator, Queries, user, clock, errors, audit);
             Mine = new MyPaymentService(Queries, user);

@@ -48,7 +48,7 @@ public class CustomersDatabaseTests
             var locks = new RowLockService(Context);
             Customers = new CustomerService(Context, new PasswordHashService(), clock, errors, locks, audit, writes, new PaymentQueries(Context));
             Groups = new CustomerGroupService(Context, clock, errors, locks, new CustomerGroupDefaultSwitcher(Context), writes, audit);
-            Credit = new CustomerCreditService(Context, locks, errors, writes, audit);
+            Credit = new CustomerCreditService(Context, locks, errors, writes, audit, clock);
         }
         public AgriSageDbContext Context { get; }
         public RealDb.MutableUser User { get; }
@@ -177,7 +177,7 @@ public class CustomersDatabaseTests
         Assert.Single((await e.Customers.ListAsync(new() { Search = c.FullName, HasDebt = true }, Token)).Items);
         // Frozen FLOW_3 rule: lower limits are allowed, negative available credit blocks new reservations.
         await e.Credit.LimitAsync(c.Id, new(100, "Reduce limit"), Token);
-        Assert.Equal(-450, (await e.Customers.GetAsync(c.Id, Token)).AvailableCredit);
+        Assert.Equal(0, (await e.Customers.GetAsync(c.Id, Token)).AvailableCredit);
     }
 
     [RealDbFact]

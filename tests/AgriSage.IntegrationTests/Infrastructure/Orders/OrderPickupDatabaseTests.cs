@@ -1,6 +1,6 @@
 using AgriSage.Application.Common;
 using AgriSage.Application.Common.Exceptions;
-using AgriSage.Application.Common.Placeholders;
+using AgriSage.Tests.TestDoubles;
 using AgriSage.Application.Features.Orders;
 using AgriSage.Application.Features.Payments;
 using AgriSage.Application.Features.Pricing;
@@ -50,12 +50,12 @@ public class OrderPickupDatabaseTests
             PriceLists = new PriceListService(context, clock, errors, audit);
             var queries = new OrderQueries(context);
             Orders = new OrderService(
-                context, new OrderBuilder(context, new PriceResolver(context), user, clock, audit), queries, user, clock, errors, audit);
+                context, new OrderBuilder(context, new PriceResolver(context), user, clock, audit, new AgriSage.Application.Features.Credit.CreditEligibilityService(context, clock, Microsoft.Extensions.Options.Options.Create(new AgriSage.Application.Features.Credit.CreditPolicy()))), queries, user, clock, errors, audit);
             Confirmation = new OrderConfirmationService(
-                context, locks, new OrderConfirmer(context, locks, new TemporaryOrderSettlementGuard(), user, clock, audit), queries, clock, errors, audit);
+                context, locks, new OrderConfirmer(context, locks, new StubOrderSettlementGuard(), user, clock, audit), queries, clock, errors, audit);
             Pickup = new OrderPickupService(
-                context, locks, new FulfillmentPostingService(context, locks, new TemporaryFulfillmentFinancialPosting(new OrderPrepaymentLedger(context))),
-                new TemporaryOrderSettlementGuard(), new OrderPaymentCancellation(context, locks, clock, audit), queries, user, clock, audit);
+                context, locks, new FulfillmentPostingService(context, locks, new StubFulfillmentFinancialPosting(new OrderPrepaymentLedger(context))),
+                new StubOrderSettlementGuard(), new OrderPaymentCancellation(context, locks, clock, audit), queries, user, clock, audit);
         }
 
         public AgriSageDbContext Context { get; }
