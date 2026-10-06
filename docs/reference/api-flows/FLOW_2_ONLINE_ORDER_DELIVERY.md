@@ -345,7 +345,8 @@ webhooks, returning raw exception messages to clients.
   quantity (else 422). Several delivery notes per order = several trips.
 - Address: snapshot of `deliveryAddress` if given, otherwise of the order's address.
 - Lot allocations are created from the order's reservation items (FEFO order) at creation.
-- `assignedToUserId` = a staff user id from `/api/staff` with role DELIVERY_STAFF and an ACTIVE store
+- `assignedToUserId` = a staff user id from `GET /api/staff?role=DELIVERY_STAFF&status=ACTIVE` (Admin, Store Owner and Sales may call it; Sales
+  see delivery staff only, another `role` is 403) with an ACTIVE store
   membership; the server resolves the store member (the client never sends `storeMemberId`, decision D2).
 
 `ChangeLotsRequest` — replaces the allocations of one delivery item before dispatch:

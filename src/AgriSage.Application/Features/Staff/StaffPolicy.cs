@@ -18,6 +18,9 @@ public static class StaffPolicy
         _ => false
     };
 
-    // Roles allowed to call the staff API at all.
+    // Roles allowed to manage staff (create, read one, change, lock, reset password, remove) and to list every staff role.
     public static bool CanUseStaffApi(RoleCode actor) => actor is RoleCode.Admin or RoleCode.StoreOwner;
+
+    // Sales staff create delivery notes and assign the driver (flow 2), so they may list delivery staff, and only them.
+    public static bool CanListStaff(RoleCode actor) => CanUseStaffApi(actor) || actor == RoleCode.SalesStaff;
 }
