@@ -401,6 +401,10 @@ Built as `FulfillmentPostingService.PostAsync(order, lines, source, deliveryId?,
   are processed first so one pick never releases what another still needs. A lot used both ways gets two movement items.
 - `FulfilledValue = round2(base quantity × unit price ÷ conversion)` per order item, summed over its lots.
 - When the order ends (COMPLETED, CANCELLED, PARTIALLY_CANCELLED) any reservation still open is released.
+- When a handover (pickup or delivery) hands over the last open line and so ends the order as PARTIALLY_CANCELLED (another
+  line had been cancelled before), `FulfillmentPostingService` calls `IOrderPaymentCancellation` too, after the
+  fulfillment posting: the prepayment of the cancelled part is given back (`paid − max(consumed, fulfilled value)`) exactly
+  as when the last remainder is cancelled.
 - The note of a pickup is kept in the `ORDER_PICKED_UP` audit row (`reason`). Cancel-remaining audits
   `ORDER_ITEM_REMAINING_CANCELLED` with the reason (also stored as `cancelReason` on the order when this ends it as CANCELLED or PARTIALLY_CANCELLED), releases the reservation of that line (no stock movement), and when the
   order ends calls `IOrderSettlementGuard.ReleaseAsync` and, for CANCELLED / PARTIALLY_CANCELLED,

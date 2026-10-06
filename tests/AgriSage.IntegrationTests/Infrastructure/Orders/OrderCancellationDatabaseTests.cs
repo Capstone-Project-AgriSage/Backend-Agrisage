@@ -59,7 +59,7 @@ public class OrderCancellationDatabaseTests
                 context, locks, new OrderConfirmer(context, locks, new StubOrderSettlementGuard(), user, clock, audit), queries, clock, errors, audit);
             Cancellation = new OrderPaymentCancellation(context, locks, Gateway, clock, audit);
             Pickup = new OrderPickupService(
-                context, locks, new FulfillmentPostingService(context, locks, new StubFulfillmentFinancialPosting(new OrderPrepaymentLedger(context))),
+                context, locks, new FulfillmentPostingService(context, locks, new StubFulfillmentFinancialPosting(new OrderPrepaymentLedger(context)), Cancellation),
                 new StubOrderSettlementGuard(), Cancellation, queries, user, clock, audit);
             Canceller = new OrderCancellationService(
                 context, locks, new OrderCanceller(context, locks, new StubOrderSettlementGuard(), Cancellation), queries, user, clock, errors, audit);
@@ -389,6 +389,48 @@ public class OrderCancellationDatabaseTests
         // The money given back is unallocated, not lost from the payment.
         Assert.Equal(100_000m, (await env.Payments.GetAsync(first.Id, Token)).UnallocatedAmount);
         Assert.Equal((80L, 0L), await BalanceAsync(env, lot.Id));
+    }
+
+    // Regression: one line was cancelled first, then handing over the last open line ended the order PARTIALLY_CANCELLED
+    // without anything being given back (only cancelling the last remainder used to request the refund).
+    [RealDbFact]
+    public async Task Handing_over_the_last_line_after_another_was_cancelled_refunds_the_cancelled_part()
+    {
+        await using var session = await RealDb.Session.StartAsync();
+        await using var env = await PrepareAsync(session);
+        var cancelledSku = await NewSkuAsync(env);
+        var keptSku = await NewSkuAsync(env);
+        var cancelledLot = await NewLotAsync(env, cancelledSku, "L1", 100);
+        var keptLot = await NewLotAsync(env, keptSku, "L2", 100);
+        var order = await env.Orders.CreateAsync(
+            new CreateCounterOrderRequest(
+                "WALK_IN", "FULL_PAYMENT", "PICKUP",
+                [new OrderItemRequest(cancelledSku.StoreProductId, cancelledSku.BottleId, 10), new OrderItemRequest(keptSku.StoreProductId, keptSku.BottleId, 5)]),
+            Token); // 100 000 + 50 000
+        var cancelledItem = order.Items.Single(i => i.StoreProductId == cancelledSku.StoreProductId).Id;
+        var keptItem = order.Items.Single(i => i.StoreProductId == keptSku.StoreProductId).Id;
+        var payment = await PayAsync(env, order.Id, 150_000m);
+        await env.Confirmation.ConfirmAsync(order.Id, Token);
+
+        // The order is still open: the other line waits for its handover, so nothing is refunded yet.
+        var open = await env.Pickup.CancelRemainingAsync(order.Id, cancelledItem, new CancelRemainingRequest("Đặt nhầm"), Token);
+        Assert.Equal("CONFIRMED", open.Status);
+        Assert.Empty(await env.Context.Refunds.AsNoTracking().Where(r => r.OrderId == order.Id).ToListAsync(Token));
+
+        var done = await env.Pickup.PickupAsync(order.Id, Take(keptItem, keptLot.Id, 5), Token);
+
+        Assert.Equal("PARTIALLY_CANCELLED", done.Status);
+        var refund = Assert.Single(await env.Context.Refunds.AsNoTracking().Where(r => r.OrderId == order.Id).ToListAsync(Token));
+        Assert.Equal((payment.Id, 100_000m, RefundStatus.Pending, RefundMethod.Cash, env.Actor.Id),
+            (refund.OriginalPaymentId, refund.Amount, refund.Status, refund.RefundMethod, refund.RequestedBy));
+        // The 50 000 of the line that was handed over stay with the order; the rest is given back, not lost from the payment.
+        var kept = await AllocationAsync(env, payment.Id);
+        Assert.Equal((50_000m, PaymentAllocationStatus.Active), (kept.AllocatedAmount, kept.Status));
+        var summary = await env.Payments.GetOrderSummaryAsync(order.Id, Token);
+        Assert.Equal((50_000m, 1), (summary.PaidAmount, summary.Refunds.Count));
+        Assert.Equal(100_000m, (await env.Payments.GetAsync(payment.Id, Token)).UnallocatedAmount);
+        Assert.Equal((100L, 0L), await BalanceAsync(env, cancelledLot.Id));
+        Assert.Equal((95L, 0L), await BalanceAsync(env, keptLot.Id));
     }
 
     [RealDbFact]

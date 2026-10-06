@@ -18,6 +18,7 @@ using AgriSage.Domain.Features.Stores.Entities;
 using AgriSage.Domain.Features.Stores.Enums;
 using AgriSage.Infrastructure.Persistence;
 using AgriSage.Infrastructure.Services;
+using AgriSage.IntegrationTests.Infrastructure.Payments;
 using AgriSage.IntegrationTests.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -57,7 +58,7 @@ public class CounterSaleDatabaseTests
                 new OrderBuilder(context, new PriceResolver(context), user, clock, audit, new AgriSage.Application.Features.Credit.CreditEligibilityService(context, clock, Microsoft.Extensions.Options.Options.Create(new AgriSage.Application.Features.Credit.CreditPolicy()))),
                 new PaymentAllocator(clock, new StubCreditReservationAdjuster(), new StubDebtRepaymentPosting()),
                 new OrderConfirmer(context, locks, new StubOrderSettlementGuard(), user, clock, audit),
-                new FulfillmentPostingService(context, locks, new StubFulfillmentFinancialPosting(Ledger)),
+                new FulfillmentPostingService(context, locks, new StubFulfillmentFinancialPosting(Ledger), new OrderPaymentCancellation(context, locks, new FakePaymentGateway(), clock, audit)),
                 queries,
                 new PaymentQueries(context),
                 user,
