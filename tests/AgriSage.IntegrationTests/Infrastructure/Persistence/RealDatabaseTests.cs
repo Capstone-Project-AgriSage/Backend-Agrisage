@@ -232,13 +232,19 @@ public class RealDatabaseTests
     {
         await using var session = await RealDb.Session.StartAsync();
         await using var context = session.NewContext();
-        var (user, _, _) = await session.SeedAsync(context);
+        await session.SeedAsync(context);
+        // A category and a product made for this test. A shared row such as the farmer role is locked (FK checks) by the users
+        // other test classes insert in parallel, so deleting it waited for them and timed out in a full run.
+        var category = new Category($"C{Unique()}", "Category");
+        var product = new Product(category.Id, $"SKU-{Unique()}", "Product");
+        context.AddRange(category, product);
+        await context.SaveChangesAsync(Token);
 
         var violation = await RealDb.ExpectViolationAsync(() =>
-            context.Database.ExecuteSqlAsync($"DELETE FROM roles WHERE id = {user.RoleId}", Token));
+            context.Database.ExecuteSqlAsync($"DELETE FROM categories WHERE id = {category.Id}", Token));
 
         Assert.Equal(PostgresErrorCodes.ForeignKeyViolation, violation.SqlState);
-        Assert.Equal("fk_users_role_id", violation.ConstraintName);
+        Assert.Equal("fk_products_category_id", violation.ConstraintName);
     }
 
     // ----- Transaction rollback / cleanup -----

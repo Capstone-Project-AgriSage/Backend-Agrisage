@@ -17,6 +17,7 @@ using AgriSage.Domain.Features.Stores.Entities;
 using AgriSage.Domain.Features.Stores.Enums;
 using AgriSage.Infrastructure.Persistence;
 using AgriSage.Infrastructure.Services;
+using AgriSage.IntegrationTests.Infrastructure.Debt;
 using AgriSage.IntegrationTests.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -300,6 +301,7 @@ public class OrderConfirmationDatabaseTests
         var farmer = new AgriSage.Domain.Features.Customers.Entities.FarmerProfile(farmerUser.Id);
         env.Context.AddRange(farmerUser, farmer);
         await env.Context.SaveChangesAsync(Token);
+        await CreditFixtures.EnableCreditAsync(env.Context, env.StoreId, farmer.Id, env.Actor.Id, Token);
         var order = await env.Orders.CreateAsync(
             new CreateCounterOrderRequest(
                 "REGISTERED", "CREDIT", "PICKUP", [new OrderItemRequest(sku.StoreProductId, sku.BottleId, 10)], farmer.Id),
