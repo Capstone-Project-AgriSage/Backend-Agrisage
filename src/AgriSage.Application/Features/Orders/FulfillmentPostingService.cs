@@ -2,6 +2,7 @@ using AgriSage.Application.Common;
 using AgriSage.Application.Common.Exceptions;
 using AgriSage.Application.Common.Interfaces;
 using AgriSage.Application.Features.Debt;
+using AgriSage.Application.Features.Payments;
 using AgriSage.Domain.Common;
 using AgriSage.Domain.Features.Inventory.Entities;
 using AgriSage.Domain.Features.Inventory.Enums;
@@ -20,14 +21,16 @@ public sealed record FulfillmentPostingResult(StockMovement Movement, IReadOnlyL
 // Inside the caller's transaction, on a tracked order with its items loaded; it never saves:
 //   check lines → lock the lot balances (id order) → reject unsellable lots → SALE movement, one item per issue with the
 //   cost snapshot (weighted average) → decrease on hand and reserved → consume (or move) the reservation →
-//   order.RecordFulfillment → IFulfillmentFinancialPosting → post the movement.
+//   order.RecordFulfillment → IFulfillmentFinancialPosting → post the movement → when the order ends PARTIALLY_CANCELLED,
+//   give back the prepayment of the cancelled part (IOrderPaymentCancellation).
 // A reserved lot is issued from its reservation. For another lot the reservation moves there first (reserve in that lot,
 // release the same quantity elsewhere) and is consumed there, so the reservation ends CONSUMED and the reserved
 // quantities of the lots stay what the open orders still hold.
 public sealed class FulfillmentPostingService(
     IAgriSageDbContext context,
     IRowLockService locks,
-    IFulfillmentFinancialPosting financialPosting)
+    IFulfillmentFinancialPosting financialPosting,
+    IOrderPaymentCancellation paymentCancellation)
 {
     public async Task<FulfillmentPostingResult> PostAsync(
         Order order,
@@ -177,6 +180,15 @@ public sealed class FulfillmentPostingService(
             && reservation.RemainingQuantity > 0)
         {
             await ReleaseLeftoversAsync(reservation, lots, actorId, at, cancellationToken);
+        }
+
+        // The last open line was handed over after another line had been cancelled: the order ends PARTIALLY_CANCELLED.
+        // The prepayment of the cancelled part will never be consumed, so it goes back now, the same as when the last
+        // remainder is cancelled (OrderPickupService.CancelRemainingAsync). Refundable = paid − max(consumed, fulfilled value).
+        if (order.Status is OrderStatus.PartiallyCancelled)
+        {
+            await paymentCancellation.ReverseForCancelledOrderAsync(
+                order, actorId, "Part of the order was cancelled before the last items were handed over.", cancellationToken);
         }
 
         return new FulfillmentPostingResult(movement, fulfilled);

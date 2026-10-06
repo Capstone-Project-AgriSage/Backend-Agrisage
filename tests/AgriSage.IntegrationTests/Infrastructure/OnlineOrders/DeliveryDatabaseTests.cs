@@ -13,6 +13,7 @@ using AgriSage.Domain.Features.Identity.Enums;
 using AgriSage.Domain.Features.Inventory.Enums;
 using AgriSage.Infrastructure.Persistence;
 using AgriSage.Infrastructure.Services;
+using AgriSage.IntegrationTests.Infrastructure.Payments;
 using AgriSage.IntegrationTests.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -73,7 +74,8 @@ public class DeliveryDatabaseTests
         public DeliveryService Deliveries => new(Context, Access, Queries, Locks, _clock, _errors, Audit);
 
         public DeliveryAttemptService Attempts => new(Context, Access, Queries, new DeliveryProofUrls(new FakeStorage()),
-            new FulfillmentPostingService(Context, Locks, new StubFulfillmentFinancialPosting(new OrderPrepaymentLedger(Context))),
+            new FulfillmentPostingService(Context, Locks, new StubFulfillmentFinancialPosting(new OrderPrepaymentLedger(Context)),
+                new OrderPaymentCancellation(Context, Locks, new FakePaymentGateway(), _clock, Audit)),
             Locks, _clock, Audit);
 
         public DeliveryIncidentService Incidents => new(Context, Access, new DeliveryProofUrls(new FakeStorage()), Locks, _clock, Audit);

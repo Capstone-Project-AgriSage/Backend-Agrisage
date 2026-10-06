@@ -66,7 +66,7 @@ public class SalesReportDatabaseTests
             var queries = new OrderQueries(context);
             var builder = new OrderBuilder(context, new PriceResolver(context), user, Clock, audit, new AgriSage.Application.Features.Credit.CreditEligibilityService(context, Clock, Microsoft.Extensions.Options.Options.Create(new AgriSage.Application.Features.Credit.CreditPolicy())));
             var confirmer = new OrderConfirmer(context, locks, new StubOrderSettlementGuard(), user, Clock, audit);
-            var posting = new FulfillmentPostingService(context, locks, new StubFulfillmentFinancialPosting(ledger));
+            var posting = new FulfillmentPostingService(context, locks, new StubFulfillmentFinancialPosting(ledger), new OrderPaymentCancellation(context, locks, new FakePaymentGateway(), Clock, audit));
             Orders = new OrderService(context, builder, queries, user, Clock, errors, audit);
             Confirmation = new OrderConfirmationService(context, locks, confirmer, queries, Clock, errors, audit);
             Pickup = new OrderPickupService(context, locks, posting, new StubOrderSettlementGuard(), new OrderPaymentCancellation(context, locks, new FakePaymentGateway(), Clock, audit), queries, user, Clock, audit);

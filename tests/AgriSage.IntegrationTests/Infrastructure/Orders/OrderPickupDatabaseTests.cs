@@ -55,7 +55,7 @@ public class OrderPickupDatabaseTests
             Confirmation = new OrderConfirmationService(
                 context, locks, new OrderConfirmer(context, locks, new StubOrderSettlementGuard(), user, clock, audit), queries, clock, errors, audit);
             Pickup = new OrderPickupService(
-                context, locks, new FulfillmentPostingService(context, locks, new StubFulfillmentFinancialPosting(new OrderPrepaymentLedger(context))),
+                context, locks, new FulfillmentPostingService(context, locks, new StubFulfillmentFinancialPosting(new OrderPrepaymentLedger(context)), new OrderPaymentCancellation(context, locks, new FakePaymentGateway(), clock, audit)),
                 new StubOrderSettlementGuard(), new OrderPaymentCancellation(context, locks, new FakePaymentGateway(), clock, audit), queries, user, clock, audit);
         }
 
