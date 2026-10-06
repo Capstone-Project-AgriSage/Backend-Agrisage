@@ -16,6 +16,7 @@ using AgriSage.Domain.Features.Stores.Entities;
 using AgriSage.Domain.Features.Stores.Enums;
 using AgriSage.Infrastructure.Persistence;
 using AgriSage.Infrastructure.Services;
+using AgriSage.IntegrationTests.Infrastructure.Debt;
 using AgriSage.IntegrationTests.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -255,6 +256,7 @@ public class OrdersDatabaseTests
         await using var session = await RealDb.Session.StartAsync();
         await using var env = await PrepareAsync(session);
         var farmer = await NewFarmerAsync(env);
+        await CreditFixtures.EnableCreditAsync(env.Context, env.StoreId, farmer.ProfileId, env.Actor.Id, Token);
         var group = new CustomerGroup(env.StoreId, $"G{Tag()}", "Khách quen");
         env.Context.CustomerGroups.Add(group);
         var groupList = await NewListAsync(env);
@@ -262,6 +264,7 @@ public class OrdersDatabaseTests
         env.Context.CustomerGroupAssignments.Add(new CustomerGroupAssignment(farmer.ProfileId, group.Id, Now.AddMinutes(-5), env.Actor.Id));
         await env.Context.SaveChangesAsync(Token);
         var priced = await NewProductAsync(env, groupList.Id, bottle: 9_000m);
+        await CreditFixtures.ReceiveStockAsync(env.Context, priced.StoreProductId, 1_000, Token);
 
         var order = await env.Orders.CreateAsync(
             new CreateCounterOrderRequest(
@@ -483,7 +486,9 @@ public class OrdersDatabaseTests
         await using var session = await RealDb.Session.StartAsync();
         await using var env = await PrepareAsync(session);
         var priced = await NewProductAsync(env);
+        await CreditFixtures.ReceiveStockAsync(env.Context, priced.StoreProductId, 1_000, Token);
         var farmer = await NewFarmerAsync(env);
+        await CreditFixtures.EnableCreditAsync(env.Context, env.StoreId, farmer.ProfileId, env.Actor.Id, Token);
         var marker = Tag();
         var first = await env.Orders.CreateAsync(Walk([Line(priced.StoreProductId, priced.BottleId, 1)], name: $"Anh {marker}"), Token);
         var second = await env.Orders.CreateAsync(

@@ -19,6 +19,7 @@ using AgriSage.Domain.Features.Stores.Entities;
 using AgriSage.Domain.Features.Stores.Enums;
 using AgriSage.Infrastructure.Persistence;
 using AgriSage.Infrastructure.Services;
+using AgriSage.IntegrationTests.Infrastructure.Debt;
 using AgriSage.IntegrationTests.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -260,6 +261,8 @@ public class PaymentsDatabaseTests
         await using var session = await RealDb.Session.StartAsync();
         await using var env = await PrepareAsync(session);
         var farmer = await NewFarmerAsync(env);
+        await CreditFixtures.EnableCreditAsync(env.Context, env.StoreId, farmer.ProfileId, env.Actor.Id, Token);
+        await CreditFixtures.ReceiveStockAsync(env.Context, env.StoreProductId, 1_000, Token);
         var order = await NewOrderAsync(env, 2, farmer, "CREDIT");
         var entity = await env.Context.Orders.Include(o => o.Items).SingleAsync(o => o.Id == order.Id, Token);
         entity.Confirm(env.Actor.Id, Now, creditTermDays: 30);
