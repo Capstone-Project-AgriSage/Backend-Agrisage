@@ -523,7 +523,16 @@ Bước 14 — kết thúc lần giao (`DeliveryResponse` rút gọn):
 1. `POST /api/me/payments/payos { paymentContext: ORDER_PAYMENT, orderId }` → `201`, lưu `paymentId`, mở `checkoutUrl`.
 2. Người dùng trả tiền; payOS gọi webhook của server → payment `PAID`, tiền ghi vào đơn.
 3. Trình duyệt về `returnUrl` → FE `GET /api/me/payments/{paymentId}` → `status: PAID` → hiện "Đã thanh toán".
-4. Máy chủ chưa cấu hình payOS: bước 1 trả `503` — đây là cách hệ thống đang chạy ở dev hiện nay.
+4. Máy chủ chưa cấu hình payOS: bước 1 trả `503`.
+
+**S2b. Thanh toán thử không qua payOS** (chỉ môi trường phát triển, máy chủ chạy với `PayOS:Mode=Simulated`)
+
+1. `POST /api/me/payments/payos` như S2. `checkoutUrl` lúc này trỏ thẳng về trang kết quả của web (`PayOS:ReturnUrl`) kèm
+   `?simulated=1&orderCode=…`; không có trang payOS.
+2. Trang `/payments/payos/return` thấy `simulated=1` và payment còn `PENDING` thì hiện nút **"Thanh toán nhanh (chỉ môi trường thử)"**.
+3. Nút gọi `POST /api/payments/{paymentId}/simulate-paid` → `200 PaymentResponse` với `status: PAID` (đã đối soát, ghi tiền vào đơn, ghi audit
+   đúng như thật). Bấm lại không đổi gì.
+4. Ngoài chế độ này endpoint trả `404`: FE chỉ hiện nút khi URL có `simulated=1`, không tự bật theo cấu hình.
 
 ---
 
@@ -547,7 +556,7 @@ Dạng lỗi chung (RFC 7807) và hàm `api()` giống luồng 1 (`FE_GUIDE_FLOW
 
 | Chức năng | Tình trạng |
 |---|---|
-| Thanh toán payOS thật | Code xong; **máy chủ cần khoá payOS và URL webhook công khai** mới chạy được (hiện trả `503`). Màn hình vẫn làm được ngay theo N5 |
+| Thanh toán payOS thật | Code xong; **máy chủ cần khoá payOS** (`PayOS:ClientId/ApiKey/ChecksumKey`) mới chạy được, nếu không trả `503`. URL webhook công khai chỉ cần để payOS báo ngay; không có thì trang kết quả vẫn xác nhận được nhờ `sync`. Muốn chạy thử cả luồng không cần khoá: S2b |
 | Mua chịu (`settlementType: CREDIT`) | Theo luồng 3: khách phải có hồ sơ tín dụng còn hạn mức; không đủ điều kiện → `422 Credit refused: …` |
 | Trả nợ bằng payOS | Theo luồng 3 (công nợ); không có nợ → `422` |
 | Điều chỉnh kho khi xử lý sự cố | Theo luồng 4 (`POST /api/inventory/adjustments`); trước đó dùng `resolutionType` không đổi kho (`RETRY_DELIVERY`, `NO_ACTION`…) |

@@ -67,7 +67,8 @@ public class PayOsHttpTests(PayOsHttpTests.PayOsApiFactory factory) : IClassFixt
         { "POST", "/api/payments/payos", null }, { "POST", "/api/payments/payos", "FARMER" },
         { "POST", "/api/payments/payos", "DELIVERY_STAFF" }, { "POST", "/api/me/payments/payos", null },
         { "POST", "/api/me/payments/payos", "SALES_STAFF" }, { "POST", $"/api/me/payments/{Id}/cancel", "ADMIN" },
-        { "POST", $"/api/payments/{Id}/sync", null }, { "POST", $"/api/payments/{Id}/sync", "DELIVERY_STAFF" }
+        { "POST", $"/api/payments/{Id}/sync", null }, { "POST", $"/api/payments/{Id}/sync", "DELIVERY_STAFF" },
+        { "POST", $"/api/payments/{Id}/simulate-paid", null }, { "POST", $"/api/payments/{Id}/simulate-paid", "DELIVERY_STAFF" }
     };
 
     [Theory]
@@ -77,6 +78,53 @@ public class PayOsHttpTests(PayOsHttpTests.PayOsApiFactory factory) : IClassFixt
         using var client = Client(role);
         var response = await client.SendAsync(new HttpRequestMessage(new HttpMethod(method), url) { Content = JsonContent.Create(new { }) }, Token);
         Assert.Equal(role is null ? HttpStatusCode.Unauthorized : HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    // The test button does not exist unless the API runs with PayOS:Mode=Simulated: 404 for every role that may call it, before
+    // anything is read from the database.
+    [Theory]
+    [InlineData("FARMER")]
+    [InlineData("SALES_STAFF")]
+    [InlineData("STORE_OWNER")]
+    [InlineData("ADMIN")]
+    public async Task The_test_button_is_404_when_payments_are_not_simulated(string role)
+    {
+        using var client = Client(role);
+
+        var response = await client.PostAsync($"/api/payments/{Id}/simulate-paid", null, Token);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Simulated_mode_swaps_the_gateway_in_development_and_the_real_one_stays_the_default()
+    {
+        await using var real = new StaffHttpTests.StaffApiFactory();
+        Assert.Null(real.Services.GetService<ISimulatedPaymentGateway>());
+        Assert.IsType<AgriSage.Infrastructure.Payments.PayOsPaymentGateway>(real.Services.GetRequiredService<IPaymentGateway>());
+
+        await using var simulated = new StaffHttpTests.StaffApiFactory().WithWebHostBuilder(b => b.UseSetting("PayOS:Mode", "Simulated"));
+        var simulator = simulated.Services.GetService<ISimulatedPaymentGateway>();
+        Assert.NotNull(simulator);
+        Assert.Same(simulator, simulated.Services.GetRequiredService<IPaymentGateway>());
+    }
+
+    [Theory]
+    [InlineData("Production", "Simulated", "Development")]
+    [InlineData("Staging", "simulated", "Development")]
+    [InlineData("Development", "Fake", "Simulated")]
+    public void The_api_refuses_to_start_with_simulated_payments_outside_development_or_with_an_unknown_mode(
+        string environment, string mode, string expectedInMessage)
+    {
+        using var app = new StaffHttpTests.StaffApiFactory().WithWebHostBuilder(builder =>
+        {
+            builder.UseEnvironment(environment);
+            builder.UseSetting("PayOS:Mode", mode);
+        });
+
+        var error = Assert.ThrowsAny<Exception>(() => app.CreateClient());
+
+        Assert.Contains(expectedInMessage, error.ToString());
     }
 
     public static TheoryData<object> InvalidRequests => new()

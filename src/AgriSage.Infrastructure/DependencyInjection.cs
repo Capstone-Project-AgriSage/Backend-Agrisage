@@ -76,7 +76,17 @@ public static class DependencyInjection
         // payOS (F2.4): a missing configuration only makes the payOS endpoints answer 503.
         services.AddOptions<PayOsOptions>().Bind(configuration.GetSection(PayOsOptions.SectionName));
         services.TryAddSingleton(TimeProvider.System);
-        services.AddHttpClient<IPaymentGateway, PayOsPaymentGateway>(client => client.Timeout = TimeSpan.FromSeconds(30));
+        if (PayOsMode.IsSimulated(configuration))
+        {
+            // Test environment only (Program refuses this outside Development): no payOS call, the web app gets a test button.
+            services.AddSingleton<SimulatedPaymentGateway>();
+            services.AddSingleton<IPaymentGateway>(provider => provider.GetRequiredService<SimulatedPaymentGateway>());
+            services.AddSingleton<ISimulatedPaymentGateway>(provider => provider.GetRequiredService<SimulatedPaymentGateway>());
+        }
+        else
+        {
+            services.AddHttpClient<IPaymentGateway, PayOsPaymentGateway>(client => client.Timeout = TimeSpan.FromSeconds(30));
+        }
 
         // Goods receipt Excel template (ClosedXML, stateless).
         services.AddSingleton<IReceiptSpreadsheet, ClosedXmlReceiptSpreadsheet>();

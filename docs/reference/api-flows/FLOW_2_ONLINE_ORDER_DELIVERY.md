@@ -305,6 +305,24 @@ expiresAt, status }`. `qrCode` is the VietQR payload string (the client renders 
 8. Unexpected exception → `500` so payOS retries; business rejections after a valid signature never answer
    4xx, so payOS does not retry them forever.
 
+### 6.4 Simulated payments (test environment only)
+
+Real payOS needs keys and a public webhook URL, so the whole online flow can also be run with a simulated gateway:
+`PayOS:Mode = Simulated` (default `Real`; user secrets, `appsettings.Local.json` or the environment variable `PayOS__Mode`).
+
+- Only the gateway changes: `SimulatedPaymentGateway` replaces the payOS adapter and moves no money. A paid link is applied by
+  `PayOsPaymentService` through the normal status-query path (`SettleAsync`, `confirmedVia = STATUS_QUERY`), so the allocation,
+  the audit rows and the order rules are the real ones. Nothing in the business code knows about the simulation.
+- `POST /api/payments/{id}/simulate-paid` (Operate, or a Farmer for their own payment, others 404) marks the payment's simulated link
+  paid and settles it; `200 PaymentResponse`. An already PAID payment is returned unchanged. It exists only in this mode: otherwise
+  **404** for every role. A payment that is not PENDING → `422`; a payment whose link the API no longer knows (state is in memory,
+  so a restart forgets it) → `422`, start the payment again.
+- The `checkoutUrl` of a simulated link is the `PayOS:ReturnUrl` with `?simulated=1&orderCode=…` added, `qrCode` is `SIMULATED`, and
+  `providerPaymentLinkId` starts with `sim-`: the web app shows its test button when `simulated=1` is in the URL, and a simulated
+  payment is recognisable in the database.
+- Safety: the API **refuses to start** with `Simulated` unless the environment is Development; an unknown `PayOS:Mode` is a startup
+  error too. Never turn it on in a shared or production deployment.
+
 Kept from NutriPlan: SDK verification, `success && code == "00"`, a link expiry, 200 for the registration
 test. Not repeated: cancelling a payment because the return URL says `cancel=true` (only payOS's own cancel or
 status API changes a payment here), accepting `amount ≥` as paid, no row lock against duplicate concurrent

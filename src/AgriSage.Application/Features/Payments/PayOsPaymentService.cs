@@ -30,7 +30,8 @@ public sealed class PayOsPaymentService(
     ICurrentUserService currentUser,
     IDateTimeProvider clock,
     IDatabaseErrorClassifier databaseErrors,
-    AuditTrail audit) : IPayOsPaymentService
+    AuditTrail audit,
+    ISimulatedPaymentGateway? simulator = null) : IPayOsPaymentService
 {
     public const string Provider = "PAYOS";
 
@@ -119,6 +120,34 @@ public sealed class PayOsPaymentService(
         }
 
         return await queries.GetAsync(paymentId, me, cancellationToken);
+    }
+
+    // Operate, or a Farmer for their own payment. Only when the API runs with the simulated gateway (PayOS:Mode=Simulated, a
+    // development setting); otherwise the feature does not exist (404). The link is marked paid in the simulator and the payment
+    // is then settled through SyncAsync, the same path a real PAID answer from payOS takes. Idempotent: an already PAID payment
+    // is returned as it is.
+    public async Task<PaymentResponse> SimulatePaidAsync(Guid paymentId, CancellationToken cancellationToken)
+    {
+        var gateway = simulator ?? throw new NotFoundException("Simulated payment", paymentId);
+        var me = await FarmerOrNullAsync(cancellationToken);
+        var payment = await FindPayOsAsync(paymentId, me, cancellationToken);
+        if (payment.Status == PaymentStatus.Paid)
+        {
+            return await queries.GetAsync(paymentId, me, cancellationToken);
+        }
+
+        if (payment.Status != PaymentStatus.Pending)
+        {
+            throw new BusinessRuleException($"Payment '{payment.PaymentNumber}' is {EnumText.Format(payment.Status)}; only a pending payment can be paid.");
+        }
+
+        if (!gateway.TryMarkPaid(payment.ProviderOrderCode!.Value))
+        {
+            throw new BusinessRuleException(
+                $"Payment '{payment.PaymentNumber}' has no live simulated link (the API restarted since it was created): start the payment again.");
+        }
+
+        return await SyncAsync(paymentId, cancellationToken);
     }
 
     // FLOW_2 §6.3: one transaction, idempotent. Business rejections after a valid signature never surface as 4xx (payOS
