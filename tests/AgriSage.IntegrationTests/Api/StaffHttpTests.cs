@@ -45,7 +45,6 @@ public class StaffHttpTests : IClassFixture<StaffHttpTests.StaffApiFactory>
 
     [Theory]
     [InlineData("FARMER")]
-    [InlineData("SALES_STAFF")]
     [InlineData("DELIVERY_STAFF")]
     public async Task Other_roles_cannot_use_the_staff_api(string role)
     {
@@ -54,6 +53,25 @@ public class StaffHttpTests : IClassFixture<StaffHttpTests.StaffApiFactory>
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/staff", Token)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync("/api/staff", new { }, Token)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.DeleteAsync($"/api/staff/{Guid.NewGuid()}", Token)).StatusCode);
+    }
+
+    // Sales staff assign drivers to deliveries, so the list is open to them (delivery staff only, enforced by the service);
+    // every other staff action stays with Admin and Store Owner. A bad query is rejected with 400 before any database
+    // access, which proves the request got past authorization (a 403 would come first).
+    [Fact]
+    public async Task Sales_staff_can_list_staff_but_not_manage_it()
+    {
+        using var client = ClientFor("SALES_STAFF");
+        var id = Guid.NewGuid();
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync("/api/staff?page=0", Token)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync($"/api/staff/{id}", Token)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync("/api/staff", new { }, Token)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PutAsJsonAsync($"/api/staff/{id}", new { }, Token)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsync($"/api/staff/{id}/lock", null, Token)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsync($"/api/staff/{id}/unlock", null, Token)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync($"/api/staff/{id}/reset-password", new { }, Token)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.DeleteAsync($"/api/staff/{id}", Token)).StatusCode);
     }
 
     [Fact]
@@ -115,7 +133,7 @@ public class StaffHttpTests : IClassFixture<StaffHttpTests.StaffApiFactory>
         var lockedUser = Guid.NewGuid();
         _factory.Accounts.Inactive.Add(lockedUser);
         using var locked = ClientFor("ADMIN", lockedUser);
-        using var active = ClientFor("SALES_STAFF");
+        using var active = ClientFor("DELIVERY_STAFF");
 
         Assert.Equal(HttpStatusCode.Unauthorized, (await locked.GetAsync("/api/staff", Token)).StatusCode);
         // Same token shape for an active account gets past authentication (403: the role is not allowed).

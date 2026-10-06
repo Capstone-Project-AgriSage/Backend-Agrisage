@@ -166,13 +166,53 @@ public class StaffDatabaseTests
         await using var session = await RealDb.Session.StartAsync();
         await using var env = await PrepareAsync(session);
         var sales = await env.NewActorAsync(RoleCode.SalesStaff);
+        var driver = await env.NewActorAsync(RoleCode.DeliveryStaff);
 
         await Assert.ThrowsAsync<ForbiddenException>(() =>
             env.StaffAs(sales.Id, "SALES_STAFF").CreateAsync(NewStaff("SALES_STAFF"), Token));
         await Assert.ThrowsAsync<ForbiddenException>(() =>
-            env.StaffAs(sales.Id, "SALES_STAFF").ListAsync(new StaffListRequest(), Token));
+            env.StaffAs(sales.Id, "SALES_STAFF").GetAsync(driver.Id, Token));
+        await Assert.ThrowsAsync<ForbiddenException>(() =>
+            env.StaffAs(driver.Id, "DELIVERY_STAFF").ListAsync(new StaffListRequest(), Token));
+        await Assert.ThrowsAsync<ForbiddenException>(() =>
+            env.StaffAs(Guid.NewGuid(), "FARMER").ListAsync(new StaffListRequest(), Token));
         await Assert.ThrowsAsync<AuthenticationFailedException>(() =>
             env.StaffAs(null, null).ListAsync(new StaffListRequest(), Token));
+    }
+
+    // Sales staff create delivery notes and pick the driver (flow 2): they may list delivery staff, and only them.
+    [RealDbFact]
+    public async Task Sales_staff_list_delivery_staff_only()
+    {
+        await using var session = await RealDb.Session.StartAsync();
+        await using var env = await PrepareAsync(session);
+        var admin = await env.NewActorAsync(RoleCode.Admin);
+        var sales = await env.NewActorAsync(RoleCode.SalesStaff);
+        var manage = env.StaffAs(admin.Id, "ADMIN");
+        var asSales = env.StaffAs(sales.Id, "SALES_STAFF");
+        var tag = Guid.NewGuid().ToString("N")[..8];
+        var first = await manage.CreateAsync(NewStaff("DELIVERY_STAFF", $"Zz{tag} Driver A"), Token);
+        var second = await manage.CreateAsync(NewStaff("DELIVERY_STAFF", $"Zz{tag} Driver B"), Token);
+        await manage.CreateAsync(NewStaff("SALES_STAFF", $"Zz{tag} Sales"), Token);
+        await manage.CreateAsync(NewStaff("STORE_OWNER", $"Zz{tag} Owner"), Token);
+        await manage.LockAsync(second.Id, Token);
+
+        // No role asked: drivers only, never the sales or owner colleagues.
+        var drivers = await asSales.ListAsync(new StaffListRequest { Search = $"zz{tag}" }, Token);
+        Assert.Equal([first.Id, second.Id], drivers.Items.Select(i => i.Id));
+        Assert.All(drivers.Items, i => Assert.Equal("DELIVERY_STAFF", i.Role));
+
+        // The filters the delivery screen uses work: role + ACTIVE account.
+        var active = await asSales.ListAsync(new StaffListRequest { Role = "DELIVERY_STAFF", Status = "ACTIVE", Search = $"zz{tag}" }, Token);
+        Assert.Equal(first.Id, Assert.Single(active.Items).Id);
+
+        // Another role is refused instead of being silently replaced.
+        await Assert.ThrowsAsync<ForbiddenException>(() => asSales.ListAsync(new StaffListRequest { Role = "STORE_OWNER" }, Token));
+        await Assert.ThrowsAsync<ForbiddenException>(() => asSales.ListAsync(new StaffListRequest { Role = "SALES_STAFF" }, Token));
+
+        // Admin and Store Owner still see every staff role.
+        var everyone = await manage.ListAsync(new StaffListRequest { Search = $"zz{tag}" }, Token);
+        Assert.Equal(4, everyone.TotalCount);
     }
 
     [RealDbFact]

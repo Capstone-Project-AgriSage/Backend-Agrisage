@@ -351,7 +351,7 @@ POST /api/deliveries
 | Huỷ lần giao đang chạy | `POST /{id}/attempts/{attemptId}/cancel` `{ "reason": "…" }` | có lần giao `IN_PROGRESS` |
 | Huỷ phiếu | `POST /{id}/cancel` `{ "reason": "…" }` (bắt buộc lý do) | chưa `DELIVERED`/`CANCELLED`, không có lần giao đang chạy |
 
-- **Danh sách tài xế:** `GET /api/staff?role=DELIVERY_STAFF&status=ACTIVE` → gửi `id` (user id) của tài xế. Người không phải tài xế → `422`.
+- **Danh sách tài xế:** `GET /api/staff?role=DELIVERY_STAFF&status=ACTIVE` → gửi `id` (user id) của tài xế. Người không phải tài xế → `422`. Admin, Chủ cửa hàng và **Nhân viên bán hàng** đều gọi được; nhân viên bán hàng chỉ thấy tài xế (xin `role` khác → `403`), nên màn gán tài xế dùng chung cho cả hai vai.
 - **Đổi lô:** tổng `baseQuantity` phải **bằng đúng** phần chưa giao của dòng (`remainingBaseQuantity`), lô phải cùng sản phẩm và còn hạn bán
   (danh sách lô: `GET /api/inventory/lots?storeProductId=&hasStock=true`). Lô cũ hiện trạng thái `RELEASED` (giữ làm lịch sử) — hiển thị mờ, không xoá.
 - **Huỷ phiếu đã giao một phần:** phần đã giao giữ nguyên, phiếu thành `DELIVERED`, dòng thành `PARTIALLY_CANCELLED`; phần chưa giao trở về đơn

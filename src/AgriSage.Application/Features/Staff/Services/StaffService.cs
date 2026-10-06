@@ -71,14 +71,27 @@ public sealed class StaffService(
 
     public async Task<PagedResult<StaffResponse>> ListAsync(StaffListRequest request, CancellationToken cancellationToken)
     {
-        GetActor();
+        var actor = GetListingActor();
         var storeId = await GetActiveStoreIdAsync(cancellationToken);
 
         var staffRoles = StaffPolicy.StaffRoles.ToArray();
         var query = context.StoreMembers.AsNoTracking()
             .Where(m => m.StoreId == storeId && staffRoles.Contains(m.User.Role.Code));
 
-        if (RoleCodeFormat.TryParse(request.Role, out var roleFilter))
+        var hasRoleFilter = RoleCodeFormat.TryParse(request.Role, out var roleFilter);
+        if (!StaffPolicy.CanUseStaffApi(actor.Role))
+        {
+            // Sales staff see delivery staff only: asking for another role is refused, no role means drivers.
+            if (hasRoleFilter && roleFilter != RoleCode.DeliveryStaff)
+            {
+                throw new ForbiddenException();
+            }
+
+            hasRoleFilter = true;
+            roleFilter = RoleCode.DeliveryStaff;
+        }
+
+        if (hasRoleFilter)
         {
             query = query.Where(m => m.User.Role.Code == roleFilter);
         }
@@ -207,6 +220,18 @@ public sealed class StaffService(
         member.EmployeeCode,
         member.JoinedAt
     };
+
+    // Like GetActor, for the one read that sales staff may also make (listing delivery staff).
+    private Actor GetListingActor()
+    {
+        var id = currentUser.UserId ?? throw new AuthenticationFailedException("Authentication is required.");
+        if (!RoleCodeFormat.TryParse(currentUser.Role, out var role) || !StaffPolicy.CanListStaff(role))
+        {
+            throw new ForbiddenException();
+        }
+
+        return new Actor(id, role);
+    }
 
     private Actor GetActor()
     {
