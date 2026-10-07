@@ -26,6 +26,11 @@ public sealed class PayOsPaymentsController(IPayOsPaymentService service, ILogge
     [Authorize(Roles = OperateOrFarmer)]
     public Task<PaymentResponse> Sync(Guid id, CancellationToken token) => service.SyncAsync(id, token);
 
+    // Test environment only: 404 unless the API runs with PayOS:Mode=Simulated. Operate, or a Farmer for their own payment.
+    [HttpPost("api/payments/{id:guid}/simulate-paid")]
+    [Authorize(Roles = OperateOrFarmer)]
+    public Task<PaymentResponse> SimulatePaid(Guid id, CancellationToken token) => service.SimulatePaidAsync(id, token);
+
     [HttpPost("api/payments/payos/webhook")]
     [AllowAnonymous]
     public async Task<IActionResult> Webhook(CancellationToken token)

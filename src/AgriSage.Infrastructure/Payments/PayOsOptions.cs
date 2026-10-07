@@ -19,6 +19,9 @@ public sealed class PayOsOptions
 
     public int LinkExpiryMinutes { get; init; } = 30;
 
+    // Real (default) talks to payOS; Simulated swaps in an in-memory gateway that moves no money (see PayOsMode).
+    public string Mode { get; init; } = PayOsMode.Real;
+
     public bool IsConfigured =>
         !string.IsNullOrWhiteSpace(ClientId) && !string.IsNullOrWhiteSpace(ApiKey) && !string.IsNullOrWhiteSpace(ChecksumKey)
         && Uri.TryCreate(ReturnUrl, UriKind.Absolute, out _) && Uri.TryCreate(CancelUrl, UriKind.Absolute, out _)

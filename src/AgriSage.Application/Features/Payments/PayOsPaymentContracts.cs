@@ -50,6 +50,10 @@ public interface IPayOsPaymentService
 
     Task<PaymentResponse> SyncAsync(Guid paymentId, CancellationToken cancellationToken);
 
+    // Test environment only (PayOS:Mode=Simulated; 404 otherwise): "pays" the payment's simulated link and applies it like a
+    // status query would, so everything after the payment is the real code.
+    Task<PaymentResponse> SimulatePaidAsync(Guid paymentId, CancellationToken cancellationToken);
+
     Task<PayOsWebhookResult> HandleWebhookAsync(string rawPayload, CancellationToken cancellationToken);
 }
 

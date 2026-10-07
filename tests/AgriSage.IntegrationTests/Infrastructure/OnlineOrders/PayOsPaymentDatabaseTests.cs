@@ -8,11 +8,14 @@ using AgriSage.Application.Features.Orders;
 using AgriSage.Application.Features.Payments;
 using AgriSage.Application.Features.Pricing;
 using AgriSage.Domain.Features.Payments.Enums;
+using AgriSage.Infrastructure.Payments;
 using AgriSage.Infrastructure.Persistence;
 using AgriSage.Infrastructure.Services;
 using AgriSage.IntegrationTests.Infrastructure.Payments;
 using AgriSage.IntegrationTests.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 namespace AgriSage.IntegrationTests.Infrastructure.OnlineOrders;
 
@@ -40,6 +43,13 @@ public class PayOsPaymentDatabaseTests
         public PayOsPaymentService PayOs => new(Data.Context, Gateway, Locks, new OrderPrepaymentLedger(Data.Context),
             new PaymentAllocator(_clock, new StubCreditReservationAdjuster(), new StubDebtRepaymentPosting()),
             new PaymentQueries(Data.Context), new CurrentFarmer(Data.Context, Data.User), Data.User, _clock, _errors, Audit);
+
+        // The same service wired the way PayOS:Mode=Simulated wires it: the simulated gateway is both the gateway and the
+        // simulator behind the test button. Built per call, like PayOs, so it sees the current acting user.
+        public PayOsPaymentService PayOsWith(SimulatedPaymentGateway simulated) => new(Data.Context, simulated, Locks,
+            new OrderPrepaymentLedger(Data.Context),
+            new PaymentAllocator(_clock, new StubCreditReservationAdjuster(), new StubDebtRepaymentPosting()),
+            new PaymentQueries(Data.Context), new CurrentFarmer(Data.Context, Data.User), Data.User, _clock, _errors, Audit, simulated);
 
         public CartService Carts => new(Data.Context, new CurrentFarmer(Data.Context, Data.User), new PriceResolver(Data.Context),
             Locks, _errors, Data.User, _clock);
@@ -178,6 +188,70 @@ public class PayOsPaymentDatabaseTests
         Assert.Equal("PAID", synced.Status);
         Assert.Equal("PAYOS_WEBHOOK", synced.ConfirmationSource);
         Assert.Contains("STATUS_QUERY", (await env.PaymentAsync(missed.PaymentId)).Metadata);
+    }
+
+    private static SimulatedPaymentGateway NewSimulator() => new(
+        Options.Create(new PayOsOptions { ReturnUrl = "http://localhost:5174/payments/payos/return" }),
+        TimeProvider.System, NullLogger<SimulatedPaymentGateway>.Instance);
+
+    // The quick "pay" button of the test environment: the simulated link is paid and the payment is settled through the real
+    // status-query path, so the allocation, the metadata and the audit are the normal ones. The link id marks it as simulated.
+    [RealDbFact]
+    public async Task The_test_button_pays_a_simulated_link_through_the_real_status_path_once()
+    {
+        await using var session = await RealDb.Session.StartAsync();
+        var (env, order, _) = await PrepareAsync(session);
+        var simulator = NewSimulator();
+
+        var link = await env.PayOsWith(simulator).CreateAsync(PayOrder with { OrderId = order.Id }, Token);
+        Assert.Equal("PENDING", link.Status);
+        Assert.Equal($"http://localhost:5174/payments/payos/return?simulated=1&orderCode={link.ProviderOrderCode}", link.CheckoutUrl);
+        var pending = await env.PaymentAsync(link.PaymentId);
+        Assert.Equal((PaymentStatus.Pending, 0), (pending.Status, pending.OrderAllocations));
+
+        var paid = await env.PayOsWith(simulator).SimulatePaidAsync(link.PaymentId, Token);
+
+        Assert.Equal("PAID", paid.Status);
+        var after = await env.PaymentAsync(link.PaymentId);
+        Assert.Equal((PaymentStatus.Paid, PaymentConfirmationSource.PayOsWebhook, 1), (after.Status, after.Source, after.OrderAllocations));
+        Assert.Contains("STATUS_QUERY", after.Metadata);
+        var stored = await env.Data.Context.Payments.AsNoTracking().SingleAsync(p => p.Id == link.PaymentId, Token);
+        Assert.StartsWith(SimulatedPaymentGateway.LinkIdPrefix, stored.ProviderPaymentLinkId);
+        Assert.Equal(1, await env.Data.Context.AuditLogs.AsNoTracking().CountAsync(a => a.EntityId == link.PaymentId && a.Action == "PAYMENT_RECEIVED", Token));
+
+        // Pressing it again changes nothing.
+        var again = await env.PayOsWith(simulator).SimulatePaidAsync(link.PaymentId, Token);
+        Assert.Equal("PAID", again.Status);
+        Assert.Equal(1, (await env.PaymentAsync(link.PaymentId)).OrderAllocations);
+        Assert.Equal(1, await env.Data.Context.AuditLogs.AsNoTracking().CountAsync(a => a.EntityId == link.PaymentId && a.Action == "PAYMENT_RECEIVED", Token));
+    }
+
+    [RealDbFact]
+    public async Task The_test_button_is_refused_for_other_farmers_closed_payments_a_restart_and_a_real_gateway()
+    {
+        await using var session = await RealDb.Session.StartAsync();
+        var (env, order, farmer) = await PrepareAsync(session);
+        var simulator = NewSimulator();
+        var link = await env.PayOsWith(simulator).CreateAsync(PayOrder with { OrderId = order.Id }, Token);
+
+        // Not running with the simulated gateway: the feature does not exist.
+        await Assert.ThrowsAsync<NotFoundException>(() => env.PayOs.SimulatePaidAsync(link.PaymentId, Token));
+
+        // Someone else's payment is a 404, like sync and cancel.
+        await env.Data.ActAsNewFarmerAsync();
+        await Assert.ThrowsAsync<NotFoundException>(() => env.PayOsWith(simulator).SimulatePaidAsync(link.PaymentId, Token));
+        env.Data.ActAs(farmer.UserId, "FARMER");
+
+        // A restart forgets the simulated links: the payment cannot be paid and has to be started again.
+        var restarted = await Assert.ThrowsAsync<BusinessRuleException>(() => env.PayOsWith(NewSimulator()).SimulatePaidAsync(link.PaymentId, Token));
+        Assert.Contains("restarted", restarted.Message);
+        Assert.Equal(PaymentStatus.Pending, (await env.PaymentAsync(link.PaymentId)).Status);
+
+        // A cancelled payment is closed for good.
+        Assert.Equal("CANCELLED", (await env.PayOsWith(simulator).CancelMineAsync(link.PaymentId, Token)).Status);
+        var closed = await Assert.ThrowsAsync<BusinessRuleException>(() => env.PayOsWith(simulator).SimulatePaidAsync(link.PaymentId, Token));
+        Assert.Contains("CANCELLED", closed.Message);
+        Assert.Equal(0, (await env.PaymentAsync(link.PaymentId)).OrderAllocations);
     }
 
     [RealDbFact]
