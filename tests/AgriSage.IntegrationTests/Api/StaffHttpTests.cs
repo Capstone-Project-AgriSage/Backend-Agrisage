@@ -171,6 +171,8 @@ public class StaffHttpTests : IClassFixture<StaffHttpTests.StaffApiFactory>
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Development");
+            // The developer's own appsettings.Local.json (payOS keys, PayOS:Mode=Simulated...) must not change what these tests assert.
+            builder.UseSetting(AgriSage.Api.Extensions.LocalSettingsExtensions.DisabledSetting, "true");
             // The in-process HTTP test host does not write machine-wide Windows event logs.
             builder.UseSetting("Logging:EventLog:LogLevel:Default", "None");
             // Test-only key; real keys come from User Secrets / environment variables.

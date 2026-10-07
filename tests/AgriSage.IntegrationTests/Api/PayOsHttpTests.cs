@@ -23,6 +23,7 @@ public class PayOsHttpTests(PayOsHttpTests.PayOsApiFactory factory) : IClassFixt
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Development");
+            builder.UseSetting(AgriSage.Api.Extensions.LocalSettingsExtensions.DisabledSetting, "true");
             builder.UseSetting("Jwt:SigningKey", "integration-test-signing-key-not-a-secret-000000");
             builder.ConfigureServices(services =>
             {

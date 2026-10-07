@@ -31,6 +31,17 @@ public class LocalSettingsFileTests : IDisposable
         Assert.Equal("from-local-file", builder.Configuration["Database:Password"]);
     }
 
+    [Fact]
+    public void The_disabled_switch_skips_the_file_even_in_development()
+    {
+        var builder = Builder("Development");
+        builder.Configuration[LocalSettingsExtensions.DisabledSetting] = "true";
+
+        builder.AddLocalSettingsFile();
+
+        Assert.Null(builder.Configuration["Database:Password"]);
+    }
+
     [Theory]
     [InlineData("Production")]
     [InlineData("Staging")]

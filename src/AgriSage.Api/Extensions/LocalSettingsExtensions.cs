@@ -8,9 +8,13 @@ public static class LocalSettingsExtensions
 {
     public const string FileName = "appsettings.Local.json";
 
+    // Set to true (e.g. through the test host's UseSetting) to skip the file: a developer's own keys or PayOS:Mode=Simulated
+    // must not change what an offline test asserts.
+    public const string DisabledSetting = "LocalSettings:Disabled";
+
     public static WebApplicationBuilder AddLocalSettingsFile(this WebApplicationBuilder builder)
     {
-        if (builder.Environment.IsDevelopment())
+        if (builder.Environment.IsDevelopment() && !builder.Configuration.GetValue<bool>(DisabledSetting))
         {
             builder.Configuration.AddJsonFile(FileName, optional: true, reloadOnChange: true);
         }
