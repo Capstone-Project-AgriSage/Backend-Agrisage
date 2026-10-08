@@ -58,7 +58,9 @@ public class AuthInfrastructureTests : IClassFixture<ApiStartupTests.Development
         Assert.Equal(userId.ToString(), result.ClaimsIdentity.FindFirst(AgriSageClaimTypes.Subject)?.Value);
         Assert.Equal("FARMER", result.ClaimsIdentity.FindFirst(AgriSageClaimTypes.Role)?.Value);
         Assert.NotNull(result.ClaimsIdentity.FindFirst(JwtRegisteredClaimNames.Jti));
-        Assert.True(token.ExpiresAt > DateTimeOffset.UtcNow.AddMinutes(59) && token.ExpiresAt <= DateTimeOffset.UtcNow.AddMinutes(61));
+        // The lifetime is configuration (60 minutes by default, a day in Development for the mobile apps), so read it.
+        var minutes = _factory.Services.GetRequiredService<IOptions<JwtOptions>>().Value.AccessTokenMinutes;
+        Assert.True(token.ExpiresAt > DateTimeOffset.UtcNow.AddMinutes(minutes - 1) && token.ExpiresAt <= DateTimeOffset.UtcNow.AddMinutes(minutes + 1));
         Assert.True(result.ClaimsIdentity.IsAuthenticated);
     }
 
@@ -66,7 +68,8 @@ public class AuthInfrastructureTests : IClassFixture<ApiStartupTests.Development
     public async Task Expired_token_is_rejected()
     {
         var options = _factory.Services.GetRequiredService<IOptions<JwtOptions>>();
-        var service = new AccessTokenService(options, new FixedClock(DateTimeOffset.UtcNow.AddHours(-3)));
+        // Issued long enough ago to be expired whatever the configured lifetime is (plus the 30 s of clock skew).
+        var service = new AccessTokenService(options, new FixedClock(DateTimeOffset.UtcNow.AddMinutes(-(options.Value.AccessTokenMinutes + 60))));
 
         var result = await ValidateAsync(service.Issue(Guid.NewGuid(), "FARMER").Value);
 

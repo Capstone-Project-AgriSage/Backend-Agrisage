@@ -222,6 +222,29 @@ public class SalesReturnDatabaseTests
         await Assert.ThrowsAsync<BusinessRuleException>(() => own.My(s => s.CancelAsync(next.Id, new("Too late"), Token)));
     }
     [RealDbFact]
+    public async Task Farmer_never_sees_what_the_goods_cost_the_store_but_the_staff_do()
+    {
+        await using var session = await RealDb.Session.StartAsync(); var env = await Prepare(session);
+        var staffReturnable = Assert.Single((await env.Run(s => s.ReturnableAsync(env.Order, Token))).Items);
+        Assert.All(staffReturnable.Sources, source => Assert.NotNull(source.OriginalCogsUnitCost));
+        var farmerReturnable = Assert.Single((await env.My(s => s.ReturnableAsync(env.Order, Token))).Items);
+        Assert.All(farmerReturnable.Sources, source => Assert.Null(source.OriginalCogsUnitCost));
+        Assert.Equal(staffReturnable.ReturnableBaseQuantity, farmerReturnable.ReturnableBaseQuantity);
+
+        var requested = await env.My(s => s.CreateAsync(new(env.Order, [env.Line(3)]), Token));
+        Assert.All(requested.Items, i => { Assert.Null(i.OriginalCogsUnitCost); Assert.Null(i.ReturnInventoryCostValue); });
+        await env.Inspect(requested.Id); var completed = await env.Run(s => s.CompleteInspectionAsync(requested.Id, Token));
+        Assert.All(completed.Items, i => { Assert.NotNull(i.OriginalCogsUnitCost); Assert.NotNull(i.ReturnInventoryCostValue); });
+
+        var farmerView = await env.My(s => s.GetAsync(requested.Id, Token));
+        Assert.Equal(completed.TotalReturnAmount, farmerView.TotalReturnAmount);
+        Assert.All(farmerView.Items, i => { Assert.Null(i.OriginalCogsUnitCost); Assert.Null(i.ReturnInventoryCostValue); });
+
+        var next = await env.My(s => s.CreateAsync(new(env.Order, [env.Line(2)]), Token));
+        var cancelled = await env.My(s => s.CancelAsync(next.Id, new("Not needed"), Token));
+        Assert.All(cancelled.Items, i => { Assert.Null(i.OriginalCogsUnitCost); Assert.Null(i.ReturnInventoryCostValue); });
+    }
+    [RealDbFact]
     public async Task Unfulfilled_wrong_order_wrong_source_type_and_overlapping_lines_are_rejected_without_partial_request()
     {
         await using var session = await RealDb.Session.StartAsync(); var env = await Prepare(session); var other = await Prepare(session, fulfilled: false);
