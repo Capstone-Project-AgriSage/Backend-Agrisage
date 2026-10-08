@@ -293,6 +293,10 @@ totalReturnAmount, totalRefundAmount, requestedAt`.
 `items` (source ids, lot, quantity, prices, return value, COGS, reason, condition, disposition,
 `returnStockMovementId`, `debtAdjustmentTransactionId`) + `refunds` (`RefundResponse[]`, README §2).
 
+**What the store paid is not for the farmer.** On the `/api/me/returns` routes and on
+`GET /api/me/orders/{id}/returnable`, `originalCogsUnitCost` and `returnInventoryCostValue` are always `null`
+(`FarmerReturnView`); the staff routes return them as above.
+
 ---
 
 ## 7. F4.5 — Refunds (`Manage`)

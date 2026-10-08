@@ -21,7 +21,7 @@ public sealed record SalesReturnListRequest : PaginationRequest
 public sealed record ReturnableSource(Guid? DeliveryItemId, Guid? DeliveryItemLotAllocationId,
     Guid? OriginalStockMovementItemId, Guid InventoryLotId, string? LotNumber, DateOnly? ExpiryDate,
     long FulfilledBaseQuantity, long AlreadyReturnedBaseQuantity, long ReturnableBaseQuantity,
-    decimal UnitPrice, long ConversionToBase, decimal OriginalCogsUnitCost);
+    decimal UnitPrice, long ConversionToBase, decimal? OriginalCogsUnitCost);
 public sealed record ReturnableOrderItem(Guid OrderItemId, string Sku, string ProductName,
     long FulfilledBaseQuantity, long AlreadyReturnedBaseQuantity, long ReturnableBaseQuantity,
     decimal UnitPrice, long ConversionToBase, IReadOnlyList<ReturnableSource> Sources);
