@@ -62,6 +62,8 @@ public sealed class MeOrderService(
 
         context.Orders.Add(order);
         cart!.MarkConverted(order.Id, clock.UtcNow);
+        audit.Record("ORDER_PLACED", "ORDER", order.Id, order.StoreId,
+            newValues: new { order.OrderNumber, status = EnumText.Format(order.Status), source = EnumText.Format(order.Source) });
 
         try
         {

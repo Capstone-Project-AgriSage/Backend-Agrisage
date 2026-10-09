@@ -80,19 +80,23 @@ public class InventoryOverviewDatabaseTests
     private static InventoryService Service(AgriSageDbContext db) => new(db, Clock, new RowLockService(db));
 
     [RealDbFact]
-    public async Task Scheduled_inventory_alerts_page_all_items_deduplicate_daily_and_only_notify_active_sales_members()
+    public async Task Scheduled_inventory_alerts_page_all_items_deduplicate_daily_and_follow_owner_sales_coverage()
     {
         await using var session = await RealDb.Session.StartAsync();
         await using var db = session.NewContext();
         var f = await PrepareAsync(db);
         var salesRole = await db.Roles.SingleAsync(r => r.Code == RoleCode.SalesStaff, Token);
         var deliveryRole = await db.Roles.SingleAsync(r => r.Code == RoleCode.DeliveryStaff, Token);
+        var ownerRole = await db.Roles.SingleAsync(r => r.Code == RoleCode.StoreOwner, Token);
         User NewUser(Role role, string suffix) => new(role.Id, suffix, "hash", $"{f.Tag}-{suffix}@example.test", null);
         var staff = NewUser(salesRole, "active"); var locked = NewUser(salesRole, "locked");
         var delivery = NewUser(deliveryRole, "delivery"); locked.ChangeStatus(UserStatus.Locked);
-        db.AddRange(staff, locked, delivery, new StoreMember(f.StoreId, staff.Id),
+        var owner = NewUser(ownerRole, "owner");
+        db.AddRange(staff, locked, delivery, owner, new StoreMember(f.StoreId, owner.Id), new StoreMember(f.StoreId, staff.Id),
             new StoreMember(f.StoreId, locked.Id), new StoreMember(f.StoreId, delivery.Id));
-        var low = f.AddProduct(db, "LOW", 1);
+        var low = f.AddProduct(db, "LOW", 2);
+        AddLot(db, low, "low", null, 1);
+        var empty = f.AddProduct(db, "EMPTY"); // out of stock also alerts without a configured minimum
         var expired = f.AddProduct(db, "PAST");
         var expiring = f.AddProduct(db, "SOON");
         var past = AddLot(db, expired, "past", -1);
@@ -102,11 +106,14 @@ public class InventoryOverviewDatabaseTests
         var alerts = new OperationalAlertsService(db, new NotificationWriter(db), Service(db), Clock);
         await alerts.InventoryAlertsAsync(1, 2, Token); // one item per page exercises continuation
         await alerts.InventoryAlertsAsync(1, 2, Token);
-        var keys = new[] { $"inventory:LOW_STOCK:{low.Id:N}:20261005",
+        var keys = new[] { $"inventory:LOW_STOCK:{low.Id:N}:20261005", $"inventory:OUT_OF_STOCK:{empty.Id:N}:20261005",
+            $"inventory:OUT_OF_STOCK:{expired.Id:N}:20261005",
             $"inventory:EXPIRED:{past.Id:N}:20261005", $"inventory:EXPIRING:{soon.Id:N}:20261005" };
         var notifications = await db.Notifications.AsNoTracking().Where(n => keys.Contains(n.DeduplicationKey!)).ToListAsync(Token);
-        Assert.Equal(3, notifications.Count);
-        Assert.All(notifications, n => Assert.Equal(staff.Id, n.UserId));
+        Assert.Equal(8, notifications.Count);
+        Assert.Equal(5, notifications.Count(n => n.UserId == owner.Id));
+        Assert.Equal(3, notifications.Count(n => n.UserId == staff.Id));
+        Assert.All(notifications.Where(n => n.NotificationType == "EXPIRY_WARNING"), n => Assert.Equal(owner.Id, n.UserId));
         Assert.Equal(movements, await db.StockMovements.CountAsync(Token));
         Assert.Equal(10, past.Balance.QuantityOnHand); Assert.Equal(10, soon.Balance.QuantityOnHand);
         Assert.Equal(InventoryLotStatus.Active, past.Status); // reminders do not expire or alter physical stock

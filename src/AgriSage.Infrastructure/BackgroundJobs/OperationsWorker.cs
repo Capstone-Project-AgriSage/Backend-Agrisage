@@ -65,6 +65,22 @@ public sealed class OperationsWorker(IServiceScopeFactory scopes, IOptions<Backg
                         logger.LogWarning("Notification event {EventId} failed; retry scheduled.", id);
                     }
                 }
+                // Independent notification-only collectors use fresh contexts after any failed save.
+                foreach (var collector in new[] { "stock", "diagnosis" })
+                {
+                    try
+                    {
+                        await using var collected = scopes.CreateAsyncScope();
+                        var publisher = collected.ServiceProvider.GetRequiredService<CommittedNotificationService>();
+                        if (collector == "stock") await publisher.StockAsync(o.BatchSize, token);
+                        else await publisher.DiagnosisAsync(o.BatchSize, token);
+                    }
+                    catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+                    catch (Exception e)
+                    {
+                        logger.LogWarning("Notification collector {Collector} failed ({ErrorType}); it will retry.", collector, e.GetType().Name);
+                    }
+                }
                 break;
             case BackgroundTask.ExpireLots:
                 await services.GetRequiredService<IInventoryService>().ExpireDueLotsAsync(token); break;

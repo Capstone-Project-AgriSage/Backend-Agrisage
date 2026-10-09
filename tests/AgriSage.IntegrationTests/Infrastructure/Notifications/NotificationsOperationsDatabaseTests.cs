@@ -77,7 +77,8 @@ public sealed class NotificationsOperationsDatabaseTests
         var item = await e.Context.NotificationOutbox.SingleAsync(o => o.AuditLogId == log.Id, Token);
         var dispatcher = new NotificationDispatcher(e.Context, new NotificationOutboxLock(e.Context), new NotificationWriter(e.Context), e.Time);
         await dispatcher.DispatchAsync(item.Id, Token); await dispatcher.DispatchAsync(item.Id, Token);
-        var notification = await e.Context.Notifications.SingleAsync(n => n.DeduplicationKey == $"audit:{log.Id:N}", Token);
+        var notification = await e.Context.Notifications.SingleAsync(n => n.UserId == e.User.Id
+            && n.DeduplicationKey == $"audit:{log.Id:N}", Token);
         Assert.Equal(e.User.Id, notification.UserId); Assert.Equal("ORDER_STATUS_CHANGED", notification.NotificationType);
         Assert.NotNull(item.ProcessedAt);
     }
@@ -85,12 +86,98 @@ public sealed class NotificationsOperationsDatabaseTests
     public async Task Failed_save_does_not_commit_the_audit_or_its_outbox()
     {
         await using var e = await OperationsTestEnvironment.CreateAsync();
-        var log = e.Audit.Record("ORDER_CONFIRMED", "ORDER", Guid.NewGuid(), e.Store.Id);
+        var log = e.Audit.Record("ORDER_PLACED", "ORDER", Guid.NewGuid(), e.Store.Id);
         e.Context.AuthSessions.Add(new AuthSession(Guid.NewGuid(), 0, e.Time.UtcNow, e.Time.UtcNow.AddDays(1)));
         await Assert.ThrowsAsync<DbUpdateException>(() => e.Context.SaveChangesAsync(Token));
         await using var reader = e.Database.NewContext();
         Assert.False(await reader.AuditLogs.AnyAsync(a => a.Id == log.Id, Token));
         Assert.False(await reader.NotificationOutbox.AnyAsync(o => o.AuditLogId == log.Id, Token));
+    }
+    [RealDbFact]
+    public async Task Farmer_order_placement_notifies_only_active_owners_and_sales_members_of_its_store()
+    {
+        await using var e = await OperationsTestEnvironment.CreateAsync();
+        // The real development store can already have eligible staff; their alerts are also legitimate.
+        var existingRecipients = await e.Context.StoreMembers.AsNoTracking().Where(m => m.StoreId == e.Store.Id
+            && m.Status == StoreMemberStatus.Active && m.User.Status == UserStatus.Active
+            && m.User.Role.IsActive && m.User.Role.DeletedAt == null
+            && (m.User.Role.Code == RoleCode.StoreOwner || m.User.Role.Code == RoleCode.SalesStaff))
+            .Select(m => m.UserId).Distinct().ToListAsync(Token);
+        var otherStore = new Store("S" + Guid.NewGuid().ToString("N")[..12], "Other", "Address", "Province", status: StoreStatus.Inactive);
+        e.Context.Stores.Add(otherStore);
+        var roles = new Dictionary<RoleCode, Role>();
+        foreach (var code in new[] { RoleCode.StoreOwner, RoleCode.SalesStaff, RoleCode.DeliveryStaff, RoleCode.Admin })
+        {
+            var role = await e.Context.Roles.SingleOrDefaultAsync(r => r.Code == code, Token) ?? new Role(code, code.ToString());
+            if (e.Context.Entry(role).State == EntityState.Detached) e.Context.Roles.Add(role);
+            roles.Add(code, role);
+        }
+        User AddMember(RoleCode code, Guid? storeId, StoreMemberStatus status = StoreMemberStatus.Active, bool disabled = false)
+        {
+            var user = new User(roles[code].Id, "Staff", "hash", $"{Guid.NewGuid():N}@example.test", null,
+                status: disabled ? UserStatus.Inactive : UserStatus.Active);
+            e.Context.Users.Add(user);
+            if (storeId is { } store)
+            {
+                var member = new StoreMember(store, user.Id);
+                if (status == StoreMemberStatus.Inactive) member.Deactivate();
+                if (status == StoreMemberStatus.Left) member.Leave(DateOnly.FromDateTime(e.Time.UtcNow.UtcDateTime));
+                e.Context.StoreMembers.Add(member);
+            }
+            return user;
+        }
+        var owner = AddMember(RoleCode.StoreOwner, e.Store.Id);
+        var sales = AddMember(RoleCode.SalesStaff, e.Store.Id);
+        AddMember(RoleCode.SalesStaff, otherStore.Id);
+        AddMember(RoleCode.SalesStaff, null);
+        AddMember(RoleCode.SalesStaff, e.Store.Id, StoreMemberStatus.Inactive);
+        AddMember(RoleCode.StoreOwner, e.Store.Id, StoreMemberStatus.Left);
+        AddMember(RoleCode.SalesStaff, e.Store.Id, disabled: true);
+        AddMember(RoleCode.DeliveryStaff, e.Store.Id);
+        AddMember(RoleCode.Admin, e.Store.Id);
+        e.Context.StoreMembers.Add(new StoreMember(e.Store.Id, e.User.Id));
+        var deleted = AddMember(RoleCode.SalesStaff, e.Store.Id);
+        await e.Context.SaveChangesAsync(Token);
+        e.Context.Remove(await e.Context.StoreMembers.SingleAsync(m => m.UserId == deleted.Id, Token));
+        var order = new Order(e.Store.Id, $"OD-{Guid.NewGuid():N}", OrderSource.FarmerMobile, CustomerType.Registered,
+            e.User.Id, "Farmer", SettlementType.FullPayment, FulfillmentType.Pickup, e.Farmer.Id);
+        e.Context.Orders.Add(order);
+        var log = e.Audit.Record("ORDER_PLACED", "ORDER", order.Id, e.Store.Id);
+        await e.Context.SaveChangesAsync(Token);
+        var item = await e.Context.NotificationOutbox.SingleAsync(o => o.AuditLogId == log.Id, Token);
+        var dispatcher = new NotificationDispatcher(e.Context, new NotificationOutboxLock(e.Context), new NotificationWriter(e.Context), e.Time);
+        await dispatcher.DispatchAsync(item.Id, Token);
+        await dispatcher.DispatchAsync(item.Id, Token);
+        var recipients = await e.Context.Notifications.Where(n => n.DeduplicationKey == $"audit:{log.Id:N}")
+            .Select(n => n.UserId).ToListAsync(Token);
+        Assert.Equal(existingRecipients.Concat([owner.Id, sales.Id]).Order(), recipients.Order());
+        Assert.Contains(owner.Id, recipients);
+        Assert.Contains(sales.Id, recipients);
+    }
+    [RealDbFact]
+    public async Task Order_placement_does_not_notify_a_store_for_missing_or_counter_orders()
+    {
+        await using var e = await OperationsTestEnvironment.CreateAsync();
+        var role = await e.Context.Roles.SingleOrDefaultAsync(r => r.Code == RoleCode.StoreOwner, Token)
+            ?? new Role(RoleCode.StoreOwner, "Owner");
+        if (e.Context.Entry(role).State == EntityState.Detached) e.Context.Roles.Add(role);
+        var owner = new User(role.Id, "Owner", "hash", $"{Guid.NewGuid():N}@example.test", null);
+        e.Context.Users.Add(owner);
+        e.Context.StoreMembers.Add(new StoreMember(e.Store.Id, owner.Id));
+        var counter = new Order(e.Store.Id, $"OD-{Guid.NewGuid():N}", OrderSource.Counter, CustomerType.Registered,
+            e.User.Id, "Farmer", SettlementType.FullPayment, FulfillmentType.Pickup, e.Farmer.Id);
+        e.Context.Orders.Add(counter);
+        var missingLog = e.Audit.Record("ORDER_PLACED", "ORDER", Guid.NewGuid(), e.Store.Id);
+        var counterLog = e.Audit.Record("ORDER_PLACED", "ORDER", counter.Id, e.Store.Id);
+        await e.Context.SaveChangesAsync(Token);
+        var dispatcher = new NotificationDispatcher(e.Context, new NotificationOutboxLock(e.Context), new NotificationWriter(e.Context), e.Time);
+        foreach (var log in new[] { missingLog, counterLog })
+        {
+            var item = await e.Context.NotificationOutbox.SingleAsync(o => o.AuditLogId == log.Id, Token);
+            await dispatcher.DispatchAsync(item.Id, Token);
+            Assert.NotNull(item.ProcessedAt);
+            Assert.False(await e.Context.Notifications.AnyAsync(n => n.DeduplicationKey == $"audit:{log.Id:N}", Token));
+        }
     }
     [RealDbFact]
     public async Task Notification_deduplication_survives_archive_and_soft_delete()
@@ -173,8 +260,11 @@ public sealed class NotificationsOperationsDatabaseTests
     [RealDbFact]
     public async Task PostgreSql_job_lock_excludes_other_replica_and_releases_on_dispose()
     {
-        await using var e = await OperationsTestEnvironment.CreateAsync();
-        var locks = new PostgresBackgroundJobLock(e.Context);
+        // Production acquires the job lock before opening the scoped EF connection. An already-open
+        // fixture connection strips its password, so use a fresh context for the dedicated lock connections.
+        await using var context = new AgriSageDbContext(new DbContextOptionsBuilder<AgriSageDbContext>()
+            .UseNpgsql(RealDb.ConnectionString()).Options);
+        var locks = new PostgresBackgroundJobLock(context);
         var first = await locks.TryAcquireAsync(AgriSage.Application.Common.Interfaces.BackgroundTask.Notifications, Token);
         Assert.NotNull(first);
         try { Assert.Null(await locks.TryAcquireAsync(AgriSage.Application.Common.Interfaces.BackgroundTask.Notifications, Token)); }

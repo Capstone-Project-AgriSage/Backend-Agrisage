@@ -136,6 +136,8 @@ public sealed class OrderPaymentCancellation(
                 DocumentNumbers.Format(DocumentNumbers.Refund, day, sequence++), payment.Id, method, amount, actorId, now, reason);
 
             refunds.Add(new CancellationRefundInfo(refund.Id, refund.RefundNumber, payment.Id, method, amount));
+            audit.Record("REFUND_PENDING", "REFUND", refund.Id, storeId,
+                newValues: new { orderId = order.Id, refund.RefundNumber, refund.Amount });
             audit.Record(
                 "ORDER_PREPAYMENT_RELEASED", "PAYMENT", payment.Id, storeId, null,
                 new { orderId = order.Id, released = amount, refundNumber = refund.RefundNumber, method = EnumText.Format(method) }, reason);

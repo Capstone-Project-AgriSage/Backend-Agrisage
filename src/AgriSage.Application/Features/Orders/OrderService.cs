@@ -36,6 +36,8 @@ public sealed class OrderService(
 
         context.Orders.Add(order);
         builder.RecordPriceOverrides(order);
+        audit.Record("ORDER_CREATED", "ORDER", order.Id, order.StoreId,
+            newValues: new { order.OrderNumber, status = EnumText.Format(order.Status) });
         await SaveAsync(cancellationToken);
 
         return await queries.GetAsync(order.Id, cancellationToken);

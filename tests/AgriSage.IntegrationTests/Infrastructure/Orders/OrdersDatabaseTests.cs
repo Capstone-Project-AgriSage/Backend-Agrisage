@@ -369,8 +369,12 @@ public class OrdersDatabaseTests
         var restored = await env.Orders.RestoreItemPriceAsync(created.Id, discounted.Id, Token);
         Assert.Equal((10_000m, false, 75_000m), (restored.Items.Single(i => i.Id == discounted.Id).UnitPrice, restored.Items.Single(i => i.Id == discounted.Id).PriceOverridden, restored.TotalAmount));
 
-        var audit = await env.Context.AuditLogs.AsNoTracking().Where(a => a.EntityId == created.Id).OrderBy(a => a.OccurredAt).ThenBy(a => a.Id).ToListAsync(Token);
+        var audit = await env.Context.AuditLogs.AsNoTracking().Where(a => a.EntityId == created.Id
+            && (a.Action == "PRICE_OVERRIDE" || a.Action == "PRICE_OVERRIDE_REMOVED"))
+            .OrderBy(a => a.OccurredAt).ThenBy(a => a.Id).ToListAsync(Token);
         Assert.Equal(["PRICE_OVERRIDE", "PRICE_OVERRIDE", "PRICE_OVERRIDE_REMOVED", "PRICE_OVERRIDE_REMOVED"], audit.Select(a => a.Action));
+        var creation = await env.Context.AuditLogs.SingleAsync(a => a.EntityId == created.Id && a.Action == "ORDER_CREATED", Token);
+        Assert.True(await env.Context.NotificationOutbox.AnyAsync(o => o.AuditLogId == creation.Id, Token));
         Assert.All(audit, a => Assert.Equal((env.Actor.Id, "ORDER"), (a.ActorUserId, a.EntityType)));
         Assert.Equal("Khách quen", audit[0].Reason);
         Assert.Contains("10000", audit[0].OldValues);

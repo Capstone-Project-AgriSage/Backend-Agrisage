@@ -43,6 +43,7 @@ public static class DependencyInjection
         services.AddScoped<NotificationWriter>();
         services.AddScoped<NotificationDispatcher>();
         services.AddScoped<OperationalAlertsService>();
+        services.AddScoped<CommittedNotificationService>();
         services.AddScoped<IAuditLogService, AuditLogService>();
         services.AddScoped<PaymentReconciliationService>();
         services.AddScoped<IAdminBootstrapService, AdminBootstrapService>();

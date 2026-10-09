@@ -4,9 +4,13 @@ using AgriSage.Tests.TestDoubles;
 using AgriSage.Application.Features.Carts;
 using AgriSage.Application.Features.Customers;
 using AgriSage.Application.Features.Orders;
+using AgriSage.Application.Features.Notifications;
 using AgriSage.Application.Features.Payments;
 using AgriSage.Application.Features.Pricing;
+using AgriSage.Domain.Features.Identity.Enums;
 using AgriSage.Domain.Features.Orders.Enums;
+using AgriSage.Domain.Features.Stores.Entities;
+using AgriSage.Infrastructure.Authentication;
 using AgriSage.Infrastructure.Persistence;
 using AgriSage.Infrastructure.Services;
 using AgriSage.IntegrationTests.Infrastructure.Payments;
@@ -75,6 +79,8 @@ public class MeOrdersDatabaseTests
         var (env, product, farmer) = await PrepareAsync(session);
         var cart = await env.Carts.AddItemAsync(new(product.StoreProductId, product.BoxId, 2), Token);
         await env.Carts.AddItemAsync(new(product.StoreProductId, product.BottleId, 3), Token);
+        env.Data.Context.StoreMembers.Add(new StoreMember(env.Data.StoreId, env.Data.Staff.Id));
+        await env.Data.Context.SaveChangesAsync(Token);
 
         var order = await env.Orders.CheckoutAsync(Pickup with { Note = "  Giao buổi sáng " }, Token);
 
@@ -94,6 +100,23 @@ public class MeOrdersDatabaseTests
         Assert.Equal(CartStatus.Converted, converted.Status);
         Assert.Equal(order.Id, converted.ConvertedOrderId);
         Assert.Null((await env.Carts.GetAsync(Token)).Id); // the next item starts a new cart
+
+        var log = await env.Data.Context.AuditLogs.SingleAsync(a => a.Action == "ORDER_PLACED" && a.EntityId == order.Id, Token);
+        Assert.Equal(farmer.UserId, log.ActorUserId);
+        Assert.Equal(env.Data.StoreId, log.StoreId);
+        var pending = await env.Data.Context.NotificationOutbox.SingleAsync(o => o.AuditLogId == log.Id, Token);
+        var dispatcher = new NotificationDispatcher(env.Data.Context, new NotificationOutboxLock(env.Data.Context),
+            new NotificationWriter(env.Data.Context), new DateTimeProvider());
+        await dispatcher.DispatchAsync(pending.Id, Token);
+        await dispatcher.DispatchAsync(pending.Id, Token);
+        var notice = await env.Data.Context.Notifications.SingleAsync(n => n.DeduplicationKey == $"audit:{log.Id:N}", Token);
+        Assert.Equal(env.Data.Staff.Id, notice.UserId);
+        Assert.Equal("ORDER_PLACED", notice.NotificationType);
+        Assert.Equal("Đơn hàng mới chờ xác nhận", notice.Title);
+        Assert.NotNull(pending.ProcessedAt);
+        Assert.False(await env.Data.Context.Notifications.AnyAsync(n => n.UserId == farmer.UserId, Token));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => env.Orders.CheckoutAsync(Pickup, Token));
+        Assert.Equal(1, await env.Data.Context.AuditLogs.CountAsync(a => a.Action == "ORDER_PLACED" && a.EntityId == order.Id, Token));
     }
 
     [RealDbFact]
@@ -145,6 +168,7 @@ public class MeOrdersDatabaseTests
         Assert.Contains("items[0]", error.Errors!.Keys);
         Assert.Equal(CartStatus.Active, (await env.Data.Context.Carts.AsNoTracking().SingleAsync(c => c.Id == cart.Id, Token)).Status);
         Assert.False(await env.Data.Context.Orders.AsNoTracking().AnyAsync(o => o.FarmerProfileId == farmer.ProfileId, Token));
+        Assert.False(await env.Data.Context.AuditLogs.AnyAsync(a => a.Action == "ORDER_PLACED" && a.ActorUserId == farmer.UserId, Token));
     }
 
     [RealDbFact]
@@ -187,5 +211,55 @@ public class MeOrdersDatabaseTests
         Assert.Equal(110_000m, refund.Amount);
 
         await Assert.ThrowsAsync<BusinessRuleException>(() => env.Orders.CancelAsync(order.Id, new("again"), Token));
+    }
+
+    [RealDbFact]
+    public async Task Farmer_cancellation_persists_its_event_and_notifies_active_owner_and_sales_once()
+    {
+        await using var session = await RealDb.Session.StartAsync();
+        var (env, product, farmer) = await PrepareAsync(session);
+        var owner = await env.Data.NewMemberAsync(RoleCode.StoreOwner);
+        var sales = await env.Data.NewMemberAsync(RoleCode.SalesStaff);
+        await env.Carts.AddItemAsync(new(product.StoreProductId, product.BoxId, 1), Token);
+        var order = await env.Orders.CheckoutAsync(Pickup, Token);
+
+        var cancelled = await env.Orders.CancelAsync(order.Id, new("Người dùng hủy"), Token);
+        Assert.Equal("CANCELLED", cancelled.Status);
+
+        // A fresh context must see both the persisted cancellation and its pending notification event.
+        await using var reader = session.NewContext();
+        var persisted = await reader.Orders.AsNoTracking().SingleAsync(o => o.Id == order.Id, Token);
+        Assert.Equal(OrderStatus.Cancelled, persisted.Status);
+        Assert.Equal(farmer.UserId, persisted.CancelledBy);
+        var log = await reader.AuditLogs.AsNoTracking()
+            .SingleAsync(a => a.Action == "ORDER_CANCELLED" && a.EntityId == order.Id, Token);
+        Assert.Equal(farmer.UserId, log.ActorUserId);
+        Assert.Equal(env.Data.StoreId, log.StoreId);
+        Assert.Equal("Người dùng hủy", log.Reason);
+        var pending = await reader.NotificationOutbox.AsNoTracking().SingleAsync(o => o.AuditLogId == log.Id, Token);
+        Assert.Null(pending.ProcessedAt);
+        var key = $"audit:{log.Id:N}";
+        Assert.False(await reader.Notifications.AnyAsync(n => n.DeduplicationKey == key, Token));
+
+        var clock = new DateTimeProvider();
+        var dispatcher = new NotificationDispatcher(reader, new NotificationOutboxLock(reader),
+            new NotificationWriter(reader), clock);
+        await dispatcher.DispatchAsync(pending.Id, Token);
+        await dispatcher.DispatchAsync(pending.Id, Token);
+        Assert.NotNull((await reader.NotificationOutbox.AsNoTracking().SingleAsync(o => o.Id == pending.Id, Token)).ProcessedAt);
+
+        foreach (var recipient in new[] { (owner.UserId, Role: "STORE_OWNER"), (sales.UserId, Role: "SALES_STAFF") })
+        {
+            env.Data.ActAs(recipient.UserId, recipient.Role);
+            var service = new NotificationService(reader, env.Data.User, clock, new AuthSecurityLock(reader));
+            var notice = Assert.Single((await service.ListAsync(new NotificationListRequest(), Token)).Items);
+            Assert.Equal("ORDER_STATUS_CHANGED", notice.NotificationType);
+            Assert.Equal("Đơn hàng đã được hủy", notice.Title);
+            Assert.Equal("UNREAD", notice.Status);
+            Assert.Equal(order.Id, notice.Data!.Value.GetProperty("orderId").GetGuid());
+            Assert.Equal(1, (await service.UnreadCountAsync(Token)).Count);
+            Assert.Equal(1, await reader.Notifications.CountAsync(n => n.UserId == recipient.UserId
+                && n.DeduplicationKey == key, Token));
+        }
     }
 }

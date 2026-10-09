@@ -62,6 +62,55 @@ No public arbitrary-send endpoint. Business audit events create a notification o
 SaveChanges/transaction. The worker delivers order status, confirmed payment, delivery assignment/
 completion and credit-limit changes. Outbox retries and deduplication prevent duplicate notifications.
 
+Successful Farmer checkout (`POST /api/me/orders`, Web or Mobile) records `ORDER_PLACED` with its
+outbox in the same transaction as the order and cart conversion. It delivers an `ORDER_PLACED`
+notification, "Đơn hàng mới chờ xác nhận", to active STORE_OWNER and SALES_STAFF members of that
+order's store whose accounts and primary roles are active. Farmers, delivery staff and members of
+other stores do not receive this staff alert. Failed checkout creates no event; retries deliver at
+most one notification per recipient/event. Existing order-confirmed events still notify the Farmer.
+Orders created before this event was added are not backfilled automatically. No schema migration is needed.
+
+### Recipient coverage (user-approved extension, 2026-10-09)
+
+| Trigger | Owner | Sale | Farmer |
+|---|---|---|---|
+| Farmer checkout / pending confirmation | Yes | Yes | — |
+| Staff-created pending order | Yes | Yes | — |
+| Completed counter sale / cancellation of remaining items | Yes | Yes | Own order |
+| Order cancellation | Yes | Yes | Own order |
+| Order confirmation, preparation, ready, pickup | — | Yes | Own order |
+| Delivery created / needs delivery | — | Yes | — |
+| Dispatch, successful/partial/failed delivery attempt, cancellation | — | Yes | Own order |
+| Successful order payment / failed or rejected payment | — | Yes | Own payment |
+| Confirmed debt repayment | Yes | Yes | Own payment |
+| New debt / manual debit | — | — | Own debt |
+| Farmer debt dispute | Yes | Yes | — |
+| Debt due soon / overdue (daily) | Yes | Yes | Own debt |
+| Low stock / out of stock (daily) | Yes | Yes | — |
+| Expiring / expired lot (daily) | Yes | — | — |
+| Posted receipt, sale issue, return receipt, adjustment, reversal | Yes | — | — |
+| Return or refund requested | Yes | Yes | — |
+| Return approved, rejected, cancelled, inspected; refund completed, failed, cancelled | — | — | Own order |
+| Credit limit changed | Yes | — | Own credit profile |
+| Persisted successful AI result | — | — | Own diagnosis |
+| Current authorized human review / approved recommendations | — | — | Own diagnosis |
+
+Recipients must have active accounts and active, non-deleted primary roles. Staff must be active
+members of the event's store; delivery assignments still target the assigned active member. Missing,
+deleted or mismatched entities never disclose an event to another store. Delivery outcome is taken
+from the immutable audit snapshot, so a later successful retry does not hide an earlier failure.
+Metadata may include `orderId` for navigation; it is resolved on the server, never client supplied.
+
+The notification worker also reads committed posted stock movements and persisted diagnosis results
+in bounded batches. Stable per-record keys survive retries/archive/soft deletion and allow existing
+records without a notification to be delivered. It never posts stock, invokes AI or approves reviews.
+AI APIs/provider processing are not implemented yet; these alerts require real persisted results.
+The Farmer diagnosis-history page still uses demo data. Diagnosis alerts show their notification
+content without linking to that demo page until a real owned diagnosis read API/UI is implemented.
+Recommendations require a current verified review by an active member with `can_review_ai`, and
+approval by an active authorized reviewer. Raw AI output never creates product recommendations.
+Debt reminders and inventory alerts must be enabled; they do not mutate inventory/debt ledgers.
+
 ## Background operations
 
 Infrastructure hosts the timer only; Application owns each operation. PostgreSQL advisory locks keep
@@ -70,7 +119,8 @@ until the migration/configuration is deployed. Runs use bounded batches and fres
 
 - Dispatch notification outbox, retry transient failures with bounded backoff.
 - Mark due lots expired through the existing inventory use case; no physical quantity changes.
-- Notify Farmers of due/overdue outstanding debt, staff of low stock and expiring/expired lots.
+- Notify Farmers and Owner/Sale staff of due/overdue outstanding debt; Owner/Sale of low/out-of-stock products;
+  Owners of expiring/expired lots. Read committed stock movements and diagnosis results for missing notifications.
   Daily deduplication uses the Vietnam business date. Debt reminders never change balances/status/ledgers.
 - Reconcile pending payOS payments through the existing settlement path (same checks/locks/idempotency
   as webhook/manual sync); external provider calls stay outside DB transactions.
