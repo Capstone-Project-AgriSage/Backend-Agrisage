@@ -1,5 +1,9 @@
 # AgriSage – Detailed Database Design v4 – Migration Candidate
 
+Extension approved by the current user request (2026-10-07):
+[Auth and operations schema](AUTH_OPERATIONS_SCHEMA.md), tables 68–71, user security version and
+notification deduplication. InitialCreate remains the historical 67-table baseline.
+
 > **Database:** PostgreSQL (Supabase)  
 > **ORM:** Entity Framework Core + Npgsql  
 > **Design approach:** Detailed Database Design First → EF Core Code First → Migrations → Supabase  

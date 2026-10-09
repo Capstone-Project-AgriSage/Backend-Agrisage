@@ -9,7 +9,8 @@ using Microsoft.EntityFrameworkCore;
 namespace AgriSage.Application.Features.Inventory;
 
 // Read side of lots and stock movements, plus the manual lot status change.
-public sealed partial class InventoryService(IAgriSageDbContext context, IDateTimeProvider clock, IRowLockService locks) : IInventoryService
+public sealed partial class InventoryService(IAgriSageDbContext context, IDateTimeProvider clock, IRowLockService locks,
+    AuditTrail? audit = null) : IInventoryService
 {
     private sealed record LotRow(
         Guid Id, Guid StoreProductId, Guid ProductId, string Sku, string ProductName, string? LotNumber,

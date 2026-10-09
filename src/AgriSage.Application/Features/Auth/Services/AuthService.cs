@@ -15,11 +15,12 @@ namespace AgriSage.Application.Features.Auth.Services;
 public sealed class AuthService(
     IAgriSageDbContext context,
     IPasswordHashService passwordHasher,
-    IAccessTokenService accessTokens,
     ICurrentUserService currentUser,
     IDateTimeProvider clock,
     IDatabaseErrorClassifier databaseErrors,
-    AuditTrail audit) : IAuthService
+    AuditTrail audit,
+    AuthSessionService sessions,
+    IAuthSecurityLock locks) : IAuthService
 {
     public async Task<AuthResponse> RegisterFarmerAsync(RegisterFarmerRequest request, CancellationToken cancellationToken)
     {
@@ -37,6 +38,8 @@ public sealed class AuthService(
 
         context.Users.Add(user);
         context.FarmerProfiles.Add(new FarmerProfile(user.Id));
+        var response = sessions.Start(user, RoleCodeFormat.ToText(role.Code));
+        audit.Record("AUTH_REGISTERED", "USER", user.Id, null, newValues: new { response.SessionId });
 
         try
         {
@@ -48,12 +51,19 @@ public sealed class AuthService(
             throw new ConflictException("An account with this phone number or email already exists.");
         }
 
-        return ToAuthResponse(user, RoleCodeFormat.ToText(role.Code));
+        return response;
     }
 
     public async Task<AuthResponse> LoginAsync(LoginRequest request, CancellationToken cancellationToken)
     {
         var user = await FindByIdentifierAsync(request.Identifier.Trim(), cancellationToken);
+
+        await using var tx = await context.BeginTransactionAsync(cancellationToken);
+        if (user is not null)
+        {
+            await locks.LockUserAsync(user.Id, cancellationToken);
+            user = await context.Users.Include(u => u.Role).SingleOrDefaultAsync(u => u.Id == user.Id, cancellationToken);
+        }
 
         // Unknown account and wrong password are indistinguishable (same message, same work).
         var verification = passwordHasher.Verify(user?.PasswordHash, request.Password);
@@ -62,7 +72,7 @@ public sealed class AuthService(
             throw new AuthenticationFailedException("Invalid phone number, email or password.");
         }
 
-        if (user.Status != UserStatus.Active)
+        if (user.Status != UserStatus.Active || !user.Role.IsActive)
         {
             throw new ForbiddenException("This account is not active.");
         }
@@ -73,9 +83,12 @@ public sealed class AuthService(
         }
 
         user.RecordLogin(clock.UtcNow);
+        var response = sessions.Start(user, RoleCodeFormat.ToText(user.Role.Code));
+        audit.Record("AUTH_LOGIN", "USER", user.Id, null, newValues: new { response.SessionId });
         await context.SaveChangesAsync(cancellationToken);
+        await tx.CommitAsync(cancellationToken);
 
-        return ToAuthResponse(user, RoleCodeFormat.ToText(user.Role.Code));
+        return response;
     }
 
     public async Task<CurrentUserResponse> GetCurrentUserAsync(CancellationToken cancellationToken)
@@ -107,6 +120,8 @@ public sealed class AuthService(
     {
         var userId = currentUser.UserId ?? throw new AuthenticationFailedException("Authentication is required.");
 
+        await using var tx = await context.BeginTransactionAsync(cancellationToken);
+        await locks.LockUserAsync(userId, cancellationToken);
         var user = await context.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken)
             ?? throw new AuthenticationFailedException("Authentication is required.");
 
@@ -128,6 +143,7 @@ public sealed class AuthService(
         user.ChangePasswordHash(passwordHasher.Hash(request.NewPassword));
         audit.Record("PASSWORD_CHANGED", "USER", user.Id, storeId: null); // never the password or its hash
         await context.SaveChangesAsync(cancellationToken);
+        await tx.CommitAsync(cancellationToken);
     }
 
     private async Task<User?> FindByIdentifierAsync(string identifier, CancellationToken cancellationToken)
@@ -135,12 +151,12 @@ public sealed class AuthService(
         if (identifier.Contains('@'))
         {
             var email = ContactNormalizer.NormalizeEmail(identifier);
-            return await context.Users.Include(u => u.Role)
+            return await context.Users.AsNoTracking().Include(u => u.Role)
                 .FirstOrDefaultAsync(u => u.Email != null && u.Email.ToLower() == email, cancellationToken);
         }
 
         return ContactNormalizer.TryNormalizePhone(identifier, out var phone)
-            ? await context.Users.Include(u => u.Role).FirstOrDefaultAsync(u => u.PhoneNumber == phone, cancellationToken)
+            ? await context.Users.AsNoTracking().Include(u => u.Role).FirstOrDefaultAsync(u => u.PhoneNumber == phone, cancellationToken)
             : null;
     }
 
@@ -161,13 +177,4 @@ public sealed class AuthService(
         : ContactNormalizer.TryNormalizePhone(input, out var phone) ? phone
         : throw new BusinessRuleException("Phone number must be a valid Vietnamese mobile number.");
 
-    private AuthResponse ToAuthResponse(User user, string roleCode)
-    {
-        var token = accessTokens.Issue(user.Id, roleCode);
-
-        return new AuthResponse(
-            token.Value,
-            token.ExpiresAt,
-            new AuthUserResponse(user.Id, user.FullName, user.PhoneNumber, user.Email, roleCode));
-    }
 }

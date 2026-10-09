@@ -46,6 +46,12 @@ public class CommittedConfigurationTests
             Assert.False(storage.TryGetProperty("SecretKey", out _), $"{relativePath} must not contain Storage:SecretKey.");
         }
 
+        if (root.TryGetProperty("MessageDelivery", out var messaging))
+        {
+            Assert.False(messaging.TryGetProperty("SmtpPassword", out _), $"{relativePath} must not contain MessageDelivery:SmtpPassword.");
+            Assert.False(messaging.TryGetProperty("SmsApiKey", out _), $"{relativePath} must not contain MessageDelivery:SmsApiKey.");
+        }
+
         if (root.TryGetProperty("AdminBootstrap", out var admin))
         {
             Assert.False(admin.TryGetProperty("Password", out _), $"{relativePath} must not contain AdminBootstrap:Password.");

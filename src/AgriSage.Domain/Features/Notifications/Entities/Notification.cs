@@ -11,13 +11,15 @@ public sealed class Notification : SoftDeletableEntity
     {
     }
 
-    public Notification(Guid userId, string notificationType, string title, string message, string? data = null)
+    public Notification(Guid userId, string notificationType, string title, string message, string? data = null,
+        string? deduplicationKey = null)
     {
         UserId = userId;
         NotificationType = Guard.NotNullOrWhiteSpace(notificationType);
         Title = Guard.NotNullOrWhiteSpace(title);
         Message = Guard.NotNullOrWhiteSpace(message);
         Data = data;
+        DeduplicationKey = deduplicationKey;
         Status = NotificationStatus.Unread;
     }
 
@@ -33,12 +35,15 @@ public sealed class Notification : SoftDeletableEntity
     // Raw JSON (jsonb).
     public string? Data { get; private set; }
 
+    public string? DeduplicationKey { get; private set; }
+
     public NotificationStatus Status { get; private set; }
 
     public DateTimeOffset? ReadAt { get; private set; }
 
     public void MarkRead(DateTimeOffset readAt)
     {
+        if (Status != NotificationStatus.Unread) return;
         Status = NotificationStatus.Read;
         ReadAt = readAt;
     }

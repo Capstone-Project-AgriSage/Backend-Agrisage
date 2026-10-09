@@ -267,7 +267,7 @@ public class SaveChangesInterceptorTests
             .Where(type => type.IsAssignableTo(typeof(SoftDeletableEntity)))
             .ToList();
 
-        Assert.Equal(66, softDeletableTypes.Count);
+        Assert.Equal(70, softDeletableTypes.Count);
         var softDeleted = new List<Type>();
         var rejected = new List<Type>();
 

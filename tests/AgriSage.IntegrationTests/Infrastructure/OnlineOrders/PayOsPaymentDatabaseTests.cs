@@ -95,6 +95,77 @@ public class PayOsPaymentDatabaseTests
     private static readonly PayOsPaymentRequest PayOrder = new("ORDER_PAYMENT");
 
     [RealDbFact]
+    public async Task Scheduled_reconciliation_records_the_attempt_and_settles_a_missed_webhook_once_as_system()
+    {
+        await using var session = await RealDb.Session.StartAsync();
+        var (env, order, _) = await PrepareAsync(session);
+        var link = await env.PayOs.CreateAsync(PayOrder with { OrderId = order.Id }, Token);
+        var service = new PaymentReconciliationService(env.Data.Context, env.PayOs,
+            new RowLockService(env.Data.Context), new DateTimeProvider());
+        Assert.Contains(link.PaymentId, await service.PendingAsync(100, Token));
+        // The worker entry point cannot be invoked as an authenticated HTTP actor.
+        await Assert.ThrowsAsync<ForbiddenException>(() => service.ReconcileAsync(link.PaymentId, Token));
+        env.Data.User.UserId = null; env.Data.User.Role = null;
+        Assert.True(await service.RecordAttemptAsync(link.PaymentId, Token));
+        var recorded = await env.Data.Context.Payments.AsNoTracking().SingleAsync(p => p.Id == link.PaymentId, Token);
+        Assert.NotNull(recorded.LastReconciliationAttemptAt);
+        Assert.Equal(PaymentStatus.Pending, recorded.Status);
+        Assert.Equal(0, await env.Data.Context.PaymentAllocations.CountAsync(a => a.PaymentId == link.PaymentId, Token));
+        env.Gateway.SetStatus(link.ProviderOrderCode, PaymentLinkStatus.Paid, (long)link.Amount);
+        await service.ReconcileAsync(link.PaymentId, Token);
+        await service.ReconcileAsync(link.PaymentId, Token);
+        Assert.Equal(PaymentStatus.Paid, (await env.PaymentAsync(link.PaymentId)).Status);
+        Assert.Equal(1, (await env.PaymentAsync(link.PaymentId)).OrderAllocations);
+        Assert.False(await service.RecordAttemptAsync(link.PaymentId, Token));
+        Assert.DoesNotContain(link.PaymentId, await service.PendingAsync(100, Token));
+        var log = await env.Data.Context.AuditLogs.SingleAsync(a => a.Action == "PAYMENT_RECEIVED" && a.EntityId == link.PaymentId, Token);
+        Assert.Null(log.ActorUserId);
+        Assert.Equal(1, await env.Data.Context.NotificationOutbox.CountAsync(o => o.AuditLogId == log.Id, Token));
+    }
+
+    [RealDbFact]
+    public async Task Provider_failure_keeps_pending_payment_and_allocations_unchanged_for_a_later_retry()
+    {
+        await using var session = await RealDb.Session.StartAsync();
+        var (env, order, _) = await PrepareAsync(session);
+        var link = await env.PayOs.CreateAsync(PayOrder with { OrderId = order.Id }, Token);
+        var service = new PaymentReconciliationService(env.Data.Context, env.PayOs,
+            new RowLockService(env.Data.Context), new DateTimeProvider());
+        env.Data.User.UserId = null; env.Data.User.Role = null;
+        await service.RecordAttemptAsync(link.PaymentId, Token);
+        env.Gateway.Unavailable = true;
+        await Assert.ThrowsAsync<PaymentGatewayUnavailableException>(() => service.ReconcileAsync(link.PaymentId, Token));
+        Assert.Equal(PaymentStatus.Pending, (await env.PaymentAsync(link.PaymentId)).Status);
+        Assert.Equal(0, (await env.PaymentAsync(link.PaymentId)).OrderAllocations);
+        Assert.Contains(link.PaymentId, await service.PendingAsync(100, Token));
+        env.Gateway.Unavailable = false;
+        env.Gateway.SetStatus(link.ProviderOrderCode, PaymentLinkStatus.Expired);
+        await service.ReconcileAsync(link.PaymentId, Token);
+        Assert.Equal(PaymentStatus.Failed, (await env.PaymentAsync(link.PaymentId)).Status);
+    }
+
+    [RealDbFact]
+    public Task Reconciliation_rejects_a_provider_response_with_the_wrong_order_code() => RejectMismatchAsync(true);
+
+    [RealDbFact]
+    public Task Reconciliation_rejects_a_provider_response_with_the_wrong_amount() => RejectMismatchAsync(false);
+
+    private async Task RejectMismatchAsync(bool wrongCode)
+    {
+        await using var session = await RealDb.Session.StartAsync();
+        var (env, order, _) = await PrepareAsync(session);
+        var link = await env.PayOs.CreateAsync(PayOrder with { OrderId = order.Id }, Token);
+        var service = new PaymentReconciliationService(env.Data.Context, env.PayOs,
+            new RowLockService(env.Data.Context), new DateTimeProvider());
+        env.Data.User.UserId = null; env.Data.User.Role = null;
+        env.Gateway.QueryOverride = new PaymentLinkState(link.ProviderOrderCode + (wrongCode ? 1 : 0),
+            PaymentLinkStatus.Paid, (long)link.Amount + (wrongCode ? 0 : 1), (long)link.Amount);
+        await Assert.ThrowsAsync<BusinessRuleException>(() => service.ReconcileAsync(link.PaymentId, Token));
+        Assert.Equal(PaymentStatus.Pending, (await env.PaymentAsync(link.PaymentId)).Status);
+        Assert.Equal(0, (await env.PaymentAsync(link.PaymentId)).OrderAllocations);
+    }
+
+    [RealDbFact]
     public async Task A_paid_webhook_confirms_and_allocates_once_even_when_delivered_twice()
     {
         await using var session = await RealDb.Session.StartAsync();

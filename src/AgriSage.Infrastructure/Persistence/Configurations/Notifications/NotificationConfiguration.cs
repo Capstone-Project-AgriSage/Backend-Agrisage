@@ -18,6 +18,9 @@ internal sealed class NotificationConfiguration : EntityConfiguration<Notificati
         builder.Property(notification => notification.Title).HasMaxLength(255);
         builder.Property(notification => notification.Message).HasMaxLength(2000);
         builder.Property(notification => notification.Data).IsJson();
+        builder.Property(notification => notification.DeduplicationKey).HasMaxLength(200);
+        builder.HasIndex(notification => new { notification.UserId, notification.DeduplicationKey })
+            .IsUnique().HasFilter("deduplication_key IS NOT NULL");
         builder.Property(notification => notification.Status).HasMaxLength(20).HasDbDefault(NotificationStatus.Unread);
 
         builder.HasReference<Notification, User>(notification => notification.UserId);

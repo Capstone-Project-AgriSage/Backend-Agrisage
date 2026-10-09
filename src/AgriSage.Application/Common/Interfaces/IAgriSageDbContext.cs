@@ -30,6 +30,10 @@ public interface IAgriSageDbContext
 
     DbSet<User> Users { get; }
 
+    DbSet<AuthSession> AuthSessions { get; }
+    DbSet<RefreshToken> RefreshTokens { get; }
+    DbSet<AuthChallenge> AuthChallenges { get; }
+
     DbSet<UserAddress> UserAddresses { get; }
 
     // Stores
@@ -171,6 +175,8 @@ public interface IAgriSageDbContext
     DbSet<ContactRequest> ContactRequests { get; }
 
     DbSet<Notification> Notifications { get; }
+
+    DbSet<NotificationOutbox> NotificationOutbox { get; }
 
     DbSet<AuditLog> AuditLogs { get; }
 

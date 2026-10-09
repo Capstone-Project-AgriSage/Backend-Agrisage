@@ -2968,6 +2968,209 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AgriSage.Domain.Features.Identity.Entities.AuthChallenge", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("channel");
+
+                    b.Property<DateTimeOffset?>("ConsumedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("consumed_at");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("DeletedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<string>("Destination")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("destination");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<int>("FailedAttempts")
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("failed_attempts");
+
+                    b.Property<string>("Purpose")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("purpose");
+
+                    b.Property<long>("SecurityVersion")
+                        .HasColumnType("bigint")
+                        .HasColumnName("security_version");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("token_hash");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_auth_challenges");
+
+                    b.HasIndex("UserId", "Purpose", "CreatedAt")
+                        .IsDescending(false, false, true)
+                        .HasDatabaseName("ix_auth_challenges_user_id_purpose_created_at");
+
+                    b.ToTable("auth_challenges", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_auth_challenges_channel", "channel IN ('EMAIL', 'SMS')");
+
+                            t.HasCheckConstraint("ck_auth_challenges_failed_attempts", "failed_attempts BETWEEN 0 AND 5");
+
+                            t.HasCheckConstraint("ck_auth_challenges_purpose", "purpose IN ('PASSWORD_RESET', 'EMAIL_VERIFICATION', 'PHONE_VERIFICATION')");
+
+                            t.HasCheckConstraint("ck_auth_challenges_purpose_channel", "purpose = 'PASSWORD_RESET' OR (purpose = 'EMAIL_VERIFICATION' AND channel = 'EMAIL') OR (purpose = 'PHONE_VERIFICATION' AND channel = 'SMS')");
+
+                            t.HasCheckConstraint("ck_auth_challenges_security_version", "security_version >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("AgriSage.Domain.Features.Identity.Entities.AuthSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("DeletedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<DateTimeOffset>("LastUsedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_used_at");
+
+                    b.Property<string>("RevocationReason")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("revocation_reason");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at");
+
+                    b.Property<long>("SecurityVersion")
+                        .HasColumnType("bigint")
+                        .HasColumnName("security_version");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_auth_sessions");
+
+                    b.HasIndex("UserId", "ExpiresAt")
+                        .HasDatabaseName("ix_auth_sessions_user_id_expires_at");
+
+                    b.ToTable("auth_sessions", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_auth_sessions_security_version", "security_version >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("AgriSage.Domain.Features.Identity.Entities.RefreshToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTimeOffset?>("ConsumedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("consumed_at");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("DeletedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<Guid>("SessionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("session_id");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("token_hash");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_refresh_tokens");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique()
+                        .HasDatabaseName("ux_refresh_tokens_token_hash");
+
+                    b.HasIndex("SessionId", "ExpiresAt")
+                        .HasDatabaseName("ix_refresh_tokens_session_id_expires_at");
+
+                    b.ToTable("refresh_tokens", (string)null);
+                });
+
             modelBuilder.Entity("AgriSage.Domain.Features.Identity.Entities.Role", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3091,6 +3294,12 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("role_id");
 
+                    b.Property<long>("SecurityVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("security_version");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(30)
@@ -3118,6 +3327,8 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                     b.ToTable("users", null, t =>
                         {
                             t.HasCheckConstraint("ck_users_contact", "NULLIF(BTRIM(email), '') IS NOT NULL OR NULLIF(BTRIM(phone_number), '') IS NOT NULL");
+
+                            t.HasCheckConstraint("ck_users_security_version", "security_version >= 0");
 
                             t.HasCheckConstraint("ck_users_status", "status IN ('ACTIVE', 'INACTIVE', 'SUSPENDED', 'LOCKED')");
                         });
@@ -3916,6 +4127,11 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("data");
 
+                    b.Property<string>("DeduplicationKey")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("deduplication_key");
+
                     b.Property<DateTimeOffset?>("DeletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
@@ -3964,6 +4180,11 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                     b.HasKey("Id")
                         .HasName("pk_notifications");
 
+                    b.HasIndex("UserId", "DeduplicationKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_notifications_user_id_deduplication_key")
+                        .HasFilter("deduplication_key IS NOT NULL");
+
                     b.HasIndex("UserId", "Status", "CreatedAt")
                         .IsDescending(false, false, true)
                         .HasDatabaseName("ix_notifications_user_id_status_created_at");
@@ -3971,6 +4192,68 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                     b.ToTable("notifications", null, t =>
                         {
                             t.HasCheckConstraint("ck_notifications_status", "status IN ('UNREAD', 'READ', 'ARCHIVED')");
+                        });
+                });
+
+            modelBuilder.Entity("AgriSage.Domain.Features.Notifications.Entities.NotificationOutbox", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("attempts");
+
+                    b.Property<Guid>("AuditLogId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("audit_log_id");
+
+                    b.Property<DateTimeOffset>("AvailableAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("available_at");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("DeletedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<string>("LastErrorCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("last_error_code");
+
+                    b.Property<DateTimeOffset?>("ProcessedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("processed_at");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_notification_outbox");
+
+                    b.HasIndex("AuditLogId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_notification_outbox_audit_log_id");
+
+                    b.HasIndex("AvailableAt")
+                        .HasDatabaseName("ix_notification_outbox_available_at")
+                        .HasFilter("processed_at IS NULL AND deleted_at IS NULL");
+
+                    b.ToTable("notification_outbox", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_notification_outbox_attempts", "attempts >= 0");
                         });
                 });
 
@@ -4571,6 +4854,10 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("initiated_at");
 
+                    b.Property<DateTimeOffset?>("LastReconciliationAttemptAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_reconciliation_attempt_at");
+
                     b.Property<string>("Note")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)")
@@ -4641,6 +4928,10 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_payments");
+
+                    b.HasIndex("LastReconciliationAttemptAt")
+                        .HasDatabaseName("ix_payments_last_reconciliation_attempt_at")
+                        .HasFilter("payment_method = 'PAYOS' AND status = 'PENDING' AND deleted_at IS NULL");
 
                     b.HasIndex("OrderId")
                         .HasDatabaseName("ix_payments_order_id");
@@ -7268,6 +7559,54 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                     b.Navigation("StoreProduct");
                 });
 
+            modelBuilder.Entity("AgriSage.Domain.Features.Identity.Entities.AuthChallenge", b =>
+                {
+                    b.HasOne("AgriSage.Domain.Features.Identity.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("DeletedBy")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_auth_challenges_deleted_by");
+
+                    b.HasOne("AgriSage.Domain.Features.Identity.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_auth_challenges_user_id");
+                });
+
+            modelBuilder.Entity("AgriSage.Domain.Features.Identity.Entities.AuthSession", b =>
+                {
+                    b.HasOne("AgriSage.Domain.Features.Identity.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("DeletedBy")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_auth_sessions_deleted_by");
+
+                    b.HasOne("AgriSage.Domain.Features.Identity.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_auth_sessions_user_id");
+                });
+
+            modelBuilder.Entity("AgriSage.Domain.Features.Identity.Entities.RefreshToken", b =>
+                {
+                    b.HasOne("AgriSage.Domain.Features.Identity.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("DeletedBy")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_refresh_tokens_deleted_by");
+
+                    b.HasOne("AgriSage.Domain.Features.Identity.Entities.AuthSession", null)
+                        .WithMany()
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_refresh_tokens_session_id");
+                });
+
             modelBuilder.Entity("AgriSage.Domain.Features.Identity.Entities.Role", b =>
                 {
                     b.HasOne("AgriSage.Domain.Features.Identity.Entities.User", null)
@@ -7577,6 +7916,22 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_notifications_user_id");
+                });
+
+            modelBuilder.Entity("AgriSage.Domain.Features.Notifications.Entities.NotificationOutbox", b =>
+                {
+                    b.HasOne("AgriSage.Domain.Features.Audit.Entities.AuditLog", null)
+                        .WithMany()
+                        .HasForeignKey("AuditLogId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_notification_outbox_audit_log_id");
+
+                    b.HasOne("AgriSage.Domain.Features.Identity.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("DeletedBy")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_notification_outbox_deleted_by");
                 });
 
             modelBuilder.Entity("AgriSage.Domain.Features.Orders.Entities.Cart", b =>

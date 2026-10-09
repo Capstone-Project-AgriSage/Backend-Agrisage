@@ -31,4 +31,7 @@ public sealed class CurrentUserService(IHttpContextAccessor httpContextAccessor)
     public string? Role => IsAuthenticated
         ? httpContextAccessor.HttpContext!.User.FindFirst(AgriSageClaimTypes.Role)?.Value
         : null;
+
+    public Guid? SessionId => IsAuthenticated && Guid.TryParse(
+        httpContextAccessor.HttpContext!.User.FindFirst("sid")?.Value, out var id) ? id : null;
 }

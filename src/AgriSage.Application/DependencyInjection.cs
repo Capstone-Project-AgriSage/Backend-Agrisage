@@ -1,6 +1,8 @@
 using AgriSage.Application.Common;
 using AgriSage.Application.Features.Auth.Interfaces;
 using AgriSage.Application.Features.Auth.Services;
+using AgriSage.Application.Features.Audit;
+using AgriSage.Application.Features.Notifications;
 using AgriSage.Application.Features.Carts;
 using AgriSage.Application.Features.Credit;
 using AgriSage.Application.Features.Customers;
@@ -33,6 +35,16 @@ public static class DependencyInjection
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly);
 
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<AuthSessionService>();
+        services.AddScoped<IAuthSessionService>(sp => sp.GetRequiredService<AuthSessionService>());
+        services.AddScoped<IAuthChallengeService, AuthChallengeService>();
+        services.AddScoped<AuthMaintenanceService>();
+        services.AddScoped<INotificationService, NotificationService>();
+        services.AddScoped<NotificationWriter>();
+        services.AddScoped<NotificationDispatcher>();
+        services.AddScoped<OperationalAlertsService>();
+        services.AddScoped<IAuditLogService, AuditLogService>();
+        services.AddScoped<PaymentReconciliationService>();
         services.AddScoped<IAdminBootstrapService, AdminBootstrapService>();
         services.AddScoped<IUserAccessValidator, UserAccessValidator>();
         services.AddScoped<IStaffService, StaffService>();
@@ -84,7 +96,8 @@ public static class DependencyInjection
         services.AddScoped<OrderCanceller>();
         services.AddScoped<IOrderCancellationService, OrderCancellationService>();
         services.AddScoped<IMeOrderService, MeOrderService>();
-        services.AddScoped<IPayOsPaymentService, PayOsPaymentService>();
+        services.AddScoped<PayOsPaymentService>();
+        services.AddScoped<IPayOsPaymentService>(sp => sp.GetRequiredService<PayOsPaymentService>());
         services.AddScoped<ICounterSaleService, CounterSaleService>();
 
         services.AddScoped<ISalesReportService, SalesReportService>();

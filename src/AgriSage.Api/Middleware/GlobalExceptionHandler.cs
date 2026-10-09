@@ -37,6 +37,7 @@ public sealed class GlobalExceptionHandler(
 
     private ProblemDetails Map(Exception exception) => exception switch
     {
+        MessageDeliveryUnavailableException => Problem(StatusCodes.Status503ServiceUnavailable, "Message delivery unavailable.", exception.Message),
         ValidationException validation => new ValidationProblemDetails(
             validation.Errors.ToDictionary(error => error.Key, error => error.Value))
         {

@@ -6,4 +6,6 @@ public sealed record AccessToken(string Value, DateTimeOffset ExpiresAt);
 public interface IAccessTokenService
 {
     AccessToken Issue(Guid userId, string roleCode);
+
+    AccessToken Issue(Guid userId, string roleCode, Guid sessionId, long securityVersion);
 }

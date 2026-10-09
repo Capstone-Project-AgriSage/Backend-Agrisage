@@ -12,6 +12,8 @@ public sealed class FakePaymentGateway : IPaymentGateway
 
     public bool Unavailable { get; set; }
 
+    public PaymentLinkState? QueryOverride { get; set; }
+
     public List<CreatePaymentLinkRequest> Created { get; } = [];
 
     public List<long> Cancelled { get; } = [];
@@ -47,7 +49,7 @@ public sealed class FakePaymentGateway : IPaymentGateway
     }
 
     public Task<PaymentLinkState> GetPaymentLinkAsync(long orderCode, CancellationToken cancellationToken) =>
-        Unavailable ? throw new PaymentGatewayUnavailableException() : Task.FromResult(_links[orderCode]);
+        Unavailable ? throw new PaymentGatewayUnavailableException() : Task.FromResult(QueryOverride ?? _links[orderCode]);
 
     public Task<PaymentLinkState> CancelPaymentLinkAsync(long orderCode, string reason, CancellationToken cancellationToken)
     {

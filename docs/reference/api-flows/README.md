@@ -4,6 +4,9 @@ Version 2.0 — 2026-10-03. Replaces the three module contracts (`API_CONTRACT_S
 `API_CONTRACT_CUSTOMERS_CREDIT.md`, `API_CONTRACT_PAYMENTS_INVENTORY_RETURNS.md`). Work is now split by
 **flow**: each person owns one end-to-end business flow that can be demonstrated on its own.
 
+Auth/session security, in-app notifications, background operations and audit history are specified in
+[AUTH_NOTIFICATIONS_OPERATIONS.md](AUTH_NOTIFICATIONS_OPERATIONS.md) (user-requested extension, 2026-10-07).
+
 | Flow | File | Owner | Demo in one sentence |
 |---|---|---|---|
 | L1 | [FLOW_1_COUNTER_SALE.md](FLOW_1_COUNTER_SALE.md) | Lead | A customer at the counter gets a price, pays cash, the order is confirmed with FEFO lots and handed over |

@@ -150,6 +150,19 @@ public sealed class PayOsPaymentService(
         return await SyncAsync(paymentId, cancellationToken);
     }
 
+    // Internal Application entry point for the scheduled reconciler. It is not exposed by the HTTP service contract.
+    internal async Task SyncSystemAsync(Guid paymentId, CancellationToken cancellationToken)
+    {
+        if (currentUser.IsAuthenticated) throw new ForbiddenException();
+        var payment = await context.Payments.AsNoTracking().SingleOrDefaultAsync(p => p.Id == paymentId
+            && p.PaymentMethod == PaymentMethod.PayOs, cancellationToken);
+        if (payment?.Status == PaymentStatus.Pending && payment.ProviderOrderCode is { } code)
+        {
+            var state = await gateway.GetPaymentLinkAsync(code, cancellationToken);
+            await ApplyStateAsync(paymentId, state, cancellationToken);
+        }
+    }
+
     // FLOW_2 §6.3: one transaction, idempotent. Business rejections after a valid signature never surface as 4xx (payOS
     // would retry them forever); only an unexpected failure escapes (500, payOS retries).
     public async Task<PayOsWebhookResult> HandleWebhookAsync(string rawPayload, CancellationToken cancellationToken)
@@ -256,6 +269,8 @@ public sealed class PayOsPaymentService(
         await using var transaction = await context.BeginTransactionAsync(cancellationToken);
         var payment = await LockAndLoadAsync(paymentId, orderId, cancellationToken);
         var metadata = JsonSerializer.Serialize(new { confirmedVia = "STATUS_QUERY", state.OrderCode, state.Amount, state.AmountPaid });
+        if (payment.ProviderOrderCode != state.OrderCode || payment.Amount != state.Amount)
+            throw new BusinessRuleException("The payment gateway response does not match the payment.");
         await SettleAsync(payment, state.Status, state.AmountPaid, null, metadata, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);

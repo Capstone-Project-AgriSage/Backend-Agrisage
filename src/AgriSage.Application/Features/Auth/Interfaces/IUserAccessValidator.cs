@@ -5,4 +5,7 @@ namespace AgriSage.Application.Features.Auth.Interfaces;
 public interface IUserAccessValidator
 {
     Task<bool> IsActiveAsync(Guid userId, CancellationToken cancellationToken);
+
+    Task<bool> IsSessionAllowedAsync(Guid userId, Guid sessionId, long securityVersion, string role,
+        CancellationToken cancellationToken);
 }

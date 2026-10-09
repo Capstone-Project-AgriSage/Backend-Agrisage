@@ -172,6 +172,11 @@ public sealed class AgriSageDbContext : DbContext, IAgriSageDbContext
 
     public DbSet<Notification> Notifications => Set<Notification>();
 
+    public DbSet<AuthSession> AuthSessions => Set<AuthSession>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<AuthChallenge> AuthChallenges => Set<AuthChallenge>();
+    public DbSet<NotificationOutbox> NotificationOutbox => Set<NotificationOutbox>();
+
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
     // A use case that runs inside an existing transaction (tests, or an outer unit of work) joins it instead of failing:

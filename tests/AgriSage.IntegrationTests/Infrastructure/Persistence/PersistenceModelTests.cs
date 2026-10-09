@@ -29,7 +29,8 @@ public class PersistenceModelTests
         "sales_returns", "sales_return_items", "refunds",
         "diseases", "disease_treatments", "ai_models", "ai_policy_configs", "diagnosis_cases",
         "diagnosis_images", "ai_inferences", "agent_reviews", "recommendation_items",
-        "articles", "contact_requests", "notifications", "audit_logs"
+        "articles", "contact_requests", "notifications", "audit_logs",
+        "auth_sessions", "refresh_tokens", "auth_challenges", "notification_outbox"
     ];
 
     private static readonly (IModel DesignModel, IModel RuntimeModel) Models = BuildModels();
@@ -53,11 +54,11 @@ public class PersistenceModelTests
         Table(table).GetCheckConstraints().Single(check => check.Name == $"ck_{table}_{name}");
 
     [Fact]
-    public void Model_maps_exactly_the_67_documented_tables()
+    public void Model_maps_exactly_the_71_documented_tables()
     {
         var tables = Model.GetEntityTypes().Select(entityType => entityType.GetTableName()).ToList();
 
-        Assert.Equal(67, DocumentedTables.Length);
+        Assert.Equal(71, DocumentedTables.Length);
         Assert.Equal(DocumentedTables.Order(), tables.Order());
         Assert.DoesNotContain(Model.GetEntityTypes(), entityType => entityType.IsOwned());
     }
@@ -218,7 +219,7 @@ public class PersistenceModelTests
     }
 
     [Fact]
-    public void Exactly_the_four_version_columns_are_concurrency_tokens()
+    public void Financial_inventory_versions_and_user_security_version_are_concurrency_tokens()
     {
         var tokens = Model.GetEntityTypes()
             .SelectMany(entityType => entityType.GetProperties())
@@ -226,7 +227,7 @@ public class PersistenceModelTests
             .Select(property => $"{property.DeclaringType.GetTableName()}.{property.GetColumnName()}");
 
         Assert.Equal(
-            ["debt_accounts.version", "farmer_credit_profiles.version", "inventory_lot_balances.version", "orders.version"],
+            ["debt_accounts.version", "farmer_credit_profiles.version", "inventory_lot_balances.version", "orders.version", "users.security_version"],
             tokens.Order());
         Assert.All(Model.GetEntityTypes().Where(entityType => entityType.ClrType.IsAssignableTo(typeof(IHasConcurrencyVersion))),
             entityType => Assert.Equal(ValueGenerated.Never, entityType.FindProperty("Version")!.ValueGenerated));

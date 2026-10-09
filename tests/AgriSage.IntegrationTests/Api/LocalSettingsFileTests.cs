@@ -17,8 +17,14 @@ public class LocalSettingsFileTests : IDisposable
 
     public void Dispose() => Directory.Delete(_directory, recursive: true);
 
-    private WebApplicationBuilder Builder(string environment) =>
-        WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = environment, ContentRootPath = _directory });
+    private WebApplicationBuilder Builder(string environment)
+    {
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = environment, ContentRootPath = _directory });
+        // This fixture tests the local-file source, independent of the caller's test DB environment variables.
+        builder.Configuration.Sources.Clear();
+        builder.Configuration.AddInMemoryCollection();
+        return builder;
+    }
 
     [Fact]
     public void The_file_is_read_in_development_and_overrides_other_sources()

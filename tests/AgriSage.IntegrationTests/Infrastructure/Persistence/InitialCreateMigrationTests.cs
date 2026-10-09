@@ -27,7 +27,8 @@ public class InitialCreateMigrationTests
                 "20261002155111_PaymentOrderLinkAndOrderRefunds",
                 "20261003001732_StocktakeItemSnapshotTime",
                 "20261003085951_CustomerGroupDefaultCreditTier",
-                "20261004055235_CreditDebtPostingSafety"
+                "20261004055235_CreditDebtPostingSafety",
+                "20261007062351_AuthSessionsNotificationsOperations"
             ],
             context.Database.GetMigrations());
     }

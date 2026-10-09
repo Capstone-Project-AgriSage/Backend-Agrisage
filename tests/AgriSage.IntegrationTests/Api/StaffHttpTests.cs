@@ -162,6 +162,9 @@ public class StaffHttpTests : IClassFixture<StaffHttpTests.StaffApiFactory>
 
         public Task<bool> IsActiveAsync(Guid userId, CancellationToken cancellationToken) =>
             Task.FromResult(!Inactive.Contains(userId));
+
+        public Task<bool> IsSessionAllowedAsync(Guid userId, Guid sessionId, long securityVersion, string role,
+            CancellationToken cancellationToken) => IsActiveAsync(userId, cancellationToken);
     }
 
     public sealed class StaffApiFactory : WebApplicationFactory<Program>

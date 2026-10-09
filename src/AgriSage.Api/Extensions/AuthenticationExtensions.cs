@@ -56,9 +56,12 @@ public static class AuthenticationExtensions
         }
 
         var validator = context.HttpContext.RequestServices.GetRequiredService<IUserAccessValidator>();
-        if (!await validator.IsActiveAsync(userId, context.HttpContext.RequestAborted))
+        if (!Guid.TryParse(context.Principal?.FindFirst("sid")?.Value, out var sessionId)
+            || !long.TryParse(context.Principal?.FindFirst("sv")?.Value, out var version) || version < 0
+            || !await validator.IsSessionAllowedAsync(userId, sessionId, version,
+                context.Principal?.FindFirst(AgriSageClaimTypes.Role)?.Value ?? "", context.HttpContext.RequestAborted))
         {
-            context.Fail("The account is not active.");
+            context.Fail("The account or session is not active.");
         }
     }
 }

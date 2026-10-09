@@ -80,6 +80,7 @@ internal sealed class CreditTestDatabase : IAsyncDisposable
             new AuditableEntityInterceptor(Clock), new ConcurrencyVersionInterceptor()));
         s.AddScoped<IAgriSageDbContext>(p => p.GetRequiredService<AgriSageDbContext>());
         s.AddScoped<IRowLockService, RowLockService>();
+        s.AddSingleton<IPaymentGateway, AgriSage.IntegrationTests.Infrastructure.Payments.FakePaymentGateway>();
         _services = s.BuildServiceProvider();
         using var scope = Scope(); var db = scope.ServiceProvider.GetRequiredService<AgriSageDbContext>();
         await db.Database.MigrateAsync(token);

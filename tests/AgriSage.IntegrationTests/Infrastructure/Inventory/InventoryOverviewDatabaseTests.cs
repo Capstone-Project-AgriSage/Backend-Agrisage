@@ -1,5 +1,9 @@
 using AgriSage.Application.Common.Interfaces;
+using AgriSage.Application.Common;
 using AgriSage.Application.Features.Inventory;
+using AgriSage.Application.Features.Notifications;
+using AgriSage.Domain.Features.Identity.Entities;
+using AgriSage.Domain.Features.Identity.Enums;
 using AgriSage.Domain.Features.Inventory.Entities;
 using AgriSage.Domain.Features.Inventory.Enums;
 using AgriSage.Domain.Features.Products.Entities;
@@ -74,6 +78,39 @@ public class InventoryOverviewDatabaseTests
     }
 
     private static InventoryService Service(AgriSageDbContext db) => new(db, Clock, new RowLockService(db));
+
+    [RealDbFact]
+    public async Task Scheduled_inventory_alerts_page_all_items_deduplicate_daily_and_only_notify_active_sales_members()
+    {
+        await using var session = await RealDb.Session.StartAsync();
+        await using var db = session.NewContext();
+        var f = await PrepareAsync(db);
+        var salesRole = await db.Roles.SingleAsync(r => r.Code == RoleCode.SalesStaff, Token);
+        var deliveryRole = await db.Roles.SingleAsync(r => r.Code == RoleCode.DeliveryStaff, Token);
+        User NewUser(Role role, string suffix) => new(role.Id, suffix, "hash", $"{f.Tag}-{suffix}@example.test", null);
+        var staff = NewUser(salesRole, "active"); var locked = NewUser(salesRole, "locked");
+        var delivery = NewUser(deliveryRole, "delivery"); locked.ChangeStatus(UserStatus.Locked);
+        db.AddRange(staff, locked, delivery, new StoreMember(f.StoreId, staff.Id),
+            new StoreMember(f.StoreId, locked.Id), new StoreMember(f.StoreId, delivery.Id));
+        var low = f.AddProduct(db, "LOW", 1);
+        var expired = f.AddProduct(db, "PAST");
+        var expiring = f.AddProduct(db, "SOON");
+        var past = AddLot(db, expired, "past", -1);
+        var soon = AddLot(db, expiring, "soon", 1);
+        await db.SaveChangesAsync(Token);
+        var movements = await db.StockMovements.CountAsync(Token);
+        var alerts = new OperationalAlertsService(db, new NotificationWriter(db), Service(db), Clock);
+        await alerts.InventoryAlertsAsync(1, 2, Token); // one item per page exercises continuation
+        await alerts.InventoryAlertsAsync(1, 2, Token);
+        var keys = new[] { $"inventory:LOW_STOCK:{low.Id:N}:20261005",
+            $"inventory:EXPIRED:{past.Id:N}:20261005", $"inventory:EXPIRING:{soon.Id:N}:20261005" };
+        var notifications = await db.Notifications.AsNoTracking().Where(n => keys.Contains(n.DeduplicationKey!)).ToListAsync(Token);
+        Assert.Equal(3, notifications.Count);
+        Assert.All(notifications, n => Assert.Equal(staff.Id, n.UserId));
+        Assert.Equal(movements, await db.StockMovements.CountAsync(Token));
+        Assert.Equal(10, past.Balance.QuantityOnHand); Assert.Equal(10, soon.Balance.QuantityOnHand);
+        Assert.Equal(InventoryLotStatus.Active, past.Status); // reminders do not expire or alter physical stock
+    }
 
     [RealDbFact]
     public async Task Summary_distinguishes_on_hand_from_sellable_and_keeps_zero_stock_products()
@@ -221,11 +258,15 @@ public class InventoryOverviewDatabaseTests
         var movementsBefore = await db.StockMovements.CountAsync(Token);
         db.ChangeTracker.Clear();
 
-        var response = await Service(db).ExpireDueLotsAsync(Token);
+        var service = new InventoryService(db, Clock, new RowLockService(db), new AuditTrail(db, session.CurrentUser, Clock));
+        var response = await service.ExpireDueLotsAsync(Token);
 
         Assert.Equal(response.Lots.Count, response.ExpiredLotCount);
         Assert.Contains(response.Lots, l => l.Id == due.Id && l.ExpiryDate == Today.AddDays(-1));
         Assert.Contains(response.Lots, l => l.Id == emptyDue.Id);
+        var log = await db.AuditLogs.AsNoTracking().SingleAsync(a => a.Action == "INVENTORY_LOTS_EXPIRED" && a.StoreId == f.StoreId, Token);
+        Assert.Null(log.ActorUserId);
+        Assert.Contains(due.Id.ToString(), log.NewValues);
         Assert.DoesNotContain(response.Lots, l => expectedStatuses.ContainsKey(l.Id));
         db.ChangeTracker.Clear();
         var persisted = await db.InventoryLots.Include(l => l.Balance).SingleAsync(l => l.Id == due.Id, Token);

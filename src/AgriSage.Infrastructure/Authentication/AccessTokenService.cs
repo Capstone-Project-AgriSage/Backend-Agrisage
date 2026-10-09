@@ -11,7 +11,10 @@ public sealed class AccessTokenService(IOptions<JwtOptions> options, IDateTimePr
 {
     private readonly JsonWebTokenHandler _handler = new();
 
-    public AccessToken Issue(Guid userId, string roleCode)
+    // Kept for signature/authorization tests; a token with an unpersisted sid fails the live session check.
+    public AccessToken Issue(Guid userId, string roleCode) => Issue(userId, roleCode, Guid.NewGuid(), 0);
+
+    public AccessToken Issue(Guid userId, string roleCode, Guid sessionId, long securityVersion)
     {
         var jwt = options.Value;
         var issuedAt = clock.UtcNow;
@@ -28,6 +31,8 @@ public sealed class AccessTokenService(IOptions<JwtOptions> options, IDateTimePr
             {
                 [AgriSageClaimTypes.Subject] = userId.ToString(),
                 [AgriSageClaimTypes.Role] = roleCode,
+                ["sid"] = sessionId.ToString(),
+                ["sv"] = securityVersion,
                 [JwtRegisteredClaimNames.Jti] = Guid.NewGuid().ToString("N")
             },
             SigningCredentials = new SigningCredentials(

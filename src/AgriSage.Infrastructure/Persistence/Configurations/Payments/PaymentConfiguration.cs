@@ -41,6 +41,8 @@ internal sealed class PaymentConfiguration : EntityConfiguration<Payment>
         builder.HasIndex(payment => payment.ProviderOrderCode)
             .IsUnique()
             .HasFilter("provider_order_code IS NOT NULL");
+        builder.HasIndex(payment => payment.LastReconciliationAttemptAt)
+            .HasFilter("payment_method = 'PAYOS' AND status = 'PENDING' AND deleted_at IS NULL");
         builder.HasIndex(payment => new { payment.Status, payment.InitiatedAt }).IsDescending(false, true);
         builder.HasIndex(payment => new { payment.PayerFarmerProfileId, payment.InitiatedAt }).IsDescending(false, true);
 

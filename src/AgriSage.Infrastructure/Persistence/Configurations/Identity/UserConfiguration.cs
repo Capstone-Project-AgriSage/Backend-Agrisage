@@ -20,6 +20,8 @@ internal sealed class UserConfiguration : EntityConfiguration<User>
         builder.Property(user => user.Status).HasMaxLength(30);
         builder.Property(user => user.EmailVerified).HasDbDefault(false);
         builder.Property(user => user.PhoneVerified).HasDbDefault(false);
+        builder.Property(user => user.SecurityVersion).HasDbDefault(0L).IsConcurrencyToken();
+        builder.HasCheck("security_version", "security_version >= 0");
 
         builder.HasOne(user => user.Role).WithMany().HasForeignKey(user => user.RoleId);
 

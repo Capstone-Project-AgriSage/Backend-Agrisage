@@ -33,6 +33,18 @@ setup documentation
 
 ## Progress
 
+- Implemented — User-requested Auth P0 + in-app notifications + scheduled operations + audit-history APIs
+  (2026-10-07): hashed rotating refresh tokens, live sessions/security-version checks, logout/revocation,
+  single-use verification/password-reset challenges, SMTP email adapter and future configurable SMS
+  gateway; owned notification APIs, transactional outbox/retries/deduplication, debt/inventory alerts,
+  payOS reconciliation, authentication maintenance and store-scoped audit history. The current model
+  has 71 tables; the historical baseline remains 67. Migration
+  `20261007062351_AuthSessionsNotificationsOperations` is reviewed, tested on isolated PostgreSQL,
+  and applied to the configured shared Supabase database on 2026-10-07 after explicit user authorization;
+  EF migration history confirms no pending migrations. Jobs default to disabled until configuration.
+  Contract/configuration: `docs/reference/api-flows/AUTH_NOTIFICATIONS_OPERATIONS.md`.
+  Google login and dynamic permissions remain deferred for this release at the user's request.
+
 - Done — AGRI-7 Solution & core configuration: `AgriSage.sln` (.NET 10), 4 src + 2 test projects,
   project references, central package versions (`Directory.Packages.props`), `Program.cs`,
   `AddApplication()` / `AddInfrastructure()`, JWT bearer + Swagger setup, `JwtOptions` validated on start,

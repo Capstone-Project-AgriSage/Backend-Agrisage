@@ -149,6 +149,8 @@ internal static class RealDb
 
         public string? Role { get; set; }
 
+        public Guid? SessionId { get; set; }
+
         public bool IsAuthenticated => UserId is not null;
     }
 

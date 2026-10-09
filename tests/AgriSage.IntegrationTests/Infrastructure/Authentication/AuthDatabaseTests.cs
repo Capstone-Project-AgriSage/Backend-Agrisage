@@ -4,6 +4,7 @@ using AgriSage.Application.Common.Exceptions;
 using AgriSage.Application.Features.Auth.Dtos.Requests;
 using AgriSage.Application.Features.Auth.Interfaces;
 using AgriSage.Application.Features.Auth.Services;
+using AgriSage.Application.Features.Auth;
 using AgriSage.Domain.Features.Identity.Entities;
 using AgriSage.Domain.Features.Identity.Enums;
 using AgriSage.Domain.Features.Products.Entities;
@@ -55,7 +56,11 @@ public class AuthDatabaseTests
         var current = new RealDb.MutableUser { UserId = currentUserId };
         var errors = new NpgsqlErrorClassifier();
 
-        return (new AuthService(context, hasher, tokens, current, clock, errors, new AuditTrail(context, current, clock)),
+        var audit = new AuditTrail(context, current, clock);
+        var locks = new AuthSecurityLock(context);
+        var sessions = new AuthSessionService(context, tokens, new SecretTokenService(Options.Create(JwtSettings)), locks,
+            current, clock, Options.Create(new AuthSecurityOptions()), audit);
+        return (new AuthService(context, hasher, current, clock, errors, audit, sessions, locks),
             new AdminBootstrapService(context, hasher, errors));
     }
 

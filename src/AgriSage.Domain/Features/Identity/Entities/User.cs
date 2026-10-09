@@ -29,6 +29,8 @@ public sealed class User : SoftDeletableEntity
 
     public Guid RoleId { get; private set; }
 
+    public long SecurityVersion { get; private set; }
+
     public Role Role { get; private set; } = null!;
 
     public string? Email { get; private set; }
@@ -57,12 +59,23 @@ public sealed class User : SoftDeletableEntity
         AvatarUrl = avatarUrl;
     }
 
-    public void ChangePasswordHash(string passwordHash) =>
+    public void ChangePasswordHash(string passwordHash)
+    {
         PasswordHash = Guard.NotNullOrWhiteSpace(passwordHash);
+        InvalidateSessions();
+    }
 
-    public void AssignRole(Guid roleId) => RoleId = roleId;
+    public void AssignRole(Guid roleId)
+    {
+        if (RoleId != roleId) { RoleId = roleId; InvalidateSessions(); }
+    }
 
-    public void ChangeStatus(UserStatus status) => Status = status;
+    public void ChangeStatus(UserStatus status)
+    {
+        if (Status != status) { Status = status; InvalidateSessions(); }
+    }
+
+    public void InvalidateSessions() => SecurityVersion = checked(SecurityVersion + 1);
 
     public void MarkEmailVerified()
     {
@@ -97,6 +110,10 @@ public sealed class User : SoftDeletableEntity
             throw new DomainException("A user must have an email or a phone number.");
         }
 
+        var changed = false;
+        if (Email != email) { EmailVerified = false; changed = true; }
+        if (PhoneNumber != phoneNumber) { PhoneVerified = false; changed = true; }
+        if (changed && PasswordHash is not null && (Email is not null || PhoneNumber is not null)) InvalidateSessions();
         Email = email;
         PhoneNumber = phoneNumber;
     }

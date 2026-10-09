@@ -291,7 +291,7 @@ public class OrderConfirmationDatabaseTests
     }
 
     [RealDbFact]
-    public async Task Credit_orders_wait_for_the_real_settlement_guard_and_reserve_nothing()
+    public async Task The_isolated_settlement_guard_rejects_credit_without_reserving_stock()
     {
         await using var session = await RealDb.Session.StartAsync();
         await using var env = await PrepareAsync(session);

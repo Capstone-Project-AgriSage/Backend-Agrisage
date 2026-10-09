@@ -41,7 +41,7 @@ public class StaffDatabaseTests
 
         public AuthService AuthAs(Guid? userId, string? role) => Build(userId, role).Auth;
 
-        public UserAccessValidator Validator => new(Context);
+        public UserAccessValidator Validator => new(Context, new DateTimeProvider());
 
         private (StaffService Staff, AuthService Auth) Build(Guid? userId, string? role)
         {
@@ -62,7 +62,11 @@ public class StaffDatabaseTests
             var audit = new AuditTrail(Context, current, clock);
 
             return (new StaffService(Context, hasher, current, clock, errors, audit),
-                new AuthService(Context, hasher, tokens, current, clock, errors, audit));
+                new AuthService(Context, hasher, current, clock, errors, audit,
+                    new AuthSessionService(Context, tokens,
+                        new SecretTokenService(Options.Create(new JwtOptions { SigningKey = "integration-test-signing-key-not-a-secret-000000" })),
+                        new AuthSecurityLock(Context), current, clock,
+                        Options.Create(new AgriSage.Application.Features.Auth.AuthSecurityOptions()), audit), new AuthSecurityLock(Context)));
         }
 
         // A user that acts as the caller (Admin or Store Owner) without going through the API.

@@ -1,7 +1,12 @@
 using AgriSage.Application.Common.Interfaces;
 using AgriSage.Application.Features.Customers;
 using AgriSage.Application.Features.GoodsReceipts.Import;
+using AgriSage.Application.Features.Auth;
+using AgriSage.Application.Features.Auth.Interfaces;
+using AgriSage.Application.Features.Notifications;
 using AgriSage.Infrastructure.Authentication;
+using AgriSage.Infrastructure.BackgroundJobs;
+using AgriSage.Infrastructure.Messaging;
 using AgriSage.Infrastructure.Payments;
 using AgriSage.Infrastructure.Persistence;
 using AgriSage.Infrastructure.Persistence.Interceptors;
@@ -32,6 +37,19 @@ public static class DependencyInjection
         services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddSingleton<IPasswordHashService, PasswordHashService>();
         services.AddSingleton<IAccessTokenService, AccessTokenService>();
+        services.AddSingleton<ISecretTokenService, SecretTokenService>();
+        services.AddScoped<IAuthSecurityLock, AuthSecurityLock>();
+        services.AddScoped<IAuditRequestMetadata, AuditRequestMetadata>();
+        services.AddScoped<INotificationOutboxLock, NotificationOutboxLock>();
+        services.AddScoped<IBackgroundJobLock, PostgresBackgroundJobLock>();
+        services.AddOptions<AuthSecurityOptions>().Bind(configuration.GetSection("AuthSecurity"))
+            .ValidateDataAnnotations().ValidateOnStart();
+        services.AddOptions<MessageDeliveryOptions>().Bind(configuration.GetSection("MessageDelivery"))
+            .ValidateDataAnnotations().ValidateOnStart();
+        services.AddHttpClient<IAuthMessageSender, AuthMessageSender>(client => client.Timeout = TimeSpan.FromSeconds(30));
+        services.AddOptions<BackgroundJobOptions>().Bind(configuration.GetSection("BackgroundJobs"))
+            .ValidateDataAnnotations().ValidateOnStart();
+        services.AddHostedService<OperationsWorker>();
         services.AddSingleton<IDatabaseErrorClassifier, NpgsqlErrorClassifier>();
 
         services.AddScoped<SoftDeleteInterceptor>();

@@ -100,6 +100,15 @@ public sealed class Payment : SoftDeletableEntity
 
     public DateTimeOffset InitiatedAt { get; private set; }
 
+    public DateTimeOffset? LastReconciliationAttemptAt { get; private set; }
+
+    public void RecordReconciliationAttempt(DateTimeOffset now)
+    {
+        if (PaymentMethod != PaymentMethod.PayOs || Status != PaymentStatus.Pending)
+            throw new DomainException("Only a pending online payment can be reconciled.");
+        LastReconciliationAttemptAt = now;
+    }
+
     public DateTimeOffset? ConfirmedAt { get; private set; }
 
     public Guid? ConfirmedBy { get; private set; }

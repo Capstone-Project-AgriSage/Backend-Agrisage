@@ -125,6 +125,9 @@ public sealed partial class InventoryService
         var lots = await due.Where(l => ids.Contains(l.Id)).OrderBy(l => l.Id).ToListAsync(cancellationToken);
         var expired = lots.Where(l => l.ExpireIfDue(today))
             .Select(l => new ExpiredLotItem(l.Id, l.LotNumber, l.ExpiryDate)).ToList();
+        if (expired.Count > 0)
+            audit?.Record("INVENTORY_LOTS_EXPIRED", "STORE", storeId, storeId,
+                newValues: new { count = expired.Count, lotIds = expired.Select(l => l.Id).ToArray() });
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 

@@ -10,4 +10,6 @@ public interface ICurrentUserService
 
     // Role code from the token (FARMER, STORE_OWNER, SALES_STAFF, DELIVERY_STAFF, ADMIN); null when unauthenticated.
     string? Role => null;
+
+    Guid? SessionId => null;
 }
