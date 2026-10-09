@@ -8,6 +8,14 @@ using AgriSage.Application.Features.Products.Dtos.Requests;
 using AgriSage.Application.Features.Products.Services;
 using AgriSage.Application.Features.Reports;
 using AgriSage.Domain.Features.Customers.Entities;
+using AgriSage.Domain.Features.Credit.Entities;
+using AgriSage.Domain.Features.Credit.Enums;
+using AgriSage.Domain.Features.Debt.Entities;
+using AgriSage.Domain.Features.GoodsReceipts.Entities;
+using AgriSage.Domain.Features.GoodsReceipts.Enums;
+using AgriSage.Domain.Features.Payments.Entities;
+using AgriSage.Domain.Features.Payments.Enums;
+using AgriSage.Domain.Features.Suppliers.Entities;
 using AgriSage.Domain.Features.Identity.Entities;
 using AgriSage.Domain.Features.Identity.Enums;
 using AgriSage.Domain.Features.Inventory.Entities;
@@ -311,6 +319,177 @@ public class SalesReportDatabaseTests
         (r.Key, r.OrderCount, r.FulfilledValue, r.CostOfGoods, r.GrossProfit, r.ReturnValue, r.NetSales);
 
     // ----- Report -----
+
+    private static RevenueReportService Revenue(Env env) => new(env.Context,
+        new ReportScope(env.Context, new RealDb.MutableUser { UserId = env.Actor.Id, Role = "ADMIN" }));
+
+    [RealDbFact]
+    public async Task Revenue_SQL_aggregates_match_the_sales_ledger_for_every_dimension_and_filters()
+    {
+        await using var session = await RealDb.Session.StartAsync();
+        await using var env = await PrepareAsync(session);
+        var scenario = await BuildScenarioAsync(env);
+        var service = Revenue(env);
+        var request = new RevenueReportRequest { FromDate = Mar5, ToDate = Mar6, PageSize = 100 };
+        foreach (var by in RevenueReportRequestValidator.GroupBys)
+        {
+            var report = await service.GetAsync(request with { GroupBy = by }, Token);
+            Assert.Equal((3, 270_000m, 150_000m, 120_000m, 16_000m, 254_000m),
+                (report.Totals.OrderCount, report.Totals.FulfilledValue, report.Totals.CostOfGoods,
+                    report.Totals.GrossProfit, report.Totals.ReturnValue, report.Totals.NetSales));
+            Assert.Equal(report.Totals.NetSales, report.Rows.Sum(r => r.NetSales));
+            Assert.Equal(90_000m, report.Totals.AverageOrderValue);
+            Assert.Equal(44.44m, report.Totals.GrossMarginPercent);
+            Assert.Equal(report.Rows.Count, report.TotalCount);
+        }
+        var product = await service.GetAsync(request with { GroupBy = "PRODUCT", StoreProductId = scenario.P.StoreProductId }, Token);
+        Assert.Equal((2, 204_000m), (product.Totals.OrderCount, product.Totals.NetSales));
+        Assert.Contains(scenario.P.Name, Assert.Single(product.Rows).Label);
+        var staff = await service.GetAsync(request with { StaffUserId = env.OtherStaff.Id }, Token);
+        Assert.Equal((1, 50_000m), (staff.Totals.OrderCount, staff.Totals.NetSales));
+        var group = await service.GetAsync(request with { CustomerGroupId = scenario.Group.Id }, Token);
+        Assert.Equal(64_000m, group.Totals.NetSales);
+        var source = await service.GetAsync(request with { Source = "FARMER_WEB" }, Token);
+        Assert.Equal(0m, source.Totals.NetSales);
+        Assert.Equal(2, source.Rows.Count);
+        Assert.All(source.Rows, r => Assert.Equal(0m, r.NetSales));
+    }
+
+    [RealDbFact]
+    public async Task Revenue_pagination_zero_buckets_and_comparison_preserve_full_totals()
+    {
+        await using var session = await RealDb.Session.StartAsync();
+        await using var env = await PrepareAsync(session);
+        var scenario = await BuildScenarioAsync(env);
+        var service = Revenue(env);
+        var page = await service.GetAsync(new() { FromDate = Mar5, ToDate = Mar6.AddDays(1), PageSize = 1, Page = 3 }, Token);
+        Assert.Equal((3, 3, 3, 254_000m), (page.TotalCount, page.TotalPages, page.Page, page.Totals.NetSales));
+        Assert.Equal(("2031-03-07", 0m), (Assert.Single(page.Rows).Key, page.Rows[0].NetSales));
+        var beyond = await service.GetAsync(new() { FromDate = Mar5, ToDate = Mar6, Page = int.MaxValue, PageSize = 100 }, Token);
+        Assert.Empty(beyond.Rows);
+        Assert.Equal(254_000m, beyond.Totals.NetSales);
+        var comparison = await service.SummaryAsync(new() { FromDate = Mar6, ToDate = Mar6 }, Token);
+        Assert.Equal((Mar5, Mar5, 164_000m, 90_000m, -45.12m),
+            (comparison.PreviousFromDate, comparison.PreviousToDate, comparison.Previous.NetSales, comparison.Current.NetSales, comparison.NetSalesChangePercent));
+        var noPrevious = await service.SummaryAsync(new() { FromDate = Mar5, ToDate = Mar6 }, Token);
+        Assert.Null(noPrevious.NetSalesChangePercent);
+        var returnsOnly = await service.GetAsync(new() { FromDate = Mar6, ToDate = Mar6, StaffUserId = env.Actor.Id, CustomerGroupId = scenario.Group.Id }, Token);
+        Assert.Equal((0, -16_000m, 0m), (returnsOnly.Totals.OrderCount, returnsOnly.Totals.NetSales, returnsOnly.Totals.AverageOrderValue));
+        Assert.Null(returnsOnly.Totals.GrossMarginPercent);
+    }
+
+    [RealDbFact]
+    public async Task Owner_report_scope_requires_active_membership_and_all_new_reports_execute_SQL()
+    {
+        await using var session = await RealDb.Session.StartAsync();
+        await using var env = await PrepareAsync(session);
+        await BuildScenarioAsync(env);
+        var owner = new RealDb.MutableUser { UserId = env.Actor.Id, Role = "STORE_OWNER" };
+        var scope = new ReportScope(env.Context, owner);
+        await Assert.ThrowsAsync<AgriSage.Application.Common.Exceptions.ForbiddenException>(() => scope.GetStoreIdAsync(Token));
+        var member = new StoreMember(env.StoreId, env.Actor.Id);
+        env.Context.StoreMembers.Add(member);
+        await env.Context.SaveChangesAsync(Token);
+        Assert.Equal(env.StoreId, await scope.GetStoreIdAsync(Token));
+        var reports = new OperationalReportService(env.Context, scope, env.Clock);
+        foreach (var by in new[] { "STATUS", "SOURCE", "SETTLEMENT" })
+            await reports.OrdersAsync(new() { FromDate = Mar5, ToDate = Mar6, GroupBy = by }, Token);
+        foreach (var by in new[] { "DAY", "METHOD", "CONTEXT", "STAFF" })
+        {
+            var report = await reports.PaymentsAsync(new() { FromDate = Mar5, ToDate = Mar6, GroupBy = by }, Token);
+            Assert.Equal((2, 130_000m, 0m), (report.Totals.PaymentCount, report.Totals.ReceivedAmount, report.Totals.DebtRepaymentAmount));
+        }
+        foreach (var by in new[] { "DAY", "SUPPLIER" })
+            await reports.PurchasesAsync(new() { FromDate = Mar5, ToDate = Mar6, GroupBy = by }, Token);
+        foreach (var by in new[] { "DAY", "CUSTOMER" })
+        {
+            var report = await reports.ReturnsAsync(new() { FromDate = Mar5, ToDate = Mar6, GroupBy = by }, Token);
+            Assert.Equal((1, 16_000m, 16_000m, 0m), (report.Totals.ReturnCount, report.Totals.ReturnAmount, report.Totals.DebtAdjustmentAmount, report.Totals.RefundAmount));
+        }
+        foreach (var by in new[] { "DAY", "METHOD", "SOURCE" })
+            await reports.RefundsAsync(new() { FromDate = Mar5, ToDate = Mar6, GroupBy = by }, Token);
+        await reports.CreditAsync(Token);
+        member.Deactivate();
+        await env.Context.SaveChangesAsync(Token);
+        await Assert.ThrowsAsync<AgriSage.Application.Common.Exceptions.ForbiddenException>(() => reports.CreditAsync(Token));
+    }
+
+    [RealDbFact]
+    public async Task Procurement_receipts_cash_refunds_and_partially_consumed_credit_are_counted_correctly()
+    {
+        await using var session = await RealDb.Session.StartAsync();
+        await using var env = await PrepareAsync(session);
+        var scenario = await BuildScenarioAsync(env);
+        var reports = new OperationalReportService(env.Context,
+            new ReportScope(env.Context, new RealDb.MutableUser { UserId = env.Actor.Id, Role = "ADMIN" }), env.Clock);
+
+        // The report's order creation clock is the persisted timestamp, not confirmation/fulfillment time.
+        var orderIds = new[] { scenario.A.Id, scenario.B.Id, scenario.C.Id };
+        await env.Context.Orders.Where(o => orderIds.Contains(o.Id)).ExecuteUpdateAsync(set => set.SetProperty(o => o.CreatedAt, Utc(5, 5)), Token);
+        var orders = await reports.OrdersAsync(new() { FromDate = Mar5, ToDate = Mar6 }, Token);
+        Assert.Equal((3, 270_000m), (orders.Totals.OrderCount, orders.Totals.OrderValue));
+
+        var supplier = new Supplier(env.StoreId, "Nhà cung cấp thử " + Tag());
+        var product = await env.Context.StoreProducts.SingleAsync(p => p.Id == scenario.P.StoreProductId, Token);
+        var packaging = await env.Context.ProductPackagings.SingleAsync(p => p.Id == scenario.P.BottleId, Token);
+        var receipt = new GoodsReceipt(env.StoreId, supplier.Id, "GR-" + Tag(), Utc(5, 4), env.Actor.Id, GoodsReceiptSourceType.Manual);
+        var item = receipt.AddItem(product, packaging, 10, 5_000m);
+        receipt.Confirm(env.Actor.Id, Utc(5, 17), new Dictionary<Guid, Guid> { [item.Id] = scenario.P.Lot.Id });
+        var draft = new GoodsReceipt(env.StoreId, supplier.Id, "GR-" + Tag(), Utc(5, 4), env.Actor.Id, GoodsReceiptSourceType.Manual);
+        draft.AddItem(product, packaging, 20, 5_000m);
+        env.Context.AddRange(supplier, receipt, draft);
+
+        var farmer = await NewFarmerAsync(env);
+        var account = new DebtAccount(env.StoreId, farmer.Id);
+        var posting = account.CreateManualAdjustmentEntry("DE-" + Tag(), 20_000m, Mar6, env.Actor.Id, Utc(5, 5));
+        var credit = new FarmerCreditProfile(env.StoreId, farmer.Id, 100_000m, env.Actor.Id, Utc(5, 5));
+        var reservation = new CreditReservation(env.StoreId, credit.Id, scenario.A.Id, 50_000m, env.Actor.Id, Utc(5, 5));
+        reservation.Consume(10_000m);
+        reservation.Release(5_000m, env.Actor.Id, Utc(6, 5));
+        env.Context.AddRange(account, posting.Entry, posting.Transaction, credit, reservation);
+
+        // A cancelled order refund pays out today even though the original receipt was yesterday.
+        env.Clock.UtcNow = Utc(5, 5);
+        var cancelledResponse = await env.Orders.CreateAsync(new CreateCounterOrderRequest("WALK_IN", "FULL_PAYMENT", "PICKUP",
+            [new OrderItemRequest(scenario.P.StoreProductId, scenario.P.BottleId, 1)]), Token);
+        var cancelled = await env.Context.Orders.SingleAsync(o => o.Id == cancelledResponse.Id, Token);
+        cancelled.Cancel(env.Actor.Id, Utc(5, 6), "Test cancellation");
+        var paid = new Payment(env.StoreId, "PM-" + Tag(), PaymentContext.OrderPayment, PaymentMethod.Cash, 10_000m,
+            Utc(5, 5), createdBy: env.Actor.Id, orderId: cancelled.Id);
+        paid.MarkPaid(PaymentConfirmationSource.Staff, Utc(5, 5), env.Actor.Id);
+        var refund = cancelled.RequestCancellationRefund("RF-" + Tag(), paid.Id, RefundMethod.Cash, 10_000m, env.Actor.Id, Utc(6, 4));
+        cancelled.CompleteCancellationRefund(refund.Id, env.Actor.Id, Utc(6, 5));
+        paid.RecordCompletedRefundTotal(10_000m);
+        var pending = new Payment(env.StoreId, "PM-" + Tag(), PaymentContext.OrderPayment, PaymentMethod.Cash, 999_000m,
+            Utc(5, 5), createdBy: env.Actor.Id, orderId: cancelled.Id);
+        env.Context.AddRange(paid, pending);
+        await env.Context.SaveChangesAsync(Token);
+
+        foreach (var by in new[] { "DAY", "SUPPLIER" })
+        {
+            var purchases = await reports.PurchasesAsync(new() { FromDate = Mar6, ToDate = Mar6, GroupBy = by }, Token);
+            Assert.Equal((1, 50_000m), (purchases.Totals.ReceiptCount, purchases.Totals.PurchaseAmount));
+            if (by == "SUPPLIER") Assert.Equal(supplier.Name, Assert.Single(purchases.Rows).Label);
+        }
+        foreach (var by in new[] { "DAY", "METHOD", "CONTEXT", "STAFF" })
+        {
+            var payments = await reports.PaymentsAsync(new() { FromDate = Mar5, ToDate = Mar6, GroupBy = by }, Token);
+            Assert.Equal((3, 140_000m, 10_000m, 130_000m),
+                (payments.Totals.PaymentCount, payments.Totals.ReceivedAmount, payments.Totals.RefundedAmount, payments.Totals.NetReceivedAmount));
+        }
+        foreach (var by in new[] { "DAY", "METHOD", "SOURCE" })
+        {
+            var refunds = await reports.RefundsAsync(new() { FromDate = Mar6, ToDate = Mar6, GroupBy = by }, Token);
+            Assert.Equal((1, 10_000m), (refunds.Totals.RefundCount, refunds.Totals.RefundedAmount));
+            if (by == "SOURCE") Assert.Equal("ORDER", Assert.Single(refunds.Rows).Key);
+        }
+        var exposure = (await reports.CreditAsync(Token)).Rows.Single(r => r.FarmerProfileId == farmer.Id);
+        Assert.Equal((20_000m, 35_000m, 55_000m, 45_000m, 55m),
+            (exposure.Outstanding, exposure.ReservedCredit, exposure.Exposure, exposure.AvailableCredit, exposure.UtilizationPercent));
+        credit.ChangeStatus(FarmerCreditProfileStatus.Blocked);
+        await env.Context.SaveChangesAsync(Token);
+        Assert.Equal(0m, (await reports.CreditAsync(Token)).Rows.Single(r => r.FarmerProfileId == farmer.Id).AvailableCredit);
+    }
 
     [RealDbFact]
     public async Task Revenue_is_recognized_when_goods_leave_and_every_total_adds_up_by_day()

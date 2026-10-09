@@ -7,6 +7,9 @@ Version 2.0 — 2026-10-03. Replaces the three module contracts (`API_CONTRACT_S
 Auth/session security, in-app notifications, background operations and audit history are specified in
 [AUTH_NOTIFICATIONS_OPERATIONS.md](AUTH_NOTIFICATIONS_OPERATIONS.md) (user-requested extension, 2026-10-07).
 
+Revenue and additional operational reporting APIs are specified in [REPORTS.md](REPORTS.md)
+(user-requested extension, 2026-10-09; revenue first).
+
 | Flow | File | Owner | Demo in one sentence |
 |---|---|---|---|
 | L1 | [FLOW_1_COUNTER_SALE.md](FLOW_1_COUNTER_SALE.md) | Lead | A customer at the counter gets a price, pays cash, the order is confirmed with FEFO lots and handed over |
