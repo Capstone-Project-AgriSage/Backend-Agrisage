@@ -50,12 +50,25 @@ public sealed class AuthOperationsHttpTests
     [InlineData("/api/me/notifications?status=BOGUS")]
     [InlineData("/api/me/notifications?pageSize=101")]
     [InlineData("/api/audit-logs?page=0")]
+    [InlineData("/api/audit-logs?actorRole=OWNER")]
+    [InlineData("/api/audit-logs?status=UNKNOWN")]
     [InlineData("/api/audit-logs?from=2026-10-08T00%3A00%3A00Z&to=2026-10-07T00%3A00%3A00Z")]
     public async Task List_filters_are_validated(string path)
     {
         using var factory = new StaffHttpTests.StaffApiFactory(); using var client = factory.CreateClient();
         client.DefaultRequestHeaders.Authorization = new("Bearer", factory.Services.GetRequiredService<IAccessTokenService>().Issue(Guid.NewGuid(), "ADMIN").Value);
         Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync(path, Token)).StatusCode);
+    }
+    [Theory]
+    [InlineData("PUT")]
+    [InlineData("PATCH")]
+    [InlineData("DELETE")]
+    public async Task Audit_events_have_no_mutation_routes(string method)
+    {
+        using var factory = new StaffHttpTests.StaffApiFactory(); using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new("Bearer", factory.Services.GetRequiredService<IAccessTokenService>().Issue(Guid.NewGuid(), "ADMIN").Value);
+        using var request = new HttpRequestMessage(new HttpMethod(method), $"/api/audit-logs/{Guid.NewGuid()}");
+        Assert.Equal(HttpStatusCode.MethodNotAllowed, (await client.SendAsync(request, Token)).StatusCode);
     }
     [Fact]
     public async Task Otp_format_is_validated_and_missing_email_transport_is_unavailable()

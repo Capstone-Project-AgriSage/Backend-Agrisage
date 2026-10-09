@@ -73,7 +73,7 @@ public class ReceivingDatabaseTests
             var clock = new DateTimeProvider();
             Locks = new RowLockService(Context);
             Suppliers = new SupplierService(Context, errors);
-            var confirmer = new GoodsReceiptConfirmer(Context, Locks, user, clock, errors);
+            var confirmer = new GoodsReceiptConfirmer(Context, Locks, user, clock, errors, new AuditTrail(Context, user, clock));
             Receipts = new GoodsReceiptService(Context, user, clock, errors, confirmer);
             Import = new GoodsReceiptImportService(Context, clock, new ClosedXmlReceiptSpreadsheet(), Receipts);
             Inventory = new InventoryService(Context, clock, Locks);
@@ -328,6 +328,11 @@ public class ReceivingDatabaseTests
         var item = Assert.Single(confirmed.Items);
         Assert.NotNull(item.InventoryLotId);
         Assert.NotNull(confirmed.StockMovementId);
+        var audit = await env.Context.AuditLogs.SingleAsync(a => a.EntityId == draft.Id && a.Action == "GOODS_RECEIPT_CONFIRMED", Token);
+        Assert.Equal(env.Actor.Id, audit.ActorUserId);
+        Assert.Equal(env.StoreId, audit.StoreId);
+        Assert.Equal("DRAFT", AuditValues.Parse(audit.OldValues)!.Value.GetProperty("status").GetString());
+        Assert.Equal("CONFIRMED", AuditValues.Parse(audit.NewValues)!.Value.GetProperty("status").GetString());
 
         var lot = await env.Inventory.GetLotAsync(item.InventoryLotId!.Value, Token);
         Assert.Equal("LOT-A", lot.LotNumber);
@@ -356,6 +361,7 @@ public class ReceivingDatabaseTests
         Assert.Equal("first line", movementItem.Note);
 
         await Assert.ThrowsAsync<BusinessRuleException>(() => env.Receipts.ConfirmAsync(draft.Id, Token));
+        Assert.Equal(1, await env.Context.AuditLogs.CountAsync(a => a.EntityId == draft.Id && a.Action == "GOODS_RECEIPT_CONFIRMED", Token));
         await Assert.ThrowsAsync<DomainException>(() => env.Receipts.AddItemAsync(draft.Id, Line(stocked, 1, 1m), Token));
         await Assert.ThrowsAsync<DomainException>(() => env.Receipts.DeleteAsync(draft.Id, Token));
         await Assert.ThrowsAsync<DomainException>(() => env.Receipts.CancelAsync(draft.Id, new CancelGoodsReceiptRequest(), Token));

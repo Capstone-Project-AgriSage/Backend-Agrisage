@@ -133,6 +133,32 @@ action/entityType/entityId/actorUserId/from/to filters. ADMIN can inspect all ev
 inspect only the active store's events while being an active store member, excluding global authentication
 events. Responses expose the existing audit metadata/JSON, never credentials. No update/delete APIs.
 
+### Audit history enrichment (user-requested, 2026-10-09)
+
+- Preserve existing fields/routes; add `actorName`, `actorEmail`, `actorRole` and `status` to list/detail responses.
+  Actor information comes from the current user/role records, including soft-deleted accounts for audit purposes;
+  it is not a historical identity snapshot. A missing actor remains null for system/anonymous events.
+- Add optional `search` (max 200 characters: actor name/email, action, entity type, reason or exact resource/user UUID),
+  `actorRole` (ADMIN, STORE_OWNER, SALES_STAFF, DELIVERY_STAFF, FARMER), and `status` (SUCCESS, FAILURE) filters.
+  Apply every filter and pagination in SQL after restricting the viewer's store scope.
+- Status describes recorded events: actions ending in `_FAILED` and `AUTH_REFRESH_REUSE` are FAILURE;
+  other committed audit events are SUCCESS. A cancelled/rejected business record is a successfully recorded
+  decision, not a failed HTTP request. This is not a history of every unsuccessful request; no status column or
+  schema migration is introduced. Existing events cannot reconstruct unrecorded failures.
+- Anonymous successful login/registration records use the server-verified user as actor through
+  `AuditTrail.RecordAuthentication`; never accept an actor from request data.
+- Login failures write `AUTH_LOGIN_FAILED` atomically before returning the existing generic 401/403;
+  actor remains the JWT user or null, target is the known account or null, reason is INVALID_CREDENTIALS or
+  INACTIVE_ACCOUNT. Never store the submitted identifier or password; an attempted account is not a verified actor.
+- Recursively redact credential fields in old/new JSON on write and again on read for older records;
+  never serialize full identity entities, passwords, hashes, tokens, OTPs or authorization headers.
+- Management web shows human-readable actions, actor details, resource references, field-level before/after
+  changes, reason, Vietnam timestamps, IP and browser; CSV follows the same applied server filters and redaction.
+  Owner's `/agent/activity-log` uses this API instead of mock data. Admin views all events; Owner sees their
+  active store only. Sales/Delivery/Farmer cannot inspect audit history.
+- Extend business audit coverage to product/catalog changes and committed inventory/receiving operations;
+  each owner adds the audit to its existing unit of work before the existing save/commit, with no extra save.
+
 ## Deployment and verification
 
 One reviewed migration expands the 67-table baseline to 71 tables. Update the database design first.

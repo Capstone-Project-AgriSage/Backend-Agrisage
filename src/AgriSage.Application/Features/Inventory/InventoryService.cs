@@ -85,7 +85,10 @@ public sealed partial class InventoryService(IAgriSageDbContext context, IDateTi
             throw new BusinessRuleException("An expired lot cannot be set to ACTIVE.");
         }
 
+        var before = new { lot.LotNumber, status = EnumText.Format(lot.Status) };
         lot.ChangeStatus(status);
+        audit?.Record("INVENTORY_LOT_STATUS_CHANGED", "INVENTORY_LOT", lot.Id, storeId, before,
+            new { lot.LotNumber, status = EnumText.Format(lot.Status) });
         await context.SaveChangesAsync(cancellationToken);
 
         return await GetLotAsync(id, cancellationToken);

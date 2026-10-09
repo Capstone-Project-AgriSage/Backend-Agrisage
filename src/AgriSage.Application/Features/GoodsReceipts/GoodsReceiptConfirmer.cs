@@ -17,7 +17,8 @@ public sealed class GoodsReceiptConfirmer(
     IRowLockService locks,
     ICurrentUserService currentUser,
     IDateTimeProvider clock,
-    IDatabaseErrorClassifier databaseErrors)
+    IDatabaseErrorClassifier databaseErrors,
+    AuditTrail? audit = null)
 {
     // Logical lot identity (database design §24): store product + normalized lot number + expiry date. A product
     // without lot tracking has one no-lot bucket (no lot number, no expiry).
@@ -92,6 +93,11 @@ public sealed class GoodsReceiptConfirmer(
         receipt.Confirm(actorId, now, lotIdsByItem);
         movement.Post(actorId, now);
         context.StockMovements.Add(movement);
+        audit?.Record("GOODS_RECEIPT_CONFIRMED", "GOODS_RECEIPT", receipt.Id, storeId,
+            new { receipt.ReceiptNumber, status = "DRAFT" },
+            new { receipt.ReceiptNumber, status = "CONFIRMED", receipt.TotalAmount, movementId = movement.Id,
+                items = items.Select(i => new { i.Id, i.StoreProductId, i.BaseQuantity, i.BaseUnitCost,
+                    inventoryLotId = lotIdsByItem[i.Id] }).ToArray() }, receipt.Note);
 
         try
         {

@@ -39,7 +39,7 @@ public sealed class AuthService(
         context.Users.Add(user);
         context.FarmerProfiles.Add(new FarmerProfile(user.Id));
         var response = sessions.Start(user, RoleCodeFormat.ToText(role.Code));
-        audit.Record("AUTH_REGISTERED", "USER", user.Id, null, newValues: new { response.SessionId });
+        audit.RecordAuthentication("AUTH_REGISTERED", user.Id, newValues: new { response.SessionId });
 
         try
         {
@@ -69,11 +69,17 @@ public sealed class AuthService(
         var verification = passwordHasher.Verify(user?.PasswordHash, request.Password);
         if (user is null || verification == PasswordVerification.Failed)
         {
+            audit.Record("AUTH_LOGIN_FAILED", "USER", user?.Id, null, reason: "INVALID_CREDENTIALS");
+            await context.SaveChangesAsync(cancellationToken);
+            await tx.CommitAsync(cancellationToken);
             throw new AuthenticationFailedException("Invalid phone number, email or password.");
         }
 
         if (user.Status != UserStatus.Active || !user.Role.IsActive)
         {
+            audit.Record("AUTH_LOGIN_FAILED", "USER", user.Id, null, reason: "INACTIVE_ACCOUNT");
+            await context.SaveChangesAsync(cancellationToken);
+            await tx.CommitAsync(cancellationToken);
             throw new ForbiddenException("This account is not active.");
         }
 
@@ -84,7 +90,7 @@ public sealed class AuthService(
 
         user.RecordLogin(clock.UtcNow);
         var response = sessions.Start(user, RoleCodeFormat.ToText(user.Role.Code));
-        audit.Record("AUTH_LOGIN", "USER", user.Id, null, newValues: new { response.SessionId });
+        audit.RecordAuthentication("AUTH_LOGIN", user.Id, newValues: new { response.SessionId });
         await context.SaveChangesAsync(cancellationToken);
         await tx.CommitAsync(cancellationToken);
 

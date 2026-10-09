@@ -1,4 +1,3 @@
-using System.Text.Json;
 using AgriSage.Application.Common.Interfaces;
 using AgriSage.Domain.Features.Audit.Entities;
 using AgriSage.Domain.Features.Notifications.Entities;
@@ -12,8 +11,6 @@ namespace AgriSage.Application.Common;
 public sealed class AuditTrail(IAgriSageDbContext context, ICurrentUserService currentUser, IDateTimeProvider clock,
     IAuditRequestMetadata? requestMetadata = null)
 {
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
-
     public AuditLog Record(
         string action,
         string entityType,
@@ -21,17 +18,24 @@ public sealed class AuditTrail(IAgriSageDbContext context, ICurrentUserService c
         Guid? storeId,
         object? oldValues = null,
         object? newValues = null,
-        string? reason = null)
+        string? reason = null) => Add(action, entityType, entityId, storeId, currentUser.UserId, oldValues, newValues, reason);
+
+    // Authentication use cases supply the user verified by the server, before a JWT exists.
+    public AuditLog RecordAuthentication(string action, Guid authenticatedUserId, object? newValues = null) =>
+        Add(action, "USER", authenticatedUserId, null, authenticatedUserId, null, newValues, null);
+
+    private AuditLog Add(string action, string entityType, Guid? entityId, Guid? storeId, Guid? actorUserId,
+        object? oldValues, object? newValues, string? reason)
     {
         var log = new AuditLog(
             action,
             entityType,
             clock.UtcNow,
             storeId,
-            currentUser.UserId,
+            actorUserId,
             entityId,
-            oldValues is null ? null : JsonSerializer.Serialize(oldValues, Json),
-            newValues is null ? null : JsonSerializer.Serialize(newValues, Json),
+            AuditValues.Serialize(oldValues),
+            AuditValues.Serialize(newValues),
             reason,
             requestMetadata?.IpAddress,
             requestMetadata?.UserAgent,

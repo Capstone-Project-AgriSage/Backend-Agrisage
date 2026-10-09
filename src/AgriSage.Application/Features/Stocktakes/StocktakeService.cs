@@ -138,8 +138,14 @@ public sealed class StocktakeService(IAgriSageDbContext context, IRowLockService
         var lines = s.Items.Select(i => new StockAdjustmentPosting.Line(lots[i.InventoryLotId], i.DifferenceQuantity!.Value,
             i.UnitCostSnapshot, i.Note)).ToList();
         await posting.PostAsync(s.StoreId, actor, lines, "STOCKTAKE_DIFFERENCE", s.Note, s.Id, token);
+        var before = new { s.StocktakeNumber, status = EnumText.Format(s.Status),
+            quantities = s.Items.OrderBy(i => i.Id).Select(i => new { i.InventoryLotId,
+                quantityOnHand = i.SystemQuantitySnapshot }).ToArray() };
         s.Complete(actor, clock.UtcNow);
-        audit.Record("STOCKTAKE_COMPLETED", "STOCKTAKE", s.Id, s.StoreId);
+        audit.Record("STOCKTAKE_COMPLETED", "STOCKTAKE", s.Id, s.StoreId, before,
+            new { s.StocktakeNumber, status = EnumText.Format(s.Status),
+                quantities = s.Items.OrderBy(i => i.Id).Select(i => new { i.InventoryLotId,
+                    quantityOnHand = i.CountedQuantity, i.DifferenceQuantity, i.ReasonCode, i.Note }).ToArray() }, s.Note);
     }, token);
 
     public Task<StocktakeResponse> CancelAsync(Guid id, CancelStocktakeRequest request, CancellationToken token) =>

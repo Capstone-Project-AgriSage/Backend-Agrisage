@@ -1,4 +1,5 @@
 using AgriSage.Application.Common.Exceptions;
+using AgriSage.Application.Common;
 using AgriSage.Application.Features.Products.Dtos.Requests;
 using AgriSage.Application.Features.Products.Dtos.Responses;
 using AgriSage.Application.Features.Products.Services;
@@ -117,6 +118,30 @@ public class CatalogDatabaseTests
                 packagings.Length > 0 ? packagings : [Bottle(env), Box(env)], brandId), Token);
 
     // ----- Categories -----
+
+    [RealDbFact]
+    public async Task Product_and_store_catalog_changes_save_safe_before_after_audits_with_the_business_change()
+    {
+        await using var session = await RealDb.Session.StartAsync();
+        await using var env = await PrepareAsync(session);
+        var audit = new AuditTrail(env.Context, session.CurrentUser, new DateTimeProvider());
+        var products = new ProductService(env.Context, new NpgsqlErrorClassifier(), audit);
+        var offered = new StoreProductService(env.Context, new NpgsqlErrorClassifier(), audit);
+        var category = await NewCategoryAsync(env);
+        var product = await products.CreateAsync(new CreateProductRequest($"AUD-{Tag()}", "Audit product", category.Id, [Bottle(env)]), Token);
+        var storeProduct = await offered.CreateAsync(new CreateStoreProductRequest(product.Id), Token);
+        await offered.UpdateAsync(storeProduct.Id, new UpdateStoreProductRequest("AUD-STORE", 20), Token);
+        await products.UpdateAsync(product.Id, new UpdateProductRequest("Updated audit product", category.Id), Token);
+        var logs = await env.Context.AuditLogs.Where(a => a.EntityId == product.Id || a.EntityId == storeProduct.Id).ToListAsync(Token);
+        Assert.Equal(4, logs.Count);
+        var update = Assert.Single(logs, a => a.Action == "PRODUCT_UPDATED");
+        Assert.Equal("Audit product", AuditValues.Parse(update.OldValues)!.Value.GetProperty("name").GetString());
+        Assert.Equal("Updated audit product", AuditValues.Parse(update.NewValues)!.Value.GetProperty("name").GetString());
+        Assert.Null(update.StoreId);
+        var storeUpdate = Assert.Single(logs, a => a.Action == "STORE_PRODUCT_UPDATED");
+        Assert.Equal(env.StoreId, storeUpdate.StoreId);
+        Assert.Equal(20, AuditValues.Parse(storeUpdate.NewValues)!.Value.GetProperty("minStockLevelBase").GetInt64());
+    }
 
     [RealDbFact]
     public async Task Category_tree_duplicates_cycles_and_delete_rules()

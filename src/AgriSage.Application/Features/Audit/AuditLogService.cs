@@ -1,9 +1,9 @@
-using System.Text.Json;
 using AgriSage.Application.Common;
 using AgriSage.Application.Common.Exceptions;
 using AgriSage.Application.Common.Interfaces;
 using AgriSage.Application.Common.Models;
 using AgriSage.Domain.Features.Audit.Entities;
+using AgriSage.Domain.Features.Identity.Enums;
 using AgriSage.Domain.Features.Stores.Enums;
 using Microsoft.EntityFrameworkCore;
 
@@ -21,6 +21,23 @@ public sealed class AuditLogService(IAgriSageDbContext context, ICurrentUserServ
         if (request.ActorUserId is { } actor) query = query.Where(a => a.ActorUserId == actor);
         if (request.From is { } from) query = query.Where(a => a.OccurredAt >= from.ToUniversalTime());
         if (request.To is { } to) query = query.Where(a => a.OccurredAt <= to.ToUniversalTime());
+        if (EnumText.TryParse<RoleCode>(request.ActorRole, out var role))
+            query = query.Where(a => context.Users.IgnoreQueryFilters().Any(u => u.Id == a.ActorUserId && u.Role.Code == role));
+        if (!string.IsNullOrWhiteSpace(request.Status))
+        {
+            var failed = request.Status.Trim().Equals("FAILURE", StringComparison.OrdinalIgnoreCase);
+            query = query.Where(a => (a.Action.EndsWith("_FAILED") || a.Action == "AUTH_REFRESH_REUSE") == failed);
+        }
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var term = request.Search.Trim().ToLowerInvariant();
+            Guid? resourceId = Guid.TryParse(term, out var parsedId) ? parsedId : null;
+            query = query.Where(a => context.Users.IgnoreQueryFilters().Any(u => u.Id == a.ActorUserId
+                    && (u.FullName.ToLower().Contains(term) || (u.Email != null && u.Email.ToLower().Contains(term))))
+                || a.Action.ToLower().Contains(term) || a.EntityType.ToLower().Contains(term)
+                || (a.Reason != null && a.Reason.ToLower().Contains(term))
+                || (resourceId != null && (a.EntityId == resourceId || a.ActorUserId == resourceId)));
+        }
         var total = await query.LongCountAsync(token);
         var rows = await Project(query.OrderByDescending(a => a.OccurredAt).ThenByDescending(a => a.Id)
             .Skip(request.Skip).Take(request.PageSize)).ToListAsync(token);
@@ -45,11 +62,20 @@ public sealed class AuditLogService(IAgriSageDbContext context, ICurrentUserServ
     }
     private sealed record Row(Guid Id, Guid? StoreId, Guid? ActorUserId, string Action, string EntityType,
         Guid? EntityId, string? OldValues, string? NewValues, string? Reason, string? IpAddress,
-        string? UserAgent, string? CorrelationId, DateTimeOffset OccurredAt);
-    private static IQueryable<Row> Project(IQueryable<AuditLog> query) => query.Select(a => new Row(a.Id, a.StoreId,
-        a.ActorUserId, a.Action, a.EntityType, a.EntityId, a.OldValues, a.NewValues, a.Reason, a.IpAddress,
-        a.UserAgent, a.CorrelationId, a.OccurredAt));
+        string? UserAgent, string? CorrelationId, DateTimeOffset OccurredAt,
+        string? ActorName, string? ActorEmail, RoleCode? ActorRole);
+    private IQueryable<Row> Project(IQueryable<AuditLog> query) =>
+        from a in query
+        join user in context.Users.IgnoreQueryFilters().AsNoTracking() on a.ActorUserId equals (Guid?)user.Id into users
+        from user in users.DefaultIfEmpty()
+        join role in context.Roles.IgnoreQueryFilters().AsNoTracking() on user.RoleId equals role.Id into roles
+        from role in roles.DefaultIfEmpty()
+        select new Row(a.Id, a.StoreId, a.ActorUserId, a.Action, a.EntityType, a.EntityId,
+            a.OldValues, a.NewValues, a.Reason, a.IpAddress, a.UserAgent, a.CorrelationId, a.OccurredAt,
+            user == null ? null : user.FullName, user == null ? null : user.Email,
+            role == null ? null : role.Code);
     private static AuditLogResponse Map(Row r) => new(r.Id, r.StoreId, r.ActorUserId, r.Action, r.EntityType, r.EntityId,
-        Parse(r.OldValues), Parse(r.NewValues), r.Reason, r.IpAddress, r.UserAgent, r.CorrelationId, r.OccurredAt);
-    private static JsonElement? Parse(string? value) => value is null ? null : JsonSerializer.Deserialize<JsonElement>(value);
+        AuditValues.Parse(r.OldValues), AuditValues.Parse(r.NewValues), r.Reason, r.IpAddress, r.UserAgent, r.CorrelationId,
+        r.OccurredAt, r.ActorName, r.ActorEmail, r.ActorRole is { } role ? EnumText.Format(role) : null,
+        r.Action.EndsWith("_FAILED", StringComparison.Ordinal) || r.Action == "AUTH_REFRESH_REUSE" ? "FAILURE" : "SUCCESS");
 }

@@ -52,7 +52,7 @@ public class StocktakeAdjustmentDatabaseTests
             await using var db = Session.NewContext();
             var locks = new RowLockService(db);
             var service = new StockAdjustmentService(db, locks, Session.CurrentUser, new StockAdjustmentPosting(db, Clock),
-                new InventoryService(db, Clock, locks));
+                new InventoryService(db, Clock, locks), new AuditTrail(db, Session.CurrentUser, Clock));
             return await service.CreateAsync(new("OTHER", "Rollback-only F4.2 test", lines), Token);
         }
 
@@ -119,6 +119,12 @@ public class StocktakeAdjustmentDatabaseTests
         var emptied = await env.Adjust(new StockAdjustmentLine(env.LotIds[0], -11));
         Assert.Equal(0, Assert.Single(emptied.Items).QuantityOnHandAfter);
         Assert.Equal(0, emptied.Items[0].TotalCostValueAfter);
+        await using var db = session.NewContext();
+        var audit = await db.AuditLogs.SingleAsync(a => a.EntityId == added.Id && a.Action == "INVENTORY_ADJUSTED", Token);
+        Assert.Equal(env.ManagerId, audit.ActorUserId);
+        Assert.Equal("Rollback-only F4.2 test", audit.Reason);
+        Assert.Equal(10, AuditValues.Parse(audit.OldValues)!.Value.GetProperty("lots")[0].GetProperty("quantityOnHand").GetInt64());
+        Assert.Equal(15, AuditValues.Parse(audit.NewValues)!.Value.GetProperty("lots")[0].GetProperty("quantityOnHand").GetInt64());
     }
 
     [RealDbFact]
@@ -128,9 +134,11 @@ public class StocktakeAdjustmentDatabaseTests
         var env = await Prepare(session, reserved: 8);
         await using var db = session.NewContext();
         var movementCount = await db.StockMovements.CountAsync(Token);
+        var auditCount = await db.AuditLogs.CountAsync(Token);
         var error = await Assert.ThrowsAsync<BusinessRuleException>(() => env.Adjust(new StockAdjustmentLine(env.LotIds[1], -1), new StockAdjustmentLine(env.LotIds[0], -3)));
         Assert.Contains(env.LotIds[0].ToString(), error.Errors!.Keys);
         Assert.Equal(movementCount, await db.StockMovements.CountAsync(Token));
+        Assert.Equal(auditCount, await db.AuditLogs.CountAsync(Token));
         Assert.Equal(10, await db.InventoryLotBalances.Where(b => b.InventoryLotId == env.LotIds[1]).Select(b => b.QuantityOnHand).SingleAsync(Token));
         await Assert.ThrowsAsync<NotFoundException>(() => env.Adjust(new StockAdjustmentLine(Guid.NewGuid(), 1, 100m)));
         var valid = await env.Adjust(new StockAdjustmentLine(env.LotIds[0], -2));

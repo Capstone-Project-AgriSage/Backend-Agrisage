@@ -12,7 +12,8 @@ using Microsoft.EntityFrameworkCore;
 namespace AgriSage.Application.Features.Products.Services;
 
 // Product aggregate: the product with its packagings (created together, one SaveChanges), plus its ingredient links.
-public sealed class ProductService(IAgriSageDbContext context, IDatabaseErrorClassifier databaseErrors) : IProductService
+public sealed class ProductService(IAgriSageDbContext context, IDatabaseErrorClassifier databaseErrors,
+    AuditTrail? audit = null) : IProductService
 {
     private sealed record ProductRow(
         Guid Id,
@@ -64,6 +65,7 @@ public sealed class ProductService(IAgriSageDbContext context, IDatabaseErrorCla
         }
 
         context.Products.Add(product);
+        audit?.Record("PRODUCT_CREATED", "PRODUCT", product.Id, null, newValues: Snapshot(product));
         await SaveAsync(cancellationToken);
 
         return await GetAsync(product.Id, cancellationToken);
@@ -157,6 +159,7 @@ public sealed class ProductService(IAgriSageDbContext context, IDatabaseErrorCla
             ?? throw new NotFoundException("Product", id);
         await EnsureCategoryAndBrandExistAsync(request.CategoryId, request.BrandId, cancellationToken);
 
+        var before = Snapshot(product);
         product.UpdateDetails(
             request.CategoryId,
             request.BrandId,
@@ -164,6 +167,7 @@ public sealed class ProductService(IAgriSageDbContext context, IDatabaseErrorCla
             Texts.Clean(request.Description),
             Texts.Clean(request.UsageInstructions),
             Texts.Clean(request.ImageUrl));
+        audit?.Record("PRODUCT_UPDATED", "PRODUCT", product.Id, null, before, Snapshot(product));
         await context.SaveChangesAsync(cancellationToken);
 
         return await GetAsync(id, cancellationToken);
@@ -174,7 +178,9 @@ public sealed class ProductService(IAgriSageDbContext context, IDatabaseErrorCla
         var product = await context.Products.FirstOrDefaultAsync(p => p.Id == id, cancellationToken)
             ?? throw new NotFoundException("Product", id);
 
+        var before = Snapshot(product);
         product.ChangeStatus(Enum.Parse<ProductStatus>(request.Status, ignoreCase: true));
+        audit?.Record("PRODUCT_STATUS_CHANGED", "PRODUCT", product.Id, null, before, Snapshot(product));
         await context.SaveChangesAsync(cancellationToken);
 
         return await GetAsync(id, cancellationToken);
@@ -185,12 +191,16 @@ public sealed class ProductService(IAgriSageDbContext context, IDatabaseErrorCla
         var product = await context.Products.FirstOrDefaultAsync(p => p.Id == id, cancellationToken)
             ?? throw new NotFoundException("Product", id);
 
+        var before = Snapshot(product);
         product.ChangeStatus(ProductStatus.Discontinued);
         foreach (var storeProduct in await context.StoreProducts.Where(sp => sp.ProductId == id).ToListAsync(cancellationToken))
         {
             storeProduct.Deactivate();
+            audit?.Record("STORE_PRODUCT_DEACTIVATED", "STORE_PRODUCT", storeProduct.Id, storeProduct.StoreId,
+                newValues: new { product.Sku, product.Name, storeProduct.IsActive, storeProduct.IsSellable });
         }
 
+        audit?.Record("PRODUCT_DISCONTINUED", "PRODUCT", product.Id, null, before, Snapshot(product));
         await context.SaveChangesAsync(cancellationToken);
     }
 
@@ -200,6 +210,7 @@ public sealed class ProductService(IAgriSageDbContext context, IDatabaseErrorCla
         await EnsureUnitsAreUsableAsync([request.UnitId], cancellationToken);
         await EnsureBarcodesAreFreeAsync([request.Barcode], null, cancellationToken);
 
+        var before = PackagingSnapshot(product);
         product.AddPackaging(
             request.UnitId,
             request.ConversionToBase,
@@ -209,6 +220,7 @@ public sealed class ProductService(IAgriSageDbContext context, IDatabaseErrorCla
             PackagingStatus.Active,
             Texts.Clean(request.PackagingName),
             Texts.Clean(request.Barcode));
+        audit?.Record("PRODUCT_PACKAGING_CREATED", "PRODUCT", product.Id, null, before, PackagingSnapshot(product));
         await SaveAsync(cancellationToken);
 
         return await GetAsync(productId, cancellationToken);
@@ -233,9 +245,11 @@ public sealed class ProductService(IAgriSageDbContext context, IDatabaseErrorCla
             throw new BusinessRuleException("The base packaging cannot be deactivated while other packagings are ACTIVE.");
         }
 
+        var before = PackagingSnapshot(product);
         packaging.UpdateDetails(
             Texts.Clean(request.PackagingName), Texts.Clean(request.Barcode), request.IsPurchaseUnit, request.IsSaleUnit);
         packaging.ChangeStatus(request.Status);
+        audit?.Record("PRODUCT_PACKAGING_UPDATED", "PRODUCT", product.Id, null, before, PackagingSnapshot(product));
         await SaveAsync(cancellationToken);
 
         return await GetAsync(productId, cancellationToken);
@@ -258,6 +272,9 @@ public sealed class ProductService(IAgriSageDbContext context, IDatabaseErrorCla
         }
 
         context.ProductPackagings.Remove(packaging);
+        audit?.Record("PRODUCT_PACKAGING_REMOVED", "PRODUCT", product.Id, null,
+            new { product.Sku, packagingId = packaging.Id, packaging.PackagingName, packaging.Barcode },
+            new { product.Sku, packagingId = packaging.Id, status = "REMOVED" });
         await context.SaveChangesAsync(cancellationToken);
 
         return await GetAsync(productId, cancellationToken);
@@ -283,6 +300,8 @@ public sealed class ProductService(IAgriSageDbContext context, IDatabaseErrorCla
         // Deleted links are loaded too: the unique index counts them, so a removed ingredient is revived, not duplicated.
         var links = await context.ProductActiveIngredients.IgnoreQueryFilters()
             .Where(l => l.ProductId == productId).ToListAsync(cancellationToken);
+        var before = new { ingredients = links.Where(l => !l.IsDeleted).Select(l => new
+            { l.ActiveIngredientId, l.Concentration, l.Note }).ToArray() };
 
         foreach (var item in request.Ingredients)
         {
@@ -309,10 +328,20 @@ public sealed class ProductService(IAgriSageDbContext context, IDatabaseErrorCla
             context.ProductActiveIngredients.Remove(link);
         }
 
+        audit?.Record("PRODUCT_INGREDIENTS_UPDATED", "PRODUCT", productId, null, before,
+            new { ingredients = request.Ingredients.Select(i => new
+                { i.ActiveIngredientId, concentration = Texts.Clean(i.Concentration), note = Texts.Clean(i.Note) }).ToArray() });
         await SaveAsync(cancellationToken);
 
         return await GetAsync(productId, cancellationToken);
     }
+
+    private static object Snapshot(Product p) => new { p.Sku, p.Name, p.CategoryId, p.BrandId, p.Description,
+        p.UsageInstructions, p.ImageUrl, p.RequiresLotTracking, p.RequiresExpiryDate, status = StatusText(p.Status) };
+
+    private static object PackagingSnapshot(Product p) => new { p.Sku, p.Name, packagings = p.Packagings
+        .OrderBy(pk => pk.Id).Select(pk => new { pk.Id, pk.UnitId, pk.ConversionToBase, pk.IsBaseUnit,
+            pk.IsPurchaseUnit, pk.IsSaleUnit, pk.PackagingName, pk.Barcode, pk.Status }).ToArray() };
 
     private async Task<Product> LoadWithPackagingsAsync(Guid id, CancellationToken cancellationToken) =>
         await context.Products.Include(p => p.Packagings).FirstOrDefaultAsync(p => p.Id == id, cancellationToken)

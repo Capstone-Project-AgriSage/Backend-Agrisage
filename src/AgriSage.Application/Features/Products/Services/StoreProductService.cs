@@ -13,7 +13,8 @@ namespace AgriSage.Application.Features.Products.Services;
 
 // Products offered by the single active store. A product can be added or marked sellable only when
 // CatalogRules.SaleBlocker allows it (ACTIVE product with an ACTIVE base and an ACTIVE sale packaging).
-public sealed class StoreProductService(IAgriSageDbContext context, IDatabaseErrorClassifier databaseErrors) : IStoreProductService
+public sealed class StoreProductService(IAgriSageDbContext context, IDatabaseErrorClassifier databaseErrors,
+    AuditTrail? audit = null) : IStoreProductService
 {
     private sealed record Row(
         Guid Id,
@@ -45,6 +46,9 @@ public sealed class StoreProductService(IAgriSageDbContext context, IDatabaseErr
 
         var storeProduct = new StoreProduct(storeId, request.ProductId, Texts.Clean(request.StoreSku), request.MinStockLevelBase);
         context.StoreProducts.Add(storeProduct);
+        audit?.Record("STORE_PRODUCT_CREATED", "STORE_PRODUCT", storeProduct.Id, storeId,
+            newValues: new { product.Sku, product.Name, storeProduct.StoreSku, storeProduct.MinStockLevelBase,
+                storeProduct.IsActive, storeProduct.IsSellable });
 
         try
         {
@@ -102,7 +106,9 @@ public sealed class StoreProductService(IAgriSageDbContext context, IDatabaseErr
     {
         var storeProduct = await FindAsync(id, cancellationToken);
 
+        var before = Snapshot(storeProduct);
         storeProduct.UpdateSettings(Texts.Clean(request.StoreSku), request.MinStockLevelBase);
+        audit?.Record("STORE_PRODUCT_UPDATED", "STORE_PRODUCT", storeProduct.Id, storeProduct.StoreId, before, Snapshot(storeProduct));
         await context.SaveChangesAsync(cancellationToken);
 
         return await GetAsync(id, cancellationToken);
@@ -111,6 +117,7 @@ public sealed class StoreProductService(IAgriSageDbContext context, IDatabaseErr
     public async Task SetSellableAsync(Guid id, bool sellable, CancellationToken cancellationToken)
     {
         var storeProduct = await FindAsync(id, cancellationToken);
+        var before = Snapshot(storeProduct);
 
         if (sellable)
         {
@@ -122,12 +129,14 @@ public sealed class StoreProductService(IAgriSageDbContext context, IDatabaseErr
             storeProduct.MarkNotSellable();
         }
 
+        audit?.Record("STORE_PRODUCT_UPDATED", "STORE_PRODUCT", storeProduct.Id, storeProduct.StoreId, before, Snapshot(storeProduct));
         await context.SaveChangesAsync(cancellationToken);
     }
 
     public async Task SetActiveAsync(Guid id, bool active, CancellationToken cancellationToken)
     {
         var storeProduct = await FindAsync(id, cancellationToken);
+        var before = Snapshot(storeProduct);
         if (active)
         {
             storeProduct.Activate();
@@ -137,8 +146,13 @@ public sealed class StoreProductService(IAgriSageDbContext context, IDatabaseErr
             storeProduct.Deactivate();
         }
 
+        audit?.Record(active ? "STORE_PRODUCT_ACTIVATED" : "STORE_PRODUCT_DEACTIVATED", "STORE_PRODUCT",
+            storeProduct.Id, storeProduct.StoreId, before, Snapshot(storeProduct));
         await context.SaveChangesAsync(cancellationToken);
     }
+
+    private static object Snapshot(StoreProduct sp) => new { sp.Product.Sku, sp.Product.Name,
+        sp.StoreSku, sp.MinStockLevelBase, sp.IsActive, sp.IsSellable };
 
     private async Task<StoreProduct> FindAsync(Guid id, CancellationToken cancellationToken)
     {
