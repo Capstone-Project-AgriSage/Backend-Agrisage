@@ -3,10 +3,12 @@ using AgriSage.Api.Middleware;
 using AgriSage.Application.Common.Exceptions;
 using AgriSage.Application.Common.Interfaces;
 using AgriSage.Domain.Common.Exceptions;
+using AgriSage.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Npgsql;
 
 namespace AgriSage.IntegrationTests.Api;
 
@@ -86,7 +88,53 @@ public class GlobalExceptionHandlerTests
         Assert.False(handled);
     }
 
-    private static async Task<(bool Handled, DefaultHttpContext Context)> HandleAsync(Exception exception, bool uniqueViolation)
+    [Fact]
+    public async Task A_full_database_pool_becomes_a_503_that_tells_the_client_to_retry_and_hides_the_cause()
+    {
+        var poolerFull = new PostgresException(
+            "(EMAXCONNSESSION) max clients reached in session mode - max clients are limited to pool_size: 15",
+            "FATAL", "FATAL", PostgresErrorCodes.InternalError);
+
+        var (handled, context) = await HandleAsync(poolerFull, uniqueViolation: false, new NpgsqlErrorClassifier());
+        context.Response.Body.Position = 0;
+        var body = await new StreamReader(context.Response.Body).ReadToEndAsync(Token);
+
+        Assert.True(handled);
+        Assert.Equal(503, context.Response.StatusCode);
+        Assert.Equal("5", context.Response.Headers.RetryAfter.ToString());
+        Assert.Contains("busy", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("pool_size", body);
+        Assert.DoesNotContain("EMAXCONNSESSION", body);
+        Assert.False(string.IsNullOrEmpty(JsonDocument.Parse(body).RootElement.GetProperty("traceId").GetString()));
+    }
+
+    [Fact]
+    public async Task A_save_that_fails_because_the_pool_is_full_is_a_503_too()
+    {
+        var update = new DbUpdateException("save failed", new PostgresException(
+            "sorry, too many clients already", "FATAL", "FATAL", PostgresErrorCodes.TooManyConnections));
+
+        var (_, context) = await HandleAsync(update, uniqueViolation: false, new NpgsqlErrorClassifier());
+
+        Assert.Equal(503, context.Response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Other_database_errors_stay_500_without_a_retry_hint()
+    {
+        var missingTable = new PostgresException("relation \"x\" does not exist", "ERROR", "ERROR", PostgresErrorCodes.UndefinedTable);
+
+        var (_, context) = await HandleAsync(missingTable, uniqueViolation: false, new NpgsqlErrorClassifier());
+
+        Assert.Equal(500, context.Response.StatusCode);
+        Assert.False(context.Response.Headers.ContainsKey("Retry-After"));
+    }
+
+    private static Task<(bool Handled, DefaultHttpContext Context)> HandleAsync(Exception exception, bool uniqueViolation) =>
+        HandleAsync(exception, uniqueViolation, new FakeClassifier(uniqueViolation));
+
+    private static async Task<(bool Handled, DefaultHttpContext Context)> HandleAsync(
+        Exception exception, bool uniqueViolation, IDatabaseErrorClassifier classifier)
     {
         var context = new DefaultHttpContext
         {
@@ -94,7 +142,7 @@ public class GlobalExceptionHandlerTests
             TraceIdentifier = "trace-1"
         };
         context.Response.Body = new MemoryStream();
-        var handler = new GlobalExceptionHandler(new FakeClassifier(uniqueViolation), NullLogger<GlobalExceptionHandler>.Instance);
+        var handler = new GlobalExceptionHandler(classifier, NullLogger<GlobalExceptionHandler>.Instance);
 
         var handled = await handler.TryHandleAsync(context, exception, Token);
 
@@ -110,5 +158,7 @@ public class GlobalExceptionHandlerTests
     private sealed class FakeClassifier(bool uniqueViolation) : IDatabaseErrorClassifier
     {
         public bool IsUniqueViolation(DbUpdateException exception) => uniqueViolation;
+
+        public bool IsConnectionUnavailable(Exception exception) => false;
     }
 }

@@ -13,6 +13,9 @@ public sealed class GlobalExceptionHandler(
     IDatabaseErrorClassifier databaseErrors,
     ILogger<GlobalExceptionHandler> logger) : IExceptionHandler
 {
+    // Seconds a client is told to wait before trying again when the database has no free connection.
+    private const string DatabaseBusyRetryAfterSeconds = "5";
+
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
         if (exception is OperationCanceledException)
@@ -24,6 +27,12 @@ public sealed class GlobalExceptionHandler(
         if (problem.Status == StatusCodes.Status500InternalServerError)
         {
             logger.LogError(exception, "Unhandled exception. TraceId {TraceId}", httpContext.TraceIdentifier);
+        }
+        else if (problem.Status == StatusCodes.Status503ServiceUnavailable && databaseErrors.IsConnectionUnavailable(exception))
+        {
+            // One line, no stack: a full pool shows up as a burst of these and the cause is already in the message.
+            logger.LogWarning("Database connection limit reached. TraceId {TraceId}", httpContext.TraceIdentifier);
+            httpContext.Response.Headers.RetryAfter = DatabaseBusyRetryAfterSeconds;
         }
 
         problem.Extensions["traceId"] = httpContext.TraceIdentifier;
@@ -57,6 +66,8 @@ public sealed class GlobalExceptionHandler(
         BusinessRuleException rule => WithErrors(
             Problem(StatusCodes.Status422UnprocessableEntity, "Business rule violated.", rule.Message), rule.Errors),
         DomainException domain => Problem(StatusCodes.Status422UnprocessableEntity, "Business rule violated.", domain.Message),
+        _ when databaseErrors.IsConnectionUnavailable(exception) => Problem(
+            StatusCodes.Status503ServiceUnavailable, "Service unavailable.", "The system is busy. Please try again in a moment."),
         _ => Problem(StatusCodes.Status500InternalServerError, "Server error.", "An unexpected error occurred.")
     };
 
