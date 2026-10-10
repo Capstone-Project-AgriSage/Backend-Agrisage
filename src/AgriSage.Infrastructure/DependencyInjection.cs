@@ -4,6 +4,7 @@ using AgriSage.Application.Features.GoodsReceipts.Import;
 using AgriSage.Application.Features.Auth;
 using AgriSage.Application.Features.Auth.Interfaces;
 using AgriSage.Application.Features.Notifications;
+using AgriSage.Infrastructure.Ai;
 using AgriSage.Infrastructure.Authentication;
 using AgriSage.Infrastructure.BackgroundJobs;
 using AgriSage.Infrastructure.Messaging;
@@ -110,7 +111,20 @@ public static class DependencyInjection
         // Goods receipt Excel template (ClosedXML, stateless).
         services.AddSingleton<IReceiptSpreadsheet, ClosedXmlReceiptSpreadsheet>();
 
-        // Further provider adapters (AI) are registered here by later tasks.
+        // Objects in the private diagnosis bucket (signed URLs, bytes): the same typed client as the public bucket.
+        services.AddTransient<IPrivateFileStore>(provider => (IPrivateFileStore)provider.GetRequiredService<IFileStorageService>());
+
+        // AI inference service (FastAPI). A missing configuration only makes diagnosis cases FAILED, never the API start.
+        services.AddOptions<AiServiceOptions>().Bind(configuration.GetSection(AiServiceOptions.SectionName));
+        if (AiServiceMode.IsSimulated(configuration))
+        {
+            // Development only (Program refuses this elsewhere): no call, deterministic made-up predictions.
+            services.AddSingleton<IAiDiagnosisClient, SimulatedDiagnosisClient>();
+        }
+        else
+        {
+            services.AddHttpClient<IAiDiagnosisClient, FastApiDiagnosisClient>(client => client.Timeout = TimeSpan.FromSeconds(130));
+        }
 
         return services;
     }

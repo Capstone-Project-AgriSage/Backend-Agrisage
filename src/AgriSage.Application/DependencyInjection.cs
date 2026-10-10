@@ -8,6 +8,7 @@ using AgriSage.Application.Features.Credit;
 using AgriSage.Application.Features.Customers;
 using AgriSage.Application.Features.Debt;
 using AgriSage.Application.Features.Deliveries;
+using AgriSage.Application.Features.Diagnosis;
 using AgriSage.Application.Features.Files;
 using AgriSage.Application.Features.GoodsReceipts;
 using AgriSage.Application.Features.GoodsReceipts.Import;
@@ -141,6 +142,14 @@ public static class DependencyInjection
         services.AddScoped<ISalesReturnService>(sp => sp.GetRequiredService<SalesReturnService>());
         services.AddScoped<IMySalesReturnService, MySalesReturnService>();
         services.AddScoped<IRefundService, RefundService>();
+
+        services.AddScoped<AiReviewer>();
+        services.AddScoped<DiagnosisImageUrls>();
+        services.AddScoped<DiagnosisAiRunner>();
+        services.AddScoped<IMyDiagnosisCaseService, MyDiagnosisCaseService>();
+        services.AddScoped<IDiagnosisCaseService, DiagnosisCaseService>();
+        services.AddScoped<IAiModelService, AiModelService>();
+        services.AddScoped<IDiseaseService, DiseaseService>();
 
         // Further feature application services are registered here by later tasks.
 

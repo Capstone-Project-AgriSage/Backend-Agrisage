@@ -21,6 +21,9 @@ public interface IStaffService
 
     Task ResetPasswordAsync(Guid userId, ResetStaffPasswordRequest request, CancellationToken cancellationToken);
 
+    // Grants or withdraws the right to review AI diagnoses (store_members.can_review_ai, AI_DIAGNOSIS.md section 9).
+    Task<StaffResponse> SetAiReviewAsync(Guid userId, AgriSage.Application.Features.Diagnosis.SetAiReviewRequest request, CancellationToken cancellationToken);
+
     // Semantic delete: the member leaves the store and the account is locked (the user row is kept for history).
     Task RemoveAsync(Guid userId, CancellationToken cancellationToken);
 }

@@ -68,4 +68,13 @@ public sealed class AgentReview : SoftDeletableChildEntity
         SupersededByReviewId = supersededByReviewId;
         SupersededAt = supersededAt;
     }
+
+    // First half of a re-review that must be saved in two steps (see DiagnosisCase.ReleaseCurrentReview).
+    internal void Release(DateTimeOffset releasedAt)
+    {
+        IsCurrent = false;
+        SupersededAt = releasedAt;
+    }
+
+    internal void LinkSuccessor(Guid successorId) => SupersededByReviewId = successorId;
 }

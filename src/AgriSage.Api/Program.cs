@@ -20,7 +20,12 @@ builder.Services.Configure<AgriSage.Application.Features.Credit.CreditPolicy>(bu
 // PayOS:Mode=Simulated confirms payments without money: Development only, checked before anything else is registered.
 var simulatedPayments = AgriSage.Infrastructure.Payments.PayOsMode.IsSimulated(builder.Configuration);
 AgriSage.Infrastructure.Payments.PayOsMode.EnsureAllowed(simulatedPayments, builder.Environment.IsDevelopment());
+// AiService:Mode=Simulated returns made-up predictions: Development only, same rule.
+AgriSage.Infrastructure.Ai.AiServiceMode.EnsureAllowed(
+    AgriSage.Infrastructure.Ai.AiServiceMode.IsSimulated(builder.Configuration), builder.Environment.IsDevelopment());
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.Configure<AgriSage.Application.Features.Diagnosis.AiDiagnosisOptions>(
+    options => options.AllowStubResults = builder.Environment.IsDevelopment());
 
 builder.Services.AddControllers(options =>
 {

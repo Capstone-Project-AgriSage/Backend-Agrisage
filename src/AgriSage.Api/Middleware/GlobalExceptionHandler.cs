@@ -54,6 +54,7 @@ public sealed class GlobalExceptionHandler(
             StatusCodes.Status409Conflict, "Conflict.", "A record with the same unique value already exists."),
         StorageUnavailableException storage => Problem(StatusCodes.Status503ServiceUnavailable, "Service unavailable.", storage.Message),
         PaymentGatewayUnavailableException gateway => Problem(StatusCodes.Status503ServiceUnavailable, "Service unavailable.", gateway.Message),
+        AiServiceUnavailableException ai => Problem(StatusCodes.Status503ServiceUnavailable, "Service unavailable.", ai.Message),
         BusinessRuleException rule => WithErrors(
             Problem(StatusCodes.Status422UnprocessableEntity, "Business rule violated.", rule.Message), rule.Errors),
         DomainException domain => Problem(StatusCodes.Status422UnprocessableEntity, "Business rule violated.", domain.Message),

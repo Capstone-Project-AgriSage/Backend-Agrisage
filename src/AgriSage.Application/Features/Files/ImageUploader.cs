@@ -35,6 +35,34 @@ internal static class ImageUploader
         return new UploadedImageResponse(result.Url, result.StorageKey, result.SizeBytes);
     }
 
+    // Same pipeline, and the caller also gets the bytes and the detected type (the AI service needs the photo itself).
+    public static async Task<(UploadedImageResponse Stored, byte[] Content, ImageType Type)> UploadWithContentAsync(
+        IFileStorageService storage,
+        IDateTimeProvider clock,
+        StorageArea area,
+        long maxBytes,
+        Stream content,
+        CancellationToken cancellationToken)
+    {
+        var buffer = await ReadLimitedAsync(content, maxBytes, cancellationToken);
+        if (buffer.Length == 0)
+        {
+            throw Invalid("file", "The file is empty.");
+        }
+
+        var type = ImageRules.Detect(buffer.GetBuffer().AsSpan(0, (int)Math.Min(buffer.Length, 16)))
+            ?? throw Invalid("file", "Only JPEG, PNG or WebP images are accepted.");
+
+        var now = clock.UtcNow;
+        var bytes = buffer.ToArray();
+        buffer.Position = 0;
+        var result = await storage.UploadAsync(
+            new FileUploadRequest(buffer, $"{Guid.NewGuid():N}{type.Extension}", type.ContentType, $"{now:yyyy}/{now:MM}", area),
+            cancellationToken);
+
+        return (new UploadedImageResponse(result.Url, result.StorageKey, result.SizeBytes), bytes, type);
+    }
+
     public static Task DeleteAsync(IFileStorageService storage, StorageArea area, string? storageKey, string notAnUploadMessage, CancellationToken cancellationToken) =>
         ImageRules.IsValidKey(storageKey)
             ? storage.DeleteAsync(storageKey!, area, cancellationToken)

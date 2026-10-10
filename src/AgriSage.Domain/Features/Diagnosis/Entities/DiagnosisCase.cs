@@ -206,6 +206,23 @@ public sealed class DiagnosisCase : SoftDeletableEntity
         Status = DiagnosisCaseStatus.UnderReview;
     }
 
+    // First step of a re-review. PostgreSQL allows one current review per case (ux_agent_reviews_current) while the old
+    // review points at its successor (superseded_by_review_id), so the old review has to stop being current in a save of
+    // its own before the new one is inserted. Application calls this, saves, then calls Review(), which links the
+    // successor. Recommendations of the released review are deactivated here.
+    public void ReleaseCurrentReview(DateTimeOffset releasedAt)
+    {
+        var current = CurrentReview
+            ?? throw new DomainException($"Diagnosis case '{CaseNumber}' has no current review to release.");
+
+        current.Release(releasedAt);
+
+        foreach (var recommendation in ActiveRecommendations.Where(r => r.AgentReviewId == current.Id && r.IsActive))
+        {
+            recommendation.Deactivate();
+        }
+    }
+
     // Human Review after AI (or after AI failed, as a manual diagnosis), or a re-review that supersedes
     // the current one and deactivates its recommendations.
     public AgentReview Review(
@@ -267,11 +284,22 @@ public sealed class DiagnosisCase : SoftDeletableEntity
             primaryInference?.PredictedDiseaseId,
             comment);
 
-        var previous = CurrentReview;
+        // The current review, or the one released by ReleaseCurrentReview that still has no successor.
+        var previous = CurrentReview
+            ?? ActiveReviews.Where(r => !r.IsCurrent && r.SupersededByReviewId is null)
+                .OrderByDescending(r => r.ReviewedAt)
+                .FirstOrDefault();
 
         if (previous is not null)
         {
-            previous.Supersede(review.Id, reviewedAt);
+            if (previous.IsCurrent)
+            {
+                previous.Supersede(review.Id, reviewedAt);
+            }
+            else
+            {
+                previous.LinkSuccessor(review.Id);
+            }
 
             foreach (var recommendation in ActiveRecommendations.Where(r => r.AgentReviewId == previous.Id && r.IsActive))
             {

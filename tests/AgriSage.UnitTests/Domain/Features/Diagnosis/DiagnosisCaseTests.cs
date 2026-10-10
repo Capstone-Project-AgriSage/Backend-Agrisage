@@ -193,6 +193,43 @@ public class DiagnosisCaseTests
     }
 
     [Fact]
+    public void A_re_review_in_two_steps_releases_the_old_review_first_and_links_the_successor_later()
+    {
+        var leafBlast = LeafBlast();
+        var brownSpot = BrownSpot();
+        var (diagnosisCase, inference) = AiCompletedCase(leafBlast);
+        var first = diagnosisCase.Review(ReviewerMemberId, AgentReviewDecision.Confirmed, Now, leafBlast, inference.Id);
+        var recommendation = diagnosisCase.AddRecommendation(
+            RecommendationType.Product, leafBlast, StaffId, Now, storeProduct: SellableStoreProduct());
+
+        // Step 1 (saved on its own): the old review is no longer current, and nothing points at a successor yet.
+        diagnosisCase.ReleaseCurrentReview(Now.AddHours(1));
+
+        Assert.False(first.IsCurrent);
+        Assert.Null(first.SupersededByReviewId);
+        Assert.Equal(Now.AddHours(1), first.SupersededAt);
+        Assert.Null(diagnosisCase.CurrentReview);
+        Assert.False(recommendation.IsActive);
+        Assert.Equal(DiagnosisCaseStatus.Verified, diagnosisCase.Status);
+
+        // Step 2: the new review is added and linked.
+        var second = diagnosisCase.Review(ReviewerMemberId, AgentReviewDecision.Corrected, Now.AddHours(1), brownSpot);
+
+        Assert.Equal(second.Id, first.SupersededByReviewId);
+        Assert.Same(second, diagnosisCase.CurrentReview);
+        Assert.Equal(brownSpot.Id, diagnosisCase.FinalDiseaseId);
+        Assert.Equal(2, diagnosisCase.Reviews.Count);
+    }
+
+    [Fact]
+    public void Releasing_needs_a_current_review()
+    {
+        var (diagnosisCase, _) = AiCompletedCase(LeafBlast());
+
+        Assert.Throws<DomainException>(() => diagnosisCase.ReleaseCurrentReview(Now));
+    }
+
+    [Fact]
     public void Inconclusive_case_gets_no_recommendation()
     {
         var leafBlast = LeafBlast();
