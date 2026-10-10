@@ -154,6 +154,16 @@ public sealed class DiagnosisCaseService(
 
         var before = EnumText.Format(diagnosisCase.Status);
         var now = clock.UtcNow;
+
+        // One transaction. A re-review needs two saves: the old review stops being current first (one current review
+        // per case in the database), then the new one is inserted and linked as its successor.
+        await using var transaction = await context.BeginTransactionAsync(cancellationToken);
+        if (diagnosisCase.CurrentReview is not null)
+        {
+            diagnosisCase.ReleaseCurrentReview(now);
+            await context.SaveChangesAsync(cancellationToken);
+        }
+
         var review = diagnosisCase.Review(
             reviewer.MemberId, decision, now, finalDisease, primary, Texts.Clean(request.Comment));
 
@@ -179,6 +189,7 @@ public sealed class DiagnosisCaseService(
             cancellationToken);
 
         await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         return await BuildAsync(id, cancellationToken);
     }

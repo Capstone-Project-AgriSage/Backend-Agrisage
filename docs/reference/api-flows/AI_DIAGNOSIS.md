@@ -63,7 +63,7 @@ is seeded with `HasData`. Tell the lead before creating it.
 | D4 | **The AI is called after the case is saved and outside any transaction.** Transaction 1: number, case, image → commit. Then the HTTP call (timeout `AiService:TimeoutSeconds`, default 15). Transaction 2: `StartProcessing` → `RecordInference` → `CompleteAi`/`FailAi`. A crash in between leaves the case `SUBMITTED`, which `rerun-ai` accepts. No transaction is held open across an HTTP call. |
 | D5 | **At most one ACTIVE model** (Application retires the previous one in the activation transaction) and at most one ACTIVE policy effective at a given moment per model. |
 | D6 | **Always ask the service for `top_k = 5`** and store all five in `top_predictions`; the screens show `policy.top_k` of them. Margin is computed from the stored list. |
-| D7 | **Reviewer authorization has two layers.** (a) The endpoint's permission code (`PermissionFilter`, see §11) is the coarse gate. (b) `AiReviewer.EnsureAsync` additionally requires `store_members.can_review_ai = true` for the active store (business rule 41, rule "AI reviewer = can_review_ai, not a primary role"). ADMIN is exempt from (b). The flag is the single source of truth for who may decide a case; permission codes only open the routes. |
+| D7 | **Reviewer authorization has two layers.** (a) The endpoint's permission code (`PermissionFilter`, see §11) is the coarse gate. (b) `AiReviewer.EnsureAsync` additionally requires `store_members.can_review_ai = true` for the active store (business rule 41, rule "AI reviewer = can_review_ai, not a primary role"). The member must belong to the active store and be ACTIVE; ADMIN is not exempt, because `agent_reviews.reviewer_member_id` references `store_members` and an Admin has no membership (an Admin can read cases, not decide them). The flag is the single source of truth for who may decide a case; permission codes only open the routes. |
 | D8 | **Farmer sees verified results only.** Before a review the response carries no AI output and no disease. For INCONCLUSIVE it carries the reviewer's comment and a retake hint, never a recommendation. |
 | D9 | **Photos are private.** Bucket `diagnosis-images`, objects fetched through short-lived signed URLs (1 hour) created at read time; the stored `image_url` is not directly fetchable. |
 | D10 | **Model identity is checked.** An answer whose `model_version` differs from the ACTIVE model's `version`, or that has `stub = true` outside Development, is recorded as a FAILED inference (`raw_output.error = MODEL_VERSION_MISMATCH` / `STUB_REFUSED`), never as a result. |
@@ -213,8 +213,8 @@ Rate limit: the existing `upload` policy (30 / minute / IP) on `POST`.
 
 ## 8. F5.5 — Reviewer API (`/api/diagnosis-cases`)
 
-All routes require D7 layer (b) except `GET` list/detail for ADMIN and STORE_OWNER read-only supervision, which
-need only the permission code.
+Listing and reading a case need only the permission code. Every route that decides or changes a case (`start-review`,
+`review`, `rerun-ai`, recommendations) also needs D7 layer (b).
 
 | Method | Route | Permission | Body / query | Response |
 |---|---|---|---|---|
@@ -259,7 +259,10 @@ need only the permission code.
 - `review` rules (Domain `Review`, §35.12): CONFIRMED needs a SUCCESS inference and the final disease equal to the
   inference's predicted disease; CORRECTED needs `finalDiseaseId`; INCONCLUSIVE has none. A case with no SUCCESS
   inference (FAILED) can only be CORRECTED or INCONCLUSIVE. A new review supersedes the current one and deactivates
-  its recommendations; history is kept.
+  its recommendations; history is kept. `primaryAiInferenceId` defaults to the latest SUCCESS inference.
+- A re-review is two saves in one transaction (`ReleaseCurrentReview`, then `Review`): the database allows one current
+  review per case (`ux_agent_reviews_current`) while the old review points at its successor
+  (`superseded_by_review_id`), so a single INSERT/UPDATE batch cannot satisfy both.
 - `recommendations`: only on a VERIFIED case; PRODUCT must be active and sellable and is refused for the Healthy class
   (`422`). Duplicate target on the same review → `409`.
 - `rerun-ai`: allowed from SUBMITTED or FAILED (Domain). Runs D4 again for the primary image and appends a new
@@ -283,8 +286,8 @@ need only the permission code.
 - `GET /api/auth/me` (`CurrentUserResponse`) gains `canReviewAi` so the web can show or hide the review screens.
   `GET /api/me/permissions` is unchanged and lists permission codes.
 - `AiReviewer.EnsureAsync(ct)` (Application, shared by F5.5): resolves the caller's `StoreMember` for the active
-  store, `403` when missing, not ACTIVE or `CanReviewAi = false`; ADMIN passes. The reviewer's `store_members.id`
-  becomes `agent_reviews.reviewer_member_id`.
+  store, `403` when missing, not ACTIVE or `CanReviewAi = false` (ADMIN included, see D7). The reviewer's
+  `store_members.id` becomes `agent_reviews.reviewer_member_id`.
 
 ---
 
@@ -327,8 +330,11 @@ Controller and action names that key the map: `MeDiagnosisCases.{Create,List,Get
 
 ## 12. Configuration, migration, operations
 
-- `appsettings.json`: `AiService` section without secrets. `appsettings.Local.json` (or user secrets): `ApiKey`,
-  `BaseUrl`. `appsettings.Local.example.json` documents `Mode`.
+- `appsettings.Development.json`: `AiService:BaseUrl` / `TimeoutSeconds` and `Storage:DiagnosisImageBucket`, no secrets.
+  `appsettings.Local.json` (or user secrets): `AiService:ApiKey`. `Mode=Simulated` (Development only) answers with
+  deterministic made-up predictions flagged `stub`; register a model whose version is `AiService:SimulatedModelVersion`
+  (default `simulated`). Outside Development a `stub` answer is refused (D10).
+- `/api/auth/me` `canReviewAi` is true for an ACTIVE store member with the flag.
 - Migration `AiDiagnosisPermissions` (data only: the new `permissions` rows, plus `role_permissions` defaults
   through `PermissionSeeder`). Review it as a data migration: no schema operation is expected.
 - Supabase: create the private bucket `diagnosis-images` and set `Storage:DiagnosisImageBucket`. The service key
