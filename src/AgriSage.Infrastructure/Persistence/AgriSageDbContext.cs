@@ -41,6 +41,9 @@ public sealed class AgriSageDbContext : DbContext, IAgriSageDbContext
     }
 
     public DbSet<Role> Roles => Set<Role>();
+    public DbSet<Permission> Permissions => Set<Permission>();
+    public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
+    public DbSet<StoreMemberPermission> StoreMemberPermissions => Set<StoreMemberPermission>();
 
     public DbSet<User> Users => Set<User>();
 

@@ -2,6 +2,7 @@ using AgriSage.Application.Common;
 using AgriSage.Application.Common.Exceptions;
 using AgriSage.Application.Common.Interfaces;
 using AgriSage.Application.Features.Auth;
+using AgriSage.Application.Features.Permissions;
 using AgriSage.Domain.Features.Credit.Entities;
 using AgriSage.Domain.Features.Credit.Enums;
 using AgriSage.Domain.Features.Customers.Entities;
@@ -13,8 +14,19 @@ namespace AgriSage.Application.Features.Customers;
 
 // Shared steps: only stage changes. The caller owns the transaction, SaveChanges and commit.
 public sealed class CustomerWrites(IAgriSageDbContext context, ICurrentUserService currentUser,
-    IDateTimeProvider clock, AuditTrail audit)
+    IDateTimeProvider clock, AuditTrail audit, IPermissionEvaluator? permissions = null)
 {
+    public async Task<Guid> ActorAsync(string permission, CancellationToken token, bool manage = false)
+    {
+        var id = Actor();
+        if (permissions is not null)
+        {
+            if (!await permissions.HasAsync(permission, token)) throw new ForbiddenException();
+        }
+        else if (manage) Actor(manage: true);
+        return id;
+    }
+
     public Guid Actor(bool manage = false)
     {
         var id = currentUser.UserId ?? throw new AuthenticationFailedException("Authentication is required.");
@@ -65,6 +77,7 @@ public sealed class CustomerWrites(IAgriSageDbContext context, ICurrentUserServi
             .FirstOrDefaultAsync(p => p.FarmerProfileId == farmerId && p.StoreId == storeId, token);
         if (profile != null && group.DefaultCreditTierId is { } tierId && profile.CreditTierId != tierId)
         {
+            await ActorAsync("CREDIT.UPDATE", token);
             await RequireTierAsync(tierId, storeId, token);
             ChangeLimit(profile, profile.CreditLimit, tierId, $"Customer group changed to {group.Code}");
         }
@@ -98,22 +111,24 @@ public sealed class CustomerWrites(IAgriSageDbContext context, ICurrentUserServi
         }
         if (limit != profile.CreditLimit || tier != profile.CreditTierId)
         {
+            await ActorAsync("CREDIT.UPDATE", token);
             // FLOW_3 §4.3 explicitly allows a limit below current exposure; future credit is then blocked.
             ChangeLimit(profile, limit, tier, request.CreditChangeReason ?? "");
         }
         if (request.AllowCreditPurchase == false && profile.Status == FarmerCreditProfileStatus.Active)
         {
-            SetCreditStatus(profile, FarmerCreditProfileStatus.Suspended, request.CreditChangeReason ?? "");
+            await SetCreditStatusAsync(profile, FarmerCreditProfileStatus.Suspended, request.CreditChangeReason ?? "", token);
         }
         else if (request.AllowCreditPurchase == true && profile.Status != FarmerCreditProfileStatus.Active)
         {
-            SetCreditStatus(profile, FarmerCreditProfileStatus.Active, request.CreditChangeReason ?? "");
+            await SetCreditStatusAsync(profile, FarmerCreditProfileStatus.Active, request.CreditChangeReason ?? "", token);
         }
     }
 
     public async Task<FarmerCreditProfile> CreateCreditAsync(Guid farmerId, Guid storeId, Guid? tierId,
         decimal? limit, string? note, CancellationToken token)
     {
+        await ActorAsync("CREDIT.CREATE", token);
         if (await context.FarmerCreditProfiles.AnyAsync(p => p.StoreId == storeId && p.FarmerProfileId == farmerId, token))
         {
             throw new ConflictException("This customer already has a credit profile.");
@@ -164,9 +179,16 @@ public sealed class CustomerWrites(IAgriSageDbContext context, ICurrentUserServi
             before, new { profile.CreditLimit, profile.CreditTierId }, reason);
     }
 
-    public void SetCreditStatus(FarmerCreditProfile profile, FarmerCreditProfileStatus status, string reason)
+    public async Task SetCreditStatusAsync(FarmerCreditProfile profile, FarmerCreditProfileStatus status, string reason, CancellationToken token)
     {
-        Actor(manage: true); // credit status changes are Manage, even when submitted through the customer form.
+        var permission = status switch
+        {
+            FarmerCreditProfileStatus.Active => "CREDIT.ACTIVATE",
+            FarmerCreditProfileStatus.Suspended => "CREDIT.SUSPEND",
+            FarmerCreditProfileStatus.Blocked => "CREDIT.BLOCK",
+            _ => throw new BusinessRuleException("Invalid credit status.")
+        };
+        await ActorAsync(permission, token, manage: true);
         RequireReason(reason);
         var before = new { Status = EnumText.Format(profile.Status) };
         profile.ChangeStatus(status);

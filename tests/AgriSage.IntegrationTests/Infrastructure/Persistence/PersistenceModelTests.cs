@@ -30,7 +30,8 @@ public class PersistenceModelTests
         "diseases", "disease_treatments", "ai_models", "ai_policy_configs", "diagnosis_cases",
         "diagnosis_images", "ai_inferences", "agent_reviews", "recommendation_items",
         "articles", "contact_requests", "notifications", "audit_logs",
-        "auth_sessions", "refresh_tokens", "auth_challenges", "notification_outbox"
+        "auth_sessions", "refresh_tokens", "auth_challenges", "notification_outbox",
+        "permissions", "role_permissions", "store_member_permissions"
     ];
 
     private static readonly (IModel DesignModel, IModel RuntimeModel) Models = BuildModels();
@@ -54,11 +55,11 @@ public class PersistenceModelTests
         Table(table).GetCheckConstraints().Single(check => check.Name == $"ck_{table}_{name}");
 
     [Fact]
-    public void Model_maps_exactly_the_71_documented_tables()
+    public void Model_maps_exactly_the_74_documented_tables()
     {
         var tables = Model.GetEntityTypes().Select(entityType => entityType.GetTableName()).ToList();
 
-        Assert.Equal(71, DocumentedTables.Length);
+        Assert.Equal(74, DocumentedTables.Length);
         Assert.Equal(DocumentedTables.Order(), tables.Order());
         Assert.DoesNotContain(Model.GetEntityTypes(), entityType => entityType.IsOwned());
     }
@@ -79,13 +80,13 @@ public class PersistenceModelTests
     }
 
     [Fact]
-    public void Only_audit_logs_lacks_audit_and_soft_delete_columns()
+    public void Immutable_permission_configuration_and_audit_tables_have_no_soft_delete()
     {
         var withoutSoftDelete = Model.GetEntityTypes()
             .Where(entityType => entityType.FindProperty(nameof(SoftDeletableEntity.DeletedAt)) is null)
             .Select(entityType => entityType.GetTableName());
 
-        Assert.Equal(["audit_logs"], withoutSoftDelete);
+        Assert.Equal(new[] { "audit_logs", "permissions", "role_permissions", "store_member_permissions" }, withoutSoftDelete.Order());
         Assert.Null(Table("audit_logs").FindProperty(nameof(AuditableEntity.CreatedAt)));
     }
 
@@ -103,7 +104,7 @@ public class PersistenceModelTests
     [Fact]
     public void Every_soft_deletable_table_references_users_through_deleted_by_without_an_index()
     {
-        foreach (var entityType in Model.GetEntityTypes().Where(e => e.GetTableName() != "audit_logs"))
+        foreach (var entityType in Model.GetEntityTypes().Where(e => e.FindProperty(nameof(SoftDeletableEntity.DeletedBy)) is not null))
         {
             var deletedBy = entityType.FindProperty(nameof(SoftDeletableEntity.DeletedBy))!;
 
@@ -227,7 +228,7 @@ public class PersistenceModelTests
             .Select(property => $"{property.DeclaringType.GetTableName()}.{property.GetColumnName()}");
 
         Assert.Equal(
-            ["debt_accounts.version", "farmer_credit_profiles.version", "inventory_lot_balances.version", "orders.version", "users.security_version"],
+            ["debt_accounts.version", "farmer_credit_profiles.version", "inventory_lot_balances.version", "orders.version", "roles.version", "store_members.version", "users.security_version"],
             tokens.Order());
         Assert.All(Model.GetEntityTypes().Where(entityType => entityType.ClrType.IsAssignableTo(typeof(IHasConcurrencyVersion))),
             entityType => Assert.Equal(ValueGenerated.Never, entityType.FindProperty("Version")!.ValueGenerated));
@@ -242,7 +243,7 @@ public class PersistenceModelTests
         {
             var filters = entityType.GetDeclaredQueryFilters();
 
-            if (entityType.GetTableName() == "audit_logs")
+            if (entityType.FindProperty(nameof(SoftDeletableEntity.DeletedAt)) is null)
             {
                 Assert.Empty(filters);
                 return;

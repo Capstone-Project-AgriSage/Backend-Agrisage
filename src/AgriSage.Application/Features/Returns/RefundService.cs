@@ -15,7 +15,7 @@ namespace AgriSage.Application.Features.Returns;
 // Transaction owner for refund records only. Staff execute the money transfer outside the system.
 // Lock order → return (when applicable) → payment; both refund sources share the payment's remaining capacity.
 public sealed class RefundService(IAgriSageDbContext context, IRowLockService locks, ICurrentUserService user,
-    IDateTimeProvider clock, AuditTrail audit) : IRefundService
+    IDateTimeProvider clock, AuditTrail audit, AgriSage.Application.Features.Permissions.IPermissionEvaluator? permissions = null) : IRefundService
 {
     public Task<RefundResponse> CreateReturnAsync(Guid id, RefundRequest request, CancellationToken token) =>
         ReturnAsync(id, null, request.OriginalPaymentId, async (r, _, actor) =>
@@ -48,7 +48,7 @@ public sealed class RefundService(IAgriSageDbContext context, IRowLockService lo
 
     public async Task<IReadOnlyList<RefundResponse>> ListOrderAsync(Guid id, CancellationToken token)
     {
-        Actor(); var storeId = await ActiveStore.GetIdAsync(context, token);
+        await ActorAsync("REFUNDS.READ", token); var storeId = await ActiveStore.GetIdAsync(context, token);
         var order = await context.Orders.AsNoTracking().SingleOrDefaultAsync(o => o.Id == id && o.StoreId == storeId, token)
             ?? throw new NotFoundException("Order", id);
         EnsureCancelled(order);
@@ -81,9 +81,10 @@ public sealed class RefundService(IAgriSageDbContext context, IRowLockService lo
         }, token);
 
     private async Task<RefundResponse> ReturnAsync(Guid id, Guid? refundId, Guid? requestedPaymentId,
-        Func<SalesReturn, Refund?, Guid, Task<Refund>> change, CancellationToken token, decimal? requestedAmount = null)
+        Func<SalesReturn, Refund?, Guid, Task<Refund>> change, CancellationToken token, decimal? requestedAmount = null,
+        [System.Runtime.CompilerServices.CallerMemberName] string operation = "")
     {
-        var actor = Actor(); var storeId = await ActiveStore.GetIdAsync(context, token);
+        var actor = await ActorAsync(PermissionFor(operation), token); var storeId = await ActiveStore.GetIdAsync(context, token);
         await using var transaction = await context.BeginTransactionAsync(token);
         var orderId = await context.SalesReturns.AsNoTracking().Where(r => r.Id == id && r.StoreId == storeId)
             .Select(r => (Guid?)r.OrderId).SingleOrDefaultAsync(token) ?? throw new NotFoundException("Sales return", id);
@@ -103,9 +104,10 @@ public sealed class RefundService(IAgriSageDbContext context, IRowLockService lo
     }
 
     private async Task<RefundResponse> OrderAsync(Guid id, Guid? refundId, Guid? requestedPaymentId,
-        Func<Order, Refund?, Guid, Task<Refund>> change, CancellationToken token, decimal? requestedAmount = null)
+        Func<Order, Refund?, Guid, Task<Refund>> change, CancellationToken token, decimal? requestedAmount = null,
+        [System.Runtime.CompilerServices.CallerMemberName] string operation = "")
     {
-        var actor = Actor(); var storeId = await ActiveStore.GetIdAsync(context, token);
+        var actor = await ActorAsync(PermissionFor(operation), token); var storeId = await ActiveStore.GetIdAsync(context, token);
         await using var transaction = await context.BeginTransactionAsync(token); await locks.LockOrderAsync(id, token);
         var order = await context.Orders.Include(o => o.CancellationRefunds).SingleOrDefaultAsync(o => o.Id == id && o.StoreId == storeId, token)
             ?? throw new NotFoundException("Order", id);
@@ -179,10 +181,22 @@ public sealed class RefundService(IAgriSageDbContext context, IRowLockService lo
             newValues: new { refund.OrderId, refund.SalesReturnId, refund.OriginalPaymentId, refund.Amount, refund.Note }, reason: refund.CancelReason);
         await context.SaveChangesAsync(token); await transaction.CommitAsync(token); return RefundResponse.From(refund);
     }
-    private Guid Actor()
+    private static string PermissionFor(string operation) => operation switch
+    {
+        nameof(CreateReturnAsync) => "REFUNDS.CREATE_RETURN",
+        nameof(CompleteReturnAsync) => "REFUNDS.COMPLETE_RETURN",
+        nameof(FailReturnAsync) => "REFUNDS.FAIL_RETURN",
+        nameof(CancelReturnAsync) => "REFUNDS.CANCEL_RETURN",
+        nameof(CreateOrderAsync) => "REFUNDS.CREATE_ORDER",
+        nameof(CompleteOrderAsync) => "REFUNDS.COMPLETE_ORDER",
+        nameof(FailOrderAsync) => "REFUNDS.FAIL_ORDER",
+        nameof(CancelOrderAsync) => "REFUNDS.CANCEL_ORDER",
+        _ => throw new InvalidOperationException("Unclassified refund operation.")
+    };
+    private async Task<Guid> ActorAsync(string permission, CancellationToken token)
     {
         var actor = user.UserId ?? throw new AuthenticationFailedException("Authentication is required.");
-        if (user.Role is not ("ADMIN" or "STORE_OWNER")) throw new ForbiddenException(); return actor;
+        if (user.Role is not ("ADMIN" or "STORE_OWNER") && (user.Role != "SALES_STAFF" || permissions is null || !await permissions.HasAsync(permission, token))) throw new ForbiddenException(); return actor;
     }
     private static void EnsureCancelled(Order order)
     {

@@ -7,11 +7,11 @@ namespace AgriSage.Application.Features.Inventory;
 
 public sealed class StockAdjustmentService(IAgriSageDbContext context, IRowLockService locks,
     ICurrentUserService currentUser, StockAdjustmentPosting posting, IInventoryService inventory,
-    AuditTrail? audit = null) : IStockAdjustmentService
+    AuditTrail? audit = null, AgriSage.Application.Features.Permissions.IPermissionEvaluator? permissions = null) : IStockAdjustmentService
 {
     public async Task<StockMovementResponse> CreateAsync(StockAdjustmentRequest request, CancellationToken token)
     {
-        var actor = InventoryActors.Require(currentUser, manage: true);
+        var actor = await InventoryActors.RequireManagerAsync(currentUser, permissions, "STOCK_ADJUSTMENTS.CREATE", token);
         var storeId = await ActiveStore.GetIdAsync(context, token);
         await using var transaction = await context.BeginTransactionAsync(token);
         var ids = request.Lines.Select(l => l.InventoryLotId).ToArray();

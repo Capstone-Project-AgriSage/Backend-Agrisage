@@ -72,6 +72,15 @@ public sealed class StockAdjustmentPosting(IAgriSageDbContext context, IDateTime
 
 internal static class InventoryActors
 {
+    public static async Task<Guid> RequireManagerAsync(ICurrentUserService user,
+        AgriSage.Application.Features.Permissions.IPermissionEvaluator? permissions, string code, CancellationToken token)
+    {
+        var id = user.UserId ?? throw new AuthenticationFailedException("Authentication is required.");
+        if (user.Role is not ("ADMIN" or "STORE_OWNER")
+            && (user.Role != "SALES_STAFF" || permissions is null || !await permissions.HasAsync(code, token)))
+            throw new ForbiddenException();
+        return id;
+    }
     public static Guid Require(ICurrentUserService user, bool manage = false)
     {
         var id = user.UserId ?? throw new AuthenticationFailedException("Authentication is required.");

@@ -10,7 +10,7 @@ using Microsoft.EntityFrameworkCore;
 namespace AgriSage.Application.Features.Stocktakes;
 
 public sealed class StocktakeService(IAgriSageDbContext context, IRowLockService locks, ICurrentUserService currentUser,
-    IDateTimeProvider clock, AuditTrail audit, StocktakeQueries queries, StockAdjustmentPosting posting) : IStocktakeService
+    IDateTimeProvider clock, AuditTrail audit, StocktakeQueries queries, StockAdjustmentPosting posting, AgriSage.Application.Features.Permissions.IPermissionEvaluator? permissions = null) : IStocktakeService
 {
     public Task<PagedResult<StocktakeListItem>> ListAsync(StocktakeListRequest request, CancellationToken token) => queries.ListAsync(request, token);
     public Task<StocktakeResponse> GetAsync(Guid id, StocktakeDetailRequest request, CancellationToken token) => queries.GetAsync(id, request, token);
@@ -171,7 +171,7 @@ public sealed class StocktakeService(IAgriSageDbContext context, IRowLockService
 
     private async Task<StocktakeResponse> MutateAsync(Guid id, bool manage, Func<Stocktake, Guid, Task> change, CancellationToken token)
     {
-        var actor = InventoryActors.Require(currentUser, manage);
+        var actor = manage ? await InventoryActors.RequireManagerAsync(currentUser, permissions, "STOCKTAKES.COMPLETE", token) : InventoryActors.Require(currentUser);
         var storeId = await ActiveStore.GetIdAsync(context, token);
         await using var transaction = await context.BeginTransactionAsync(token);
         await locks.LockStocktakeAsync(id, token);

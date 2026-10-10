@@ -15,7 +15,7 @@ namespace AgriSage.Application.Features.Returns;
 // All mutations serialize on the original order, then the return. The order is read but never rewritten.
 public sealed class SalesReturnService(IAgriSageDbContext context, IRowLockService locks, ICurrentUserService currentUser,
     IDateTimeProvider clock, AuditTrail audit, SalesReturnQueries queries, ReturnSources sources,
-    IDebtReturnPosting debtPosting) : ISalesReturnService
+    IDebtReturnPosting debtPosting, AgriSage.Application.Features.Permissions.IPermissionEvaluator? permissions = null) : ISalesReturnService
 {
     public Task<ReturnableResponse> ReturnableAsync(Guid orderId, CancellationToken token) => queries.ReturnableAsync(orderId, null, token);
     public Task<PagedResult<SalesReturnListItem>> ListAsync(SalesReturnListRequest request, CancellationToken token) => queries.ListAsync(request, null, token);
@@ -24,7 +24,7 @@ public sealed class SalesReturnService(IAgriSageDbContext context, IRowLockServi
 
     internal async Task<SalesReturnResponse> CreateForAsync(CreateReturnRequest request, Guid? farmerId, CancellationToken token)
     {
-        var actor = Actor(farmerId);
+        var actor = await ActorAsync(farmerId, false, null, token);
         var storeId = await ActiveStore.GetIdAsync(context, token);
         await using var transaction = await context.BeginTransactionAsync(token);
         await locks.LockOrderAsync(request.OrderId, token);
@@ -167,18 +167,20 @@ public sealed class SalesReturnService(IAgriSageDbContext context, IRowLockServi
     {
         if (!r.Items.Any(i => i.Id == itemId && !i.IsDeleted)) throw new NotFoundException("Return item", itemId);
     }
-    private Guid Actor(Guid? farmerId, bool manage = false)
+    private async Task<Guid> ActorAsync(Guid? farmerId, bool manage, string? permission, CancellationToken token)
     {
         var id = currentUser.UserId ?? throw new AuthenticationFailedException("Authentication is required.");
         var allowed = farmerId is not null ? currentUser.Role == "FARMER" :
-            currentUser.Role is "ADMIN" or "STORE_OWNER" || (!manage && currentUser.Role == "SALES_STAFF");
+            currentUser.Role is "ADMIN" or "STORE_OWNER" || (currentUser.Role == "SALES_STAFF" && (!manage || (permissions is not null && permission is not null && await permissions.HasAsync(permission, token))));
         if (!allowed) throw new ForbiddenException();
         return id;
     }
     private async Task<SalesReturnResponse> MutateAsync(Guid id, Guid? farmerId, bool manage,
-        Func<SalesReturn, Order, Guid, Task> change, CancellationToken token)
+        Func<SalesReturn, Order, Guid, Task> change, CancellationToken token,
+        [System.Runtime.CompilerServices.CallerMemberName] string operation = "")
     {
-        var actor = Actor(farmerId, manage);
+        var permission = operation switch { "ApproveAsync" => "RETURNS.APPROVE", "RejectAsync" => "RETURNS.REJECT", "CompleteInspectionAsync" => "RETURNS.COMPLETE_INSPECTION", _ => null };
+        var actor = await ActorAsync(farmerId, manage, permission, token);
         var storeId = await ActiveStore.GetIdAsync(context, token);
         await using var transaction = await context.BeginTransactionAsync(token);
         var orderId = await context.SalesReturns.AsNoTracking().Where(r => r.Id == id && r.StoreId == storeId

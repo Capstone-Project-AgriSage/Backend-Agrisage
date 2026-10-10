@@ -81,6 +81,7 @@ public static class DependencyInjection
 
         services.AddScoped<IAgriSageDbContext>(provider => provider.GetRequiredService<AgriSageDbContext>());
         services.AddScoped<IRowLockService, RowLockService>();
+        services.AddScoped<AgriSage.Application.Features.Permissions.IPermissionWriteLock, PermissionWriteLock>();
         services.AddScoped<ICustomerGroupDefaultSwitcher, CustomerGroupDefaultSwitcher>();
         services.AddScoped<IUserAddressDefaultSwitcher, UserAddressDefaultSwitcher>();
 

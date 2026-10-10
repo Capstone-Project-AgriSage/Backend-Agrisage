@@ -142,7 +142,7 @@ public sealed class CustomerService(IAgriSageDbContext context, IPasswordHashSer
 
     public async Task<CustomerResponse> SetStatusAsync(Guid id, CustomerStatusRequest request, CancellationToken token)
     {
-        writes.Actor(manage: true);
+        await writes.ActorAsync("CUSTOMERS.STATUS", token, manage: true);
         var storeId = await ActiveStore.GetIdAsync(context, token);
         await using var transaction = await context.BeginTransactionAsync(token);
         await locks.LockStoreAsync(storeId, token);

@@ -27,6 +27,9 @@ public interface IAgriSageDbContext
 {
     // Identity
     DbSet<Role> Roles { get; }
+    DbSet<Permission> Permissions { get; }
+    DbSet<RolePermission> RolePermissions { get; }
+    DbSet<StoreMemberPermission> StoreMemberPermissions { get; }
 
     DbSet<User> Users { get; }
 

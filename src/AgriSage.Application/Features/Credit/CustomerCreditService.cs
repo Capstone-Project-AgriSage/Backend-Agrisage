@@ -59,7 +59,7 @@ public sealed class CustomerCreditService(IAgriSageDbContext context, IRowLockSe
         MutateAsync(farmerId, async (store, ct) =>
         {
             await writes.CreateCreditAsync(farmerId, store, request.CreditTierId, request.CreditLimit, request.Note, ct);
-        }, false, token);
+        }, false, "CREDIT.CREATE", token);
 
     public Task<CreditSummaryResponse> LimitAsync(Guid farmerId, CustomerCreditLimitRequest request, CancellationToken token) =>
         MutateAsync(farmerId, async (store, ct) =>
@@ -69,15 +69,19 @@ public sealed class CustomerCreditService(IAgriSageDbContext context, IRowLockSe
             if (tier != p.CreditTierId && tier is { } tierId) await writes.RequireTierAsync(tierId, store, ct);
             if (request.CreditLimit != p.CreditLimit || tier != p.CreditTierId)
                 writes.ChangeLimit(p, request.CreditLimit, tier, request.Reason);
-        }, false, token);
+        }, false, "CREDIT.UPDATE", token);
 
     public Task<CreditSummaryResponse> StatusAsync(Guid farmerId, string status, CustomerCreditStatusRequest request, CancellationToken token) =>
         MutateAsync(farmerId, async (store, ct) =>
         {
             var p = await FindProfileAsync(farmerId, store, ct);
             if (!EnumText.TryParse<FarmerCreditProfileStatus>(status, out var parsed)) throw new BusinessRuleException("Invalid credit status.");
-            writes.SetCreditStatus(p, parsed, request.Reason);
-        }, true, token);
+            await writes.SetCreditStatusAsync(p, parsed, request.Reason, ct);
+        }, true, status switch
+        {
+            "ACTIVE" => "CREDIT.ACTIVATE", "SUSPENDED" => "CREDIT.SUSPEND", "BLOCKED" => "CREDIT.BLOCK",
+            _ => throw new BusinessRuleException("Invalid credit status.")
+        }, token);
 
     public async Task<IReadOnlyList<CreditLimitHistoryResponse>> HistoryAsync(Guid farmerId, CancellationToken token)
     {
@@ -134,7 +138,7 @@ public sealed class CustomerCreditService(IAgriSageDbContext context, IRowLockSe
 
     public async Task<CreditTierResponse> CreateTierAsync(CreditTierRequest request, CancellationToken token)
     {
-        writes.Actor(manage: true);
+        await writes.ActorAsync("CREDIT_TIERS.CREATE", token, manage: true);
         var store = await ActiveStore.GetIdAsync(context, token);
         await using var tx = await context.BeginTransactionAsync(token);
         await locks.LockStoreAsync(store, token);
@@ -154,7 +158,7 @@ public sealed class CustomerCreditService(IAgriSageDbContext context, IRowLockSe
         {
             tier.Update(request.Name.Trim(), Texts.Clean(request.Description), request.DefaultCreditLimit, request.DefaultPaymentTermDays);
             return Task.CompletedTask;
-        }, token);
+        }, "CREDIT_TIERS.UPDATE", token);
 
     public Task<CreditTierResponse> SetTierActiveAsync(Guid id, bool active, CancellationToken token) =>
         MutateTierAsync(id, async (tier, ct) =>
@@ -163,11 +167,11 @@ public sealed class CustomerCreditService(IAgriSageDbContext context, IRowLockSe
             if (await context.CustomerGroups.AnyAsync(g => g.DefaultCreditTierId == id, ct))
                 throw new BusinessRuleException("Unlink this tier from customer groups before deactivating it.");
             tier.Deactivate();
-        }, token);
+        }, active ? "CREDIT_TIERS.ACTIVATE" : "CREDIT_TIERS.DEACTIVATE", token);
 
-    private async Task<CreditSummaryResponse> MutateAsync(Guid farmerId, Func<Guid, CancellationToken, Task> change, bool manage, CancellationToken token)
+    private async Task<CreditSummaryResponse> MutateAsync(Guid farmerId, Func<Guid, CancellationToken, Task> change, bool manage, string permission, CancellationToken token)
     {
-        writes.Actor(manage);
+        await writes.ActorAsync(permission, token, manage);
         var store = await ActiveStore.GetIdAsync(context, token);
         await using var tx = await context.BeginTransactionAsync(token);
         await locks.LockStoreAsync(store, token);
@@ -179,9 +183,9 @@ public sealed class CustomerCreditService(IAgriSageDbContext context, IRowLockSe
         return await GetAsync(farmerId, token);
     }
 
-    private async Task<CreditTierResponse> MutateTierAsync(Guid id, Func<CreditTier, CancellationToken, Task> change, CancellationToken token)
+    private async Task<CreditTierResponse> MutateTierAsync(Guid id, Func<CreditTier, CancellationToken, Task> change, string permission, CancellationToken token)
     {
-        writes.Actor(manage: true);
+        await writes.ActorAsync(permission, token, manage: true);
         var store = await ActiveStore.GetIdAsync(context, token);
         await using var tx = await context.BeginTransactionAsync(token);
         await locks.LockStoreAsync(store, token);

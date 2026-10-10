@@ -165,7 +165,8 @@ public sealed class DebtService(IAgriSageDbContext db, IRowLockService locks, ID
 
     public async Task<DebtEntryResponse> ActionAsync(Guid id, string action, string reason, decimal? amount, DateOnly? dueDate, CancellationToken token)
     {
-        var actor = access.Actor(manage: action is "ADJUST" or "CANCEL");
+        var actor = action is "ADJUST" or "CANCEL"
+            ? await access.ActorAsync("DEBT." + action, token, manage: true) : access.Actor();
         return await ActionCoreAsync(id, action, reason, amount, dueDate, actor, token);
     }
 
@@ -199,7 +200,7 @@ public sealed class DebtService(IAgriSageDbContext db, IRowLockService locks, ID
 
     public async Task<DebtEntryResponse> ManualAsync(Guid farmerId, ManualDebtEntryRequest request, CancellationToken token)
     {
-        var actor = access.Actor(manage: true);
+        var actor = await access.ActorAsync("DEBT.MANUAL", token, manage: true);
         if (string.IsNullOrWhiteSpace(request.Reason)) throw new BusinessRuleException("Manual debt requires a reason.");
         var store = await ActiveStore.GetIdAsync(db, token);
         await using var tx = await db.BeginTransactionAsync(token);

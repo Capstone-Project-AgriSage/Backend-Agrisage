@@ -16,6 +16,7 @@ internal sealed class RoleConfiguration : EntityConfiguration<Role>
         builder.Property(role => role.Name).HasMaxLength(100);
         builder.Property(role => role.Description).HasMaxLength(500);
         builder.Property(role => role.IsActive).HasDbDefault(true);
+        builder.Property(role => role.Version).HasDbDefault(0L);
 
         // UNIQUE(code) for active records.
         builder.HasIndex(role => role.Code).IsUnique().HasFilter("deleted_at IS NULL");

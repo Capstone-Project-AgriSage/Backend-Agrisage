@@ -6696,3 +6696,43 @@ audit): ExecuteDelete / ExecuteDeleteAsync are forbidden for business
 tables; ExecuteUpdate / ExecuteUpdateAsync are forbidden for normal
 business mutations unless explicitly reviewed.
 ```
+
+# XXXVI. DYNAMIC PERMISSIONS (2026-10-09, user-requested extension)
+
+The previous 71-table model gains three tables (74 total). Primary role codes remain unchanged. `roles` and
+`store_members` gain `version bigint NOT NULL DEFAULT 0`, optimistic concurrency per §35.15; permission changes
+explicitly mark the parent modified so child-only writes increment its version.
+
+## 36.1 `permissions`
+
+`id uuid PK DEFAULT gen_random_uuid()`, `code varchar(120) NOT NULL UNIQUE`, `module varchar(50) NOT NULL`,
+`name varchar(150) NOT NULL`, `is_delegable boolean NOT NULL`, `is_active boolean NOT NULL DEFAULT true`.
+Reviewed, immutable machine-code catalog, seeded with deterministic ids. No soft deletion or client-created codes;
+retirement uses is_active. Code syntax: `MODULE.OPERATION` (UPPER_SNAKE). Index `(module, is_active)`.
+
+## 36.2 `role_permissions`
+
+`id uuid PK DEFAULT gen_random_uuid()`, `role_id uuid NOT NULL FK roles.id RESTRICT`,
+`permission_id uuid NOT NULL FK permissions.id RESTRICT`, `is_granted boolean NOT NULL`,
+`created_at timestamptz NOT NULL`, `updated_at timestamptz NOT NULL`.
+UNIQUE `(role_id, permission_id)`; permission_id lookup index. Revoke by is_granted=false, retain the row. Parent
+role version covers concurrent edits. Seed initial grants only for absent pairs; seeding never overwrites configuration.
+
+## 36.3 `store_member_permissions`
+
+`id uuid PK DEFAULT gen_random_uuid()`, `store_member_id uuid NOT NULL FK store_members.id RESTRICT`,
+`permission_id uuid NOT NULL FK permissions.id RESTRICT`, `is_granted boolean NOT NULL`,
+`created_at timestamptz NOT NULL`, `updated_at timestamptz NOT NULL`.
+UNIQUE `(store_member_id, permission_id)`; permission_id lookup index. An explicit override wins over the role
+default (absence inherits). Store identity is derived from store_member_id, never a duplicated/client-supplied store_id.
+No hard deletes; changing an override preserves the row and audits the change. Parent member version covers edits.
+
+## 36.4 Authority and transaction safety
+
+Admin role retains all active catalog permissions; cannot be edited through permission APIs. Only Admin edits role
+defaults within the role's reviewed catalog ceiling. Owner manages active Sales Staff in its active store, never
+self/other roles. Member grants/denies are limited to delegable codes the actor currently holds. Effective Sale
+permissions are capped by current Owner-role defaults. Each permission configuration transaction acquires the same
+PostgreSQL transaction advisory lock before re-checking authority, then writes permissions + parent version + audit
+with one SaveChanges/commit. An old role/member version fails with 409. Authorization reads current rows on each
+request; permissions are not cached in JWT. Existing store/ownership/financial invariants remain mandatory.

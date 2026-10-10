@@ -182,6 +182,8 @@ public class StaffHttpTests : IClassFixture<StaffHttpTests.StaffApiFactory>
             builder.UseSetting("Jwt:SigningKey", "integration-test-signing-key-not-a-secret-000000");
             builder.ConfigureServices(services =>
             {
+                services.RemoveAll<AgriSage.Application.Features.Permissions.IPermissionEvaluator>();
+                services.AddScoped<AgriSage.Application.Features.Permissions.IPermissionEvaluator, BaselinePermissions>();
                 services.RemoveAll<IUserAccessValidator>();
                 services.AddSingleton<IUserAccessValidator>(Accounts);
             });

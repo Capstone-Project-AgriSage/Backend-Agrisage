@@ -4,6 +4,9 @@ Version 2.0 — 2026-10-03. Replaces the three module contracts (`API_CONTRACT_S
 `API_CONTRACT_CUSTOMERS_CREDIT.md`, `API_CONTRACT_PAYMENTS_INVENTORY_RETURNS.md`). Work is now split by
 **flow**: each person owns one end-to-end business flow that can be demonstrated on its own.
 
+Dynamic permission enforcement and configuration follow [DYNAMIC_PERMISSIONS.md](DYNAMIC_PERMISSIONS.md)
+(user-requested extension, 2026-10-09, superseding the previous deferral).
+
 Auth/session security, in-app notifications, background operations and audit history are specified in
 [AUTH_NOTIFICATIONS_OPERATIONS.md](AUTH_NOTIFICATIONS_OPERATIONS.md) (user-requested extension, 2026-10-07).
 

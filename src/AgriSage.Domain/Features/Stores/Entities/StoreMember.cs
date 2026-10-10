@@ -7,7 +7,7 @@ namespace AgriSage.Domain.Features.Stores.Entities;
 
 // Staff membership (Store Owner / Sales Staff / Delivery Staff). UNIQUE(store_id, user_id):
 // a returning member reuses this record via Activate().
-public sealed class StoreMember : SoftDeletableEntity
+public sealed class StoreMember : SoftDeletableEntity, IHasConcurrencyVersion
 {
     private StoreMember()
     {
@@ -38,6 +38,8 @@ public sealed class StoreMember : SoftDeletableEntity
 
     // AI Human Review permission; which roles may hold it is checked by Application.
     public bool CanReviewAi { get; private set; }
+    public long Version { get; private set; }
+    public void MarkPermissionsChanged() => Version++;
 
     public void UpdateEmployment(string? employeeCode, DateOnly? joinedAt)
     {

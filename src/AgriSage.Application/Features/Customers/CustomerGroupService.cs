@@ -41,7 +41,7 @@ public sealed class CustomerGroupService(IAgriSageDbContext context, IDateTimePr
 
     public async Task<CustomerGroupResponse> CreateAsync(CustomerGroupRequest request, CancellationToken token)
     {
-        writes.Actor(manage: true);
+        await writes.ActorAsync("CUSTOMER_GROUPS.CREATE", token, manage: true);
         var store = await ActiveStore.GetIdAsync(context, token);
         await using var transaction = await context.BeginTransactionAsync(token);
         await locks.LockStoreAsync(store, token);
@@ -61,7 +61,7 @@ public sealed class CustomerGroupService(IAgriSageDbContext context, IDateTimePr
         {
             g.Update(request.Name.Trim(), Texts.Clean(request.Description), request.Priority);
             return Task.CompletedTask;
-        }, "CUSTOMER_GROUP_UPDATED", token);
+        }, "CUSTOMER_GROUP_UPDATED", "CUSTOMER_GROUPS.UPDATE", token);
 
     public Task<CustomerGroupResponse> SetActiveAsync(Guid id, bool active, CancellationToken token) =>
         MutateAsync(id, async (g, ct) =>
@@ -71,11 +71,11 @@ public sealed class CustomerGroupService(IAgriSageDbContext context, IDateTimePr
             if (await context.CustomerGroupAssignments.AnyAsync(a => a.CustomerGroupId == id && a.EffectiveTo == null, ct))
                 throw new BusinessRuleException("Move the group's current customers before deactivating it.");
             g.Deactivate();
-        }, "CUSTOMER_GROUP_STATUS_CHANGED", token);
+        }, "CUSTOMER_GROUP_STATUS_CHANGED", active ? "CUSTOMER_GROUPS.ACTIVATE" : "CUSTOMER_GROUPS.DEACTIVATE", token);
 
     public async Task<CustomerGroupResponse> SetDefaultAsync(Guid id, CancellationToken token)
     {
-        writes.Actor(manage: true);
+        await writes.ActorAsync("CUSTOMER_GROUPS.SET_DEFAULT", token, manage: true);
         var store = await ActiveStore.GetIdAsync(context, token);
         await using var transaction = await context.BeginTransactionAsync(token);
         await locks.LockStoreAsync(store, token);
@@ -100,7 +100,7 @@ public sealed class CustomerGroupService(IAgriSageDbContext context, IDateTimePr
 
     public async Task DeleteAsync(Guid id, CancellationToken token)
     {
-        writes.Actor(manage: true);
+        await writes.ActorAsync("CUSTOMER_GROUPS.DELETE", token, manage: true);
         var store = await ActiveStore.GetIdAsync(context, token);
         await using var transaction = await context.BeginTransactionAsync(token);
         await locks.LockStoreAsync(store, token);
@@ -124,7 +124,7 @@ public sealed class CustomerGroupService(IAgriSageDbContext context, IDateTimePr
         {
             if (request.CreditTierId is { } tier) await writes.RequireTierAsync(tier, g.StoreId, ct);
             g.SetDefaultCreditTier(request.CreditTierId);
-        }, "CUSTOMER_GROUP_CREDIT_TIER_CHANGED", token);
+        }, "CUSTOMER_GROUP_CREDIT_TIER_CHANGED", "CUSTOMER_GROUPS.UPDATE", token);
 
     public Task<CustomerGroupResponse> SetPriceListAsync(Guid id, GroupPriceListRequest request, CancellationToken token) =>
         MutateAsync(id, async (g, ct) =>
@@ -139,8 +139,8 @@ public sealed class CustomerGroupService(IAgriSageDbContext context, IDateTimePr
             if (current != null && current.EffectiveFrom >= from)
                 throw new BusinessRuleException("A price-list link must start after the current link.");
             current?.End(from);
-            context.CustomerGroupPriceLists.Add(new CustomerGroupPriceList(id, list.Id, from, writes.Actor(manage: true)));
-        }, "CUSTOMER_GROUP_PRICE_LIST_CHANGED", token);
+            context.CustomerGroupPriceLists.Add(new CustomerGroupPriceList(id, list.Id, from, writes.Actor()));
+        }, "CUSTOMER_GROUP_PRICE_LIST_CHANGED", "CUSTOMER_GROUPS.UPDATE", token);
 
     public async Task<IReadOnlyList<GroupPriceListResponse>> PriceListsAsync(Guid id, CancellationToken token)
     {
@@ -153,9 +153,9 @@ public sealed class CustomerGroupService(IAgriSageDbContext context, IDateTimePr
     }
 
     private async Task<CustomerGroupResponse> MutateAsync(Guid id, Func<CustomerGroup, CancellationToken, Task> change,
-        string action, CancellationToken token)
+        string action, string permission, CancellationToken token)
     {
-        writes.Actor(manage: true);
+        await writes.ActorAsync(permission, token, manage: true);
         var store = await ActiveStore.GetIdAsync(context, token);
         await using var transaction = await context.BeginTransactionAsync(token);
         await locks.LockStoreAsync(store, token);

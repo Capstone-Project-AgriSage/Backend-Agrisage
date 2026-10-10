@@ -15,6 +15,7 @@ internal sealed class StoreMemberConfiguration : EntityConfiguration<StoreMember
         builder.Property(member => member.EmployeeCode).HasMaxLength(50);
         builder.Property(member => member.Status).HasMaxLength(20);
         builder.Property(member => member.CanReviewAi).HasDbDefault(false);
+        builder.Property(member => member.Version).HasDbDefault(0L);
 
         builder.HasReference<StoreMember, Store>(member => member.StoreId);
         builder.HasOne(member => member.User).WithMany().HasForeignKey(member => member.UserId);

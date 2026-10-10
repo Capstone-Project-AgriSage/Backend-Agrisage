@@ -4,7 +4,7 @@ using AgriSage.Domain.Features.Identity.Enums;
 namespace AgriSage.Domain.Features.Identity.Entities;
 
 // Primary role of a User (one per User). AI review is a StoreMember permission, not a role.
-public sealed class Role : SoftDeletableEntity
+public sealed class Role : SoftDeletableEntity, IHasConcurrencyVersion
 {
     private Role()
     {
@@ -25,6 +25,8 @@ public sealed class Role : SoftDeletableEntity
     public string? Description { get; private set; }
 
     public bool IsActive { get; private set; }
+    public long Version { get; private set; }
+    public void MarkPermissionsChanged() => Version++;
 
     public void Update(string name, string? description)
     {

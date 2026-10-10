@@ -35,6 +35,7 @@ public sealed class DatabaseSeeder(AgriSageDbContext context, IOptions<SeedStore
         try
         {
             var roles = await RoleSeeder.StageAsync(context, cancellationToken);
+            await PermissionSeeder.StageAsync(context, cancellationToken);
             var units = await UnitSeeder.StageAsync(context, cancellationToken);
             var diseases = await DiseaseSeeder.StageAsync(context, cancellationToken);
             var stores = await StoreSeeder.StageAsync(context, storeOptions.Value, cancellationToken);

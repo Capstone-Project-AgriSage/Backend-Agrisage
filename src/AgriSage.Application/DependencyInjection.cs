@@ -33,6 +33,9 @@ public static class DependencyInjection
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly);
+        services.AddScoped<AgriSage.Application.Features.Permissions.PermissionEvaluator>();
+        services.AddScoped<AgriSage.Application.Features.Permissions.IPermissionEvaluator>(sp => sp.GetRequiredService<AgriSage.Application.Features.Permissions.PermissionEvaluator>());
+        services.AddScoped<AgriSage.Application.Features.Permissions.IPermissionConfigurationService, AgriSage.Application.Features.Permissions.PermissionConfigurationService>();
 
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<AuthSessionService>();

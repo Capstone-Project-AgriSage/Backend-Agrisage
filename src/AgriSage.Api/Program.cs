@@ -22,10 +22,15 @@ var simulatedPayments = AgriSage.Infrastructure.Payments.PayOsMode.IsSimulated(b
 AgriSage.Infrastructure.Payments.PayOsMode.EnsureAllowed(simulatedPayments, builder.Environment.IsDevelopment());
 builder.Services.AddInfrastructure(builder.Configuration);
 
-builder.Services.AddControllers(options => options.Filters.Add<ValidationFilter>());
+builder.Services.AddControllers(options =>
+{
+    options.Filters.Add<AgriSage.Api.Authorization.PermissionFilter>();
+    options.Filters.Add<ValidationFilter>();
+});
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddApiAuthentication();
 builder.Services.AddAuthorization();
+builder.Services.AddScoped<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, AgriSage.Api.Authorization.DelegatedPermissionHandler>();
 builder.Services.AddApiRateLimiting();
 builder.Services.AddApiCors(builder.Configuration);
 builder.Services.AddApiSwagger();
