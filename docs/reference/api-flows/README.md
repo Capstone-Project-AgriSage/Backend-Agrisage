@@ -13,6 +13,9 @@ Auth/session security, in-app notifications, background operations and audit his
 Revenue and additional operational reporting APIs are specified in [REPORTS.md](REPORTS.md)
 (user-requested extension, 2026-10-09; revenue first).
 
+AI rice-leaf diagnosis (AI Service call, policy, Human Review, recommendations; Farmer and reviewer APIs) is
+specified in [AI_DIAGNOSIS.md](AI_DIAGNOSIS.md) (user-requested extension, 2026-10-10).
+
 | Flow | File | Owner | Demo in one sentence |
 |---|---|---|---|
 | L1 | [FLOW_1_COUNTER_SALE.md](FLOW_1_COUNTER_SALE.md) | Lead | A customer at the counter gets a price, pays cash, the order is confirmed with FEFO lots and handed over |
