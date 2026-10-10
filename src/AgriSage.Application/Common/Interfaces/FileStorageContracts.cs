@@ -4,7 +4,10 @@ namespace AgriSage.Application.Common.Interfaces;
 public enum StorageArea
 {
     ProductImages,
-    DeliveryProofs
+    DeliveryProofs,
+
+    // Private bucket: photos a Farmer sends for AI diagnosis. Read only through IPrivateFileStore (signed URLs).
+    DiagnosisImages
 }
 
 public sealed record FileUploadRequest(

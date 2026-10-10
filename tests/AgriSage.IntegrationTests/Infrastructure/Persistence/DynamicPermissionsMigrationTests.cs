@@ -14,11 +14,13 @@ public sealed class DynamicPermissionsMigrationTests
         Assert.Equal(new[] { "roles.version", "store_members.version" }, ops.OfType<AddColumnOperation>().Select(c => $"{c.Table}.{c.Name}").Order());
         Assert.DoesNotContain(ops, o => o is DropTableOperation or DropColumnOperation or AlterColumnOperation or DeleteDataOperation or UpdateDataOperation);
         Assert.All(ops.OfType<CreateTableOperation>().SelectMany(t => t.ForeignKeys), fk => Assert.Equal(ReferentialAction.Restrict, fk.OnDelete));
+        // The catalog as this migration shipped it: permissions added by later migrations are not part of it.
+        var shipped = PermissionCatalog.Entries.Where(p => !AiDiagnosisPermissionsMigrationTests.NewCodes.Contains(p.Code)).ToList();
         var seed = Assert.Single(ops.OfType<InsertDataOperation>());
-        Assert.Equal(PermissionCatalog.Entries.Count, seed.Values.GetLength(0));
+        Assert.Equal(shipped.Count, seed.Values.GetLength(0));
         var sql = Assert.Single(ops.OfType<SqlOperation>()).Sql;
         Assert.Contains("ON CONFLICT (role_id, permission_id) DO NOTHING", sql);
-        Assert.All(PermissionCatalog.Entries, p => Assert.Contains(p.Id.ToString(), sql));
+        Assert.All(shipped, p => Assert.Contains(p.Id.ToString(), sql));
         var indexes = ops.OfType<CreateIndexOperation>().ToList();
         Assert.Contains(indexes, i => i.IsUnique && i.Table == "permissions" && i.Columns.SequenceEqual(["code"]));
         Assert.Contains(indexes, i => i.IsUnique && i.Table == "role_permissions" && i.Columns.SequenceEqual(["role_id", "permission_id"]));

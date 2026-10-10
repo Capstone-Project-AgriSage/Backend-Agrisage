@@ -29,7 +29,8 @@ public class InitialCreateMigrationTests
                 "20261003085951_CustomerGroupDefaultCreditTier",
                 "20261004055235_CreditDebtPostingSafety",
                 "20261007062351_AuthSessionsNotificationsOperations",
-                "20261009151702_DynamicPermissions"
+                "20261009151702_DynamicPermissions",
+                "20261010064131_AiDiagnosisPermissions"
             ],
             context.Database.GetMigrations());
     }

@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text.Json;
 using AgriSage.Application.Common.Exceptions;
 using AgriSage.Application.Common.Interfaces;
 using Microsoft.Extensions.Logging;
@@ -13,7 +15,7 @@ namespace AgriSage.Infrastructure.Storage;
 public sealed class SupabaseFileStorageService(
     HttpClient httpClient,
     IOptions<StorageOptions> options,
-    ILogger<SupabaseFileStorageService> logger) : IFileStorageService
+    ILogger<SupabaseFileStorageService> logger) : IFileStorageService, IPrivateFileStore
 {
     public async Task<StoredFileResult> UploadAsync(FileUploadRequest request, CancellationToken cancellationToken)
     {
@@ -36,7 +38,81 @@ public sealed class SupabaseFileStorageService(
 
         var size = request.Content.CanSeek ? request.Content.Length : 0;
 
-        return new StoredFileResult(key, PublicUrl(settings, bucket, key), size);
+        // A private bucket has no public URL: the returned address is the authenticated object path, which only
+        // identifies the object. Readers go through IPrivateFileStore (signed URL or bytes).
+        var url = request.Area == StorageArea.DiagnosisImages
+            ? ObjectUri(settings, bucket, key).ToString()
+            : PublicUrl(settings, bucket, key);
+
+        return new StoredFileResult(key, url, size);
+    }
+
+    public async Task<string> CreateSignedUrlAsync(
+        string storageKey, StorageArea area, TimeSpan lifetime, CancellationToken cancellationToken)
+    {
+        var settings = RequireConfigured(area);
+        var bucket = settings.BucketFor(area);
+        var seconds = (int)Math.Clamp(lifetime.TotalSeconds, 1, 7 * 24 * 3600);
+
+        using var message = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"{settings.Url!.TrimEnd('/')}/storage/v1/object/sign/{Uri.EscapeDataString(bucket)}/{EscapeKey(storageKey)}")
+        {
+            Content = JsonContent.Create(new { expiresIn = seconds })
+        };
+        Authorize(message, settings);
+
+        using var response = await SendAsync(message, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            logger.LogWarning("Storage signing was rejected with status {StatusCode}.", (int)response.StatusCode);
+            throw new StorageUnavailableException();
+        }
+
+        string? signed;
+        try
+        {
+            using var body = await JsonDocument.ParseAsync(
+                await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
+            signed = body.RootElement.TryGetProperty("signedURL", out var upper) ? upper.GetString()
+                : body.RootElement.TryGetProperty("signedUrl", out var lower) ? lower.GetString()
+                : null;
+        }
+        catch (JsonException)
+        {
+            signed = null;
+        }
+
+        if (string.IsNullOrWhiteSpace(signed))
+        {
+            logger.LogWarning("Storage signing answered without a URL.");
+            throw new StorageUnavailableException();
+        }
+
+        // The answer is a path relative to the storage API (with or without the /storage/v1 prefix).
+        var baseUrl = settings.Url!.TrimEnd('/');
+
+        return signed.StartsWith("http", StringComparison.OrdinalIgnoreCase) ? signed
+            : signed.StartsWith("/storage/v1", StringComparison.Ordinal) ? baseUrl + signed
+            : $"{baseUrl}/storage/v1{(signed.StartsWith('/') ? signed : "/" + signed)}";
+    }
+
+    public async Task<byte[]> ReadAsync(string storageKey, StorageArea area, CancellationToken cancellationToken)
+    {
+        var settings = RequireConfigured(area);
+        var bucket = settings.BucketFor(area);
+
+        using var message = new HttpRequestMessage(HttpMethod.Get, ObjectUri(settings, bucket, storageKey));
+        Authorize(message, settings);
+
+        using var response = await SendAsync(message, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            logger.LogWarning("Storage read was rejected with status {StatusCode}.", (int)response.StatusCode);
+            throw new StorageUnavailableException();
+        }
+
+        return await response.Content.ReadAsByteArrayAsync(cancellationToken);
     }
 
     public async Task DeleteAsync(string storageKey, StorageArea area, CancellationToken cancellationToken)

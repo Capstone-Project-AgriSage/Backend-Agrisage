@@ -17,6 +17,7 @@ public static class DocumentNumbers
     public const string SalesReturn = "RT";
     public const string Refund = "RF";
     public const string DebtEntry = "DE";
+    public const string DiagnosisCase = "DG";
 
     public static string Format(string prefix, DateOnly day, int sequence) => $"{prefix}-{day:yyyyMMdd}-{sequence:D4}";
 

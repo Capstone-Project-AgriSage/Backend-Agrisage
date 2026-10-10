@@ -16,6 +16,9 @@ public sealed class StorageOptions
     // Public bucket for delivery proof and incident photos (kept apart from catalog images).
     public string DeliveryProofBucket { get; init; } = "delivery-proofs";
 
+    // PRIVATE bucket for the photos Farmers send for AI diagnosis. Objects are only reachable through signed URLs.
+    public string DiagnosisImageBucket { get; init; } = "diagnosis-images";
+
     // Supabase secret key (sb_secret_...) or legacy service_role key. Server side only; never sent to clients.
     public string? SecretKey { get; init; }
 
@@ -23,5 +26,10 @@ public sealed class StorageOptions
         Uri.TryCreate(Url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps
         && !string.IsNullOrWhiteSpace(Bucket) && !string.IsNullOrWhiteSpace(SecretKey);
 
-    public string BucketFor(StorageArea area) => area == StorageArea.DeliveryProofs ? DeliveryProofBucket : Bucket;
+    public string BucketFor(StorageArea area) => area switch
+    {
+        StorageArea.DeliveryProofs => DeliveryProofBucket,
+        StorageArea.DiagnosisImages => DiagnosisImageBucket,
+        _ => Bucket
+    };
 }

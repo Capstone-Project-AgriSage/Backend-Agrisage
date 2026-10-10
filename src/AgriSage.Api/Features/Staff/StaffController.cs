@@ -79,6 +79,15 @@ public sealed class StaffController(IStaffService staffService) : ControllerBase
         return NoContent();
     }
 
+    // Review right for AI diagnoses (store_members.can_review_ai). Not a role: see AI_DIAGNOSIS.md section 9.
+    [Authorize(Roles = ApiRoles.Manage)]
+    [HttpPut("{id:guid}/ai-review")]
+    public async Task<ActionResult<StaffResponse>> SetAiReview(
+        Guid id,
+        AgriSage.Application.Features.Diagnosis.SetAiReviewRequest request,
+        CancellationToken cancellationToken) =>
+        await staffService.SetAiReviewAsync(id, request, cancellationToken);
+
     // Semantic delete: the member leaves the store and the account is locked; the user row is kept.
     [Authorize(Roles = ApiRoles.Manage)]
     [HttpDelete("{id:guid}")]
