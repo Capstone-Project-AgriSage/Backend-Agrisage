@@ -416,6 +416,12 @@ public sealed class DiagnosisDatabaseTests
         Assert.Equal("AI_SERVICE_UNAVAILABLE", inference.Error);
         Assert.False(inference.PassedPolicy);
 
+        // Still down: the re-run reports it (503) and records nothing, so the failed attempts do not pile up.
+        await Assert.ThrowsAsync<AiServiceUnavailableException>(() => env.Reviewer(s => s.RerunAiAsync(created.Id, Token)));
+        var unchanged = await env.Reviewer(s => s.GetAsync(created.Id, Token));
+        Assert.Equal("FAILED", unchanged.Status);
+        Assert.Single(unchanged.Inferences);
+
         // The service is back: run again; the failed attempt stays as history, the case continues.
         env.Ai.Answer = _ => Answer("SHEATH_BLIGHT", 0.9m, others: [("HEALTHY", 0.05m)]);
         var again = await env.Reviewer(s => s.RerunAiAsync(created.Id, Token));

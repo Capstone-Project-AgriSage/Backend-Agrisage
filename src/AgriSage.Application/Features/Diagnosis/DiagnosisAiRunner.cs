@@ -14,7 +14,9 @@ namespace AgriSage.Application.Features.Diagnosis;
 // The caller has already committed the case (SUBMITTED or FAILED) with its photo. This step reads, calls the AI service
 // with NO transaction and no tracked entity open, then re-reads the case and records the result in one save:
 // StartProcessing -> RecordInference -> CompleteAi / FailAi. A crash in between leaves the case SUBMITTED, which a
-// reviewer can run again. An AI failure never throws: it is stored as a FAILED inference (or none, without a model).
+// reviewer can run again. When the case is first created an AI failure never throws: it is stored as a FAILED inference
+// (or none, without a model). A reviewer's re-run passes failWhenUnavailable: an unreachable service is then reported
+// (503) and nothing is recorded, so pressing the button while the service is down does not pile up FAILED rows.
 public sealed class DiagnosisAiRunner(
     IAgriSageDbContext context,
     IAiDiagnosisClient client,
@@ -29,7 +31,9 @@ public sealed class DiagnosisAiRunner(
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
-    public async Task RunAsync(Guid caseId, byte[] photo, string contentType, string fileName, CancellationToken cancellationToken)
+    public async Task RunAsync(
+        Guid caseId, byte[] photo, string contentType, string fileName, CancellationToken cancellationToken,
+        bool failWhenUnavailable = false)
     {
         var caseNumber = await context.DiagnosisCases.AsNoTracking()
             .Where(c => c.Id == caseId).Select(c => c.CaseNumber).FirstOrDefaultAsync(cancellationToken)
@@ -68,7 +72,7 @@ public sealed class DiagnosisAiRunner(
             result = await client.PredictAsync(
                 new AiPredictionRequest(stream, fileName, contentType, RequestedTopK, caseNumber), cancellationToken);
         }
-        catch (AiServiceUnavailableException)
+        catch (AiServiceUnavailableException) when (!failWhenUnavailable)
         {
             error = "AI_SERVICE_UNAVAILABLE";
         }

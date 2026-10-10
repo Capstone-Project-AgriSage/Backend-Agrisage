@@ -204,7 +204,7 @@ public sealed class DiagnosisCaseService(
         var bytes = await privateFiles.ReadAsync(photo.StorageKey, StorageArea.DiagnosisImages, cancellationToken);
         var contentType = photo.MimeType ?? ImageRulesContentType(photo.StorageKey);
 
-        await runner.RunAsync(id, bytes, contentType, "photo", cancellationToken);
+        await runner.RunAsync(id, bytes, contentType, "photo", cancellationToken, failWhenUnavailable: true);
 
         return await BuildAsync(id, cancellationToken);
     }
