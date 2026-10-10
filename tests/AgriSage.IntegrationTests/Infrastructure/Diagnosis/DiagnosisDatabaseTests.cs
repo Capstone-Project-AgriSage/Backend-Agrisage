@@ -136,7 +136,7 @@ public sealed class DiagnosisDatabaseTests
             var urls = new DiagnosisImageUrls(Files, clock, NullLogger<DiagnosisImageUrls>.Instance);
             var service = new DiagnosisCaseService(
                 db, Session.CurrentUser, clock, new AiReviewer(db, Session.CurrentUser), runner, urls, Files,
-                new NotificationWriter(db), new AuditTrail(db, Session.CurrentUser, clock));
+                new AuditTrail(db, Session.CurrentUser, clock));
 
             return await call(service);
         }
@@ -322,12 +322,21 @@ public sealed class DiagnosisDatabaseTests
                 created.Id, new RecommendationRequest("PRODUCT", StoreProductId: storeProduct.Id), Token)));
         }
 
-        // 5. The Farmer was notified once and now sees the verified result with the guidance.
+        // 5. The review writes no notification of its own; the committed-notification worker tells the Farmer once, and
+        //    running it again changes nothing. Then the Farmer sees the verified result with the guidance.
         await using (var db = session.NewContext())
         {
-            var notification = await db.Notifications.SingleAsync(
-                n => n.UserId == env.FarmerUserId && n.DeduplicationKey!.StartsWith("diagnosis:"), Token);
-            Assert.Equal("DIAGNOSIS_VERIFIED", notification.NotificationType);
+            Assert.False(await db.Notifications.AnyAsync(
+                n => n.UserId == env.FarmerUserId && n.DeduplicationKey!.StartsWith("diagnosis"), Token));
+
+            var collector = new CommittedNotificationService(db, new NotificationWriter(db));
+            await collector.DiagnosisAsync(100, Token);
+            await collector.DiagnosisAsync(100, Token);
+
+            var types = await db.Notifications
+                .Where(n => n.UserId == env.FarmerUserId && n.DeduplicationKey!.StartsWith("diagnosis"))
+                .Select(n => n.NotificationType).ToListAsync(Token);
+            Assert.Equal(["AI_DIAGNOSIS_COMPLETED", "DIAGNOSIS_RECOMMENDATIONS", "DIAGNOSIS_REVIEWED"], types.Order().ToArray());
         }
 
         var mine = await env.Farmer(s => s.GetAsync(created.Id, Token));

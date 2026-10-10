@@ -104,9 +104,9 @@ Metadata may include `orderId` for navigation; it is resolved on the server, nev
 The notification worker also reads committed posted stock movements and persisted diagnosis results
 in bounded batches. Stable per-record keys survive retries/archive/soft deletion and allow existing
 records without a notification to be delivered. It never posts stock, invokes AI or approves reviews.
-AI APIs/provider processing are not implemented yet; these alerts require real persisted results.
-The Farmer diagnosis-history page still uses demo data. Diagnosis alerts show their notification
-content without linking to that demo page until a real owned diagnosis read API/UI is implemented.
+These alerts require real persisted results. The diagnosis APIs exist (`AI_DIAGNOSIS.md`); an alert
+carries `entityType = DIAGNOSIS_CASE` and the case id so a client can open `GET /api/me/diagnosis-cases/{id}`.
+The diagnosis use cases do not write notifications themselves, only this worker does (one alert per decision).
 Recommendations require a current verified review by an active member with `can_review_ai`, and
 approval by an active authorized reviewer. Raw AI output never creates product recommendations.
 Debt reminders and inventory alerts must be enabled; they do not mutate inventory/debt ledgers.

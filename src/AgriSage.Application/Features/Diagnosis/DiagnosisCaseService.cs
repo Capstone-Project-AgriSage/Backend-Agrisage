@@ -3,7 +3,6 @@ using AgriSage.Application.Common;
 using AgriSage.Application.Common.Exceptions;
 using AgriSage.Application.Common.Interfaces;
 using AgriSage.Application.Common.Models;
-using AgriSage.Application.Features.Notifications;
 using AgriSage.Domain.Features.Diagnosis.Entities;
 using AgriSage.Domain.Features.Diagnosis.Enums;
 using AgriSage.Domain.Features.Products.Entities;
@@ -14,7 +13,9 @@ namespace AgriSage.Application.Features.Diagnosis;
 
 // Reviewer side of diagnosis (/api/diagnosis-cases; AI_DIAGNOSIS.md section 8). Listing and reading need only the
 // permission code of the route; every decision (start review, review, rerun, recommend) also needs the member's
-// can_review_ai flag (AiReviewer, D7). One save per use case; a notification and the audit row go with the change.
+// can_review_ai flag (AiReviewer, D7). One save per use case; the audit row goes with the change. The Farmer's alerts come
+// from the committed-notification worker (CommittedNotificationService.DiagnosisAsync), not from here: writing one too
+// would give the Farmer two for every decision.
 public sealed class DiagnosisCaseService(
     IAgriSageDbContext context,
     ICurrentUserService currentUser,
@@ -23,7 +24,6 @@ public sealed class DiagnosisCaseService(
     DiagnosisAiRunner runner,
     DiagnosisImageUrls imageUrls,
     IPrivateFileStore privateFiles,
-    NotificationWriter notifications,
     AuditTrail audit) : IDiagnosisCaseService
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -172,21 +172,6 @@ public sealed class DiagnosisCaseService(
             new { Status = before },
             new { Status = EnumText.Format(diagnosisCase.Status), Decision = EnumText.Format(decision), review.FinalDiseaseId },
             Texts.Clean(request.Comment));
-
-        var farmerUserId = await context.FarmerProfiles.AsNoTracking()
-            .Where(f => f.Id == diagnosisCase.FarmerProfileId).Select(f => f.UserId).FirstAsync(cancellationToken);
-        var verified = review.IsVerified;
-        await notifications.AddAsync(
-            [farmerUserId],
-            verified ? "DIAGNOSIS_VERIFIED" : "DIAGNOSIS_INCONCLUSIVE",
-            "Kết quả chẩn đoán",
-            verified
-                ? $"Ca chẩn đoán {diagnosisCase.CaseNumber} đã có kết quả."
-                : $"Ca chẩn đoán {diagnosisCase.CaseNumber} chưa thể kết luận, vui lòng chụp lại ảnh lá lúa.",
-            $"diagnosis:{diagnosisCase.Id:N}:{review.Id:N}",
-            "DIAGNOSIS_CASE",
-            diagnosisCase.Id,
-            cancellationToken);
 
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);

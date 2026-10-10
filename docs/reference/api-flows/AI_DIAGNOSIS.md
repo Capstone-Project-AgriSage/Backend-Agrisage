@@ -270,8 +270,12 @@ Listing and reading a case need only the permission code. Every route that decid
 - Audit actions: `DIAGNOSIS_CASE_CREATED`, `DIAGNOSIS_REVIEWED`, `DIAGNOSIS_RECOMMENDATION_ADDED`,
   `DIAGNOSIS_RECOMMENDATION_REMOVED`, `AI_MODEL_ACTIVATED`, `AI_MODEL_RETIRED`, `AI_POLICY_ACTIVATED`,
   `AI_POLICY_DEACTIVATED`, `STAFF_AI_REVIEW_CHANGED`.
-- Notification to the Farmer after `review` (written with `NotificationWriter.AddAsync`, same transaction, dedup key
-  `diagnosis:{caseId}:{reviewId}`, entity type `DIAGNOSIS_CASE`): `DIAGNOSIS_VERIFIED` or `DIAGNOSIS_INCONCLUSIVE`.
+- Notifications to the Farmer come from the existing committed-notification worker
+  (`CommittedNotificationService.DiagnosisAsync`, entity type `DIAGNOSIS_CASE`, keys `diagnosis-ai:`, `diagnosis-review:`,
+  `diagnosis-recommendations:`): `AI_DIAGNOSIS_COMPLETED`, `DIAGNOSIS_REVIEWED` (VERIFIED and INCONCLUSIVE alike) and
+  `DIAGNOSIS_RECOMMENDATIONS`. The use cases write none themselves: an in-transaction notification as well gave the
+  Farmer two alerts per decision (found in the first end-to-end run on 2026-10-10). The worker only reports a review
+  made by a member who still has `can_review_ai`.
 
 ---
 

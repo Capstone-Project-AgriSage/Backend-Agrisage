@@ -33,7 +33,7 @@ public sealed class AiDiagnosisPermissionsMigrationTests
         var insert = Assert.Single(ops.OfType<InsertDataOperation>());
         Assert.Equal("permissions", insert.Table);
         var codeColumn = Array.IndexOf(insert.Columns, "code");
-        var inserted = Enumerable.Range(0, insert.Values.GetLength(0)).Select(i => (string)insert.Values[i, codeColumn]).ToList();
+        var inserted = Enumerable.Range(0, insert.Values.GetLength(0)).Select(i => (string)insert.Values[i, codeColumn]!).ToList();
         Assert.Equal(NewCodes.Order(), inserted.Order());
 
         var sql = Assert.Single(ops.OfType<SqlOperation>()).Sql;
