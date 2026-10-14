@@ -18,7 +18,7 @@ Passwords, refresh tokens, verification tokens and OTPs never appear in audit/lo
 | GET | /api/auth/sessions | Authenticated; live own sessions only |
 | DELETE | /api/auth/sessions/{id} | Authenticated; revoke own session; 204, other's id = 404 |
 | POST | /api/auth/forgot-password | Anonymous; `{ identifier }`; uniform 202 |
-| POST | /api/auth/reset-password | Anonymous; `{ token, newPassword }`; single-use token; 204 |
+| POST | /api/auth/reset-password | Anonymous; `{ token, newPassword }` for the long token an email carries, or `{ identifier, code, newPassword }` (phone + the 6-digit code an SMS carries); exactly one proof, single use; 204 |
 | POST | /api/auth/email-verification/request | Authenticated; current email only; 202 |
 | POST | /api/auth/email-verification/confirm | Authenticated; `{ token }`; 204 |
 | POST | /api/auth/phone-verification/request | Authenticated; current phone only; 202 |
@@ -30,8 +30,8 @@ Password change/reset, staff password reset, account status/role/contact changes
 security version. A lock followed by unlock never revives old sessions. Contact changes clear the
 corresponding verified flag. Concurrent security mutations use row locks or optimistic concurrency.
 
-Email confirmation and password-reset tokens (including future SMS resets) include a challenge id
-and 256-bit secret. SMS phone verification uses
+Email confirmation and password-reset tokens include a challenge id
+and 256-bit secret. Everything delivered by SMS (phone verification and password reset) uses
 6-digit OTPs, keyed hashes, 5 attempts, a 10-minute lifetime and a 60-second resend cooldown. All
 challenge types are single-use, bound to purpose, destination and security version. Reset requests
 are generic for unknown/inactive accounts; delivered messages carry the actual token. Reissuing a
@@ -51,9 +51,16 @@ own SIM: `POST {SmsGatewayUrl}` (the app's `/message` address) with Basic auth (
 addresses (LAN, loopback), anything else needs HTTPS. SMS text is ASCII, no timestamp, so a 6-digit OTP fits one
 segment. Cost guards for real SMS: `SmsAllowedRecipients` (when not empty, any other number is refused without
 sending) and `SmsDailyLimit` (per Vietnam day, in memory per API process, 0 = unlimited); a refused or capped send is
-the same "delivery unavailable" outcome as a provider failure and is logged without the number or the code. Known
-limit: a password-reset token sent by SMS is the long challenge token (id + 256-bit secret), not a 6-digit code, so the
-farmer must paste it; a short code for SMS resets needs a contract change.
+the same "delivery unavailable" outcome as a provider failure and is logged without the number or the code.
+
+An SMS carries a 6-digit code for both phone verification and password reset (2026-10-14, lead decision); an email still
+carries the long token. For an SMS reset the code is only valid together with the phone number (`identifier`), is checked
+against that account's newest unused SMS reset challenge, and shares the challenge rules: single use, 10 minutes, 5
+failed attempts then the challenge is dead, 60-second resend cooldown. An unknown phone, no live challenge and a wrong
+code are the same 422. Residual risk: a 6-digit code is guessable in principle (5 guesses per challenge, a new
+challenge at most every 60 seconds, auth rate limit per IP), so an attacker who keeps requesting resets for one
+victim gets a small but non-zero chance over many hours; a per-account failed-attempt lockout would close it and is
+the deferred lockout item.
 
 ## In-app notifications
 

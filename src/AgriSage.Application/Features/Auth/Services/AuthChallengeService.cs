@@ -68,14 +68,16 @@ public sealed class AuthChallengeService(IAgriSageDbContext context, ISecretToke
 
             challenge = new AuthChallenge(userId, purpose, channel, destination, user.SecurityVersion,
                 now.AddMinutes(options.Value.ChallengeMinutes));
-            raw = purpose == AuthChallengePurpose.PhoneVerification ? secrets.GenerateOtp() : secrets.GenerateToken();
+            // An SMS carries a 6-digit code a person can type (5 attempts, short life, single use); an email carries the
+            // long token. The code is checked together with the phone number, never on its own.
+            raw = channel == AuthDeliveryChannel.Sms ? secrets.GenerateOtp() : secrets.GenerateToken();
             challenge.SetTokenHash(secrets.HashChallenge(challenge.Id, raw));
             context.AuthChallenges.Add(challenge);
             await context.SaveChangesAsync(token);
             await tx.CommitAsync(token);
         }
 
-        var deliveredToken = purpose == AuthChallengePurpose.PhoneVerification ? raw! : $"{challenge.Id:N}.{raw}";
+        var deliveredToken = channel == AuthDeliveryChannel.Sms ? raw! : $"{challenge.Id:N}.{raw}";
         try
         {
             await sender.SendAsync(new AuthMessage(channel, challenge.Destination, purpose, deliveredToken, challenge.ExpiresAt), token);
@@ -95,6 +97,21 @@ public sealed class AuthChallengeService(IAgriSageDbContext context, ISecretToke
 
     public Task ResetPasswordAsync(string tokenValue, string newPassword, CancellationToken token) =>
         ConfirmAsync(Parse(tokenValue).Id, Parse(tokenValue).Secret, AuthChallengePurpose.PasswordReset, newPassword, token);
+
+    public async Task ResetPasswordWithCodeAsync(string identifier, string code, string newPassword, CancellationToken token)
+    {
+        // An unknown phone, an account with no live SMS challenge and a wrong code all answer the same way.
+        if (!ContactNormalizer.TryNormalizePhone(identifier, out var phone)) throw InvalidChallenge();
+        var id = await (from c in context.AuthChallenges.AsNoTracking()
+                join u in context.Users.AsNoTracking() on c.UserId equals u.Id
+                where u.PhoneNumber == phone && u.Status == UserStatus.Active
+                    && c.Purpose == AuthChallengePurpose.PasswordReset && c.Channel == AuthDeliveryChannel.Sms
+                    && c.ConsumedAt == null
+                orderby c.CreatedAt descending, c.Id descending
+                select (Guid?)c.Id).FirstOrDefaultAsync(token);
+        if (id is null) throw InvalidChallenge();
+        await ConfirmAsync(id.Value, code, AuthChallengePurpose.PasswordReset, newPassword, token);
+    }
 
     public Task ConfirmEmailAsync(string tokenValue, CancellationToken token) =>
         ConfirmAsync(Parse(tokenValue).Id, Parse(tokenValue).Secret, AuthChallengePurpose.EmailVerification, null, token);

@@ -83,6 +83,36 @@ public class AuthValidatorTests
         Assert.False(_admin.Validate(new CreateAdminRequest("Administrator", "admin@example.com", "123", "password1")).IsValid);
     }
 
+    private static readonly string EmailToken = new string('a', 32) + "." + new string('B', 43);
+
+    [Fact]
+    public void Reset_password_accepts_the_email_token_or_a_phone_with_its_six_digit_code()
+    {
+        var reset = new ResetPasswordRequestValidator();
+        Assert.True(reset.Validate(new ResetPasswordRequest(EmailToken, "password1")).IsValid);
+        Assert.True(reset.Validate(new ResetPasswordRequest(null, "password1", "0912345678", "123456")).IsValid);
+    }
+
+    [Theory]
+    [InlineData(null, null, null)]
+    [InlineData(null, "0912345678", null)]
+    [InlineData(null, null, "123456")]
+    [InlineData(null, "0912345678", "12345")]
+    [InlineData(null, "0912345678", "1234567")]
+    [InlineData(null, "0912345678", "12345a")]
+    [InlineData("short-token", null, null)]
+    public void Reset_password_rejects_an_incomplete_or_malformed_proof(string? token, string? identifier, string? code) =>
+        Assert.False(new ResetPasswordRequestValidator()
+            .Validate(new ResetPasswordRequest(token, "password1", identifier, code)).IsValid);
+
+    [Fact]
+    public void Reset_password_rejects_both_proofs_at_once_and_a_weak_new_password()
+    {
+        var reset = new ResetPasswordRequestValidator();
+        Assert.False(reset.Validate(new ResetPasswordRequest(EmailToken, "password1", "0912345678", "123456")).IsValid);
+        Assert.False(reset.Validate(new ResetPasswordRequest(null, "short", "0912345678", "123456")).IsValid);
+    }
+
     [Theory]
     [InlineData(RoleCode.Farmer, "FARMER")]
     [InlineData(RoleCode.StoreOwner, "STORE_OWNER")]

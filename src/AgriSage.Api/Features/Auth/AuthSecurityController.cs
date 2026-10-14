@@ -35,7 +35,13 @@ public sealed class AuthSecurityController(IAuthSessionService sessions, IAuthCh
 
     [HttpPost("reset-password"), AllowAnonymous, EnableRateLimiting(RateLimitingExtensions.AuthPolicy)]
     public async Task<IActionResult> Reset(ResetPasswordRequest request, CancellationToken token)
-    { await challenges.ResetPasswordAsync(request.Token, request.NewPassword, token); return NoContent(); }
+    {
+        if (string.IsNullOrWhiteSpace(request.Token))
+            await challenges.ResetPasswordWithCodeAsync(request.Identifier!, request.Code!, request.NewPassword, token);
+        else
+            await challenges.ResetPasswordAsync(request.Token, request.NewPassword, token);
+        return NoContent();
+    }
 
     [HttpPost("email-verification/request"), EnableRateLimiting(RateLimitingExtensions.AuthPolicy)]
     public async Task<IActionResult> RequestEmail(CancellationToken token)

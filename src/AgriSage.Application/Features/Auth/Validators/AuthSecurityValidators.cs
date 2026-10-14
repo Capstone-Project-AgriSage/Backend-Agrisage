@@ -15,7 +15,19 @@ public sealed class ResetPasswordRequestValidator : AbstractValidator<ResetPassw
 {
     public ResetPasswordRequestValidator()
     {
-        RuleFor(r => r.Token).NotEmpty().Length(76).Matches("^[a-fA-F0-9]{32}\\.[A-Za-z0-9_-]{43}$");
+        // Email sends the long token; SMS sends a 6-digit code that is checked together with the phone number.
+        RuleFor(r => r)
+            .Must(r => !string.IsNullOrWhiteSpace(r.Token)
+                ^ (!string.IsNullOrWhiteSpace(r.Identifier) || !string.IsNullOrWhiteSpace(r.Code)))
+            .WithName("proof")
+            .WithMessage("Send either token, or identifier and code.");
+        When(r => !string.IsNullOrWhiteSpace(r.Token), () =>
+            RuleFor(r => r.Token!).Length(76).Matches("^[a-fA-F0-9]{32}\\.[A-Za-z0-9_-]{43}$"));
+        When(r => string.IsNullOrWhiteSpace(r.Token), () =>
+        {
+            RuleFor(r => r.Identifier).NotEmpty().MaximumLength(255);
+            RuleFor(r => r.Code).NotEmpty().Matches("^[0-9]{6}$");
+        });
         RuleFor(r => r.NewPassword).MustBeValidPassword();
     }
 }

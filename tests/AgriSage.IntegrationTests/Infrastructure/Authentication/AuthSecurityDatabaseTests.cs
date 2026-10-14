@@ -22,16 +22,53 @@ public sealed class AuthSecurityDatabaseTests
         Assert.True(e.User.PhoneVerified);
     }
     [RealDbFact]
-    public async Task Sms_password_reset_uses_a_purpose_bound_high_entropy_token()
+    public async Task Sms_password_reset_carries_a_six_digit_code_that_is_used_with_the_phone_number()
     {
         await using var e = await OperationsTestEnvironment.CreateAsync();
         e.User.UpdateContact(e.User.Email, "09" + Random.Shared.Next(10_000_000, 99_999_999));
         await e.Context.SaveChangesAsync(Token);
         await e.Challenges.RequestResetAsync(e.User.PhoneNumber!, Token);
         var message = Assert.Single(e.Messages.Sent);
-        Assert.Equal(76, message.Token.Length);
-        await e.Challenges.ResetPasswordAsync(message.Token, "sms-reset-password", Token);
+        Assert.Equal(AuthDeliveryChannel.Sms, message.Channel);
+        Assert.Matches("^[0-9]{6}$", message.Token);
+        await e.Challenges.ResetPasswordWithCodeAsync(e.User.PhoneNumber!, message.Token, "sms-reset-password", Token);
         Assert.Equal(AgriSage.Application.Common.Interfaces.PasswordVerification.Success, e.Passwords.Verify(e.User.PasswordHash, "sms-reset-password"));
+        // single use
+        await Assert.ThrowsAsync<BusinessRuleException>(
+            () => e.Challenges.ResetPasswordWithCodeAsync(e.User.PhoneNumber!, message.Token, "another-password", Token));
+    }
+    [RealDbFact]
+    public async Task Sms_password_reset_rejects_a_wrong_code_an_unknown_phone_and_stops_after_five_attempts()
+    {
+        await using var e = await OperationsTestEnvironment.CreateAsync();
+        e.User.UpdateContact(e.User.Email, "09" + Random.Shared.Next(10_000_000, 99_999_999));
+        await e.Context.SaveChangesAsync(Token);
+        await e.Challenges.RequestResetAsync(e.User.PhoneNumber!, Token);
+        var code = Assert.Single(e.Messages.Sent).Token;
+        var wrong = code == "000000" ? "000001" : "000000";
+
+        await Assert.ThrowsAsync<BusinessRuleException>(
+            () => e.Challenges.ResetPasswordWithCodeAsync("0399999999", code, "new-password-1", Token));
+        for (var i = 0; i < 5; i++)
+            await Assert.ThrowsAsync<BusinessRuleException>(
+                () => e.Challenges.ResetPasswordWithCodeAsync(e.User.PhoneNumber!, wrong, "new-password-1", Token));
+
+        // the budget is spent: even the right code no longer works, and the password is unchanged
+        await Assert.ThrowsAsync<BusinessRuleException>(
+            () => e.Challenges.ResetPasswordWithCodeAsync(e.User.PhoneNumber!, code, "new-password-1", Token));
+        Assert.Equal(AgriSage.Application.Common.Interfaces.PasswordVerification.Success, e.Passwords.Verify(e.User.PasswordHash, "initial-password"));
+    }
+    [RealDbFact]
+    public async Task An_email_reset_token_cannot_be_used_as_an_sms_code()
+    {
+        await using var e = await OperationsTestEnvironment.CreateAsync();
+        e.User.UpdateContact(e.User.Email, "09" + Random.Shared.Next(10_000_000, 99_999_999));
+        await e.Context.SaveChangesAsync(Token);
+        await e.Challenges.RequestResetAsync(e.User.Email!, Token);
+        var mail = Assert.Single(e.Messages.Sent);
+        Assert.Equal(76, mail.Token.Length);
+        await Assert.ThrowsAsync<BusinessRuleException>(
+            () => e.Challenges.ResetPasswordWithCodeAsync(e.User.PhoneNumber!, mail.Token[^6..], "new-password-1", Token));
     }
     [RealDbFact]
     public async Task Anonymous_reset_acknowledges_unknown_and_delivery_failure_without_revealing_existence()
