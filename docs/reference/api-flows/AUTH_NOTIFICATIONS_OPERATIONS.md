@@ -44,6 +44,17 @@ are audited, the unsent challenge is invalidated, and no account-existence signa
 All anonymous and challenge endpoints use the existing auth rate limiter. No account is forced to
 verify contact just to use existing workflows in this release.
 
+SMS providers (`MessageDelivery:SmsProvider`): `Generic` (default) posts `{to, message}` with a Bearer key to an
+HTTPS gateway. `AndroidGateway` uses the open-source "SMS Gateway for Android" app on a phone, which sends through its
+own SIM: `POST {SmsGatewayUrl}` (the app's `/message` address) with Basic auth (`SmsUsername` + `SmsApiKey`) and
+`{ "textMessage": { "text": … }, "phoneNumbers": ["+84…"] }`; plain HTTP is accepted only for private-network
+addresses (LAN, loopback), anything else needs HTTPS. SMS text is ASCII, no timestamp, so a 6-digit OTP fits one
+segment. Cost guards for real SMS: `SmsAllowedRecipients` (when not empty, any other number is refused without
+sending) and `SmsDailyLimit` (per Vietnam day, in memory per API process, 0 = unlimited); a refused or capped send is
+the same "delivery unavailable" outcome as a provider failure and is logged without the number or the code. Known
+limit: a password-reset token sent by SMS is the long challenge token (id + 256-bit secret), not a 6-digit code, so the
+farmer must paste it; a short code for SMS resets needs a contract change.
+
 ## In-app notifications
 
 All roles may access their own notifications; the user id comes from the current-user abstraction.

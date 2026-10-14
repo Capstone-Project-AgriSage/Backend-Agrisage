@@ -47,6 +47,7 @@ public static class DependencyInjection
             .ValidateDataAnnotations().ValidateOnStart();
         services.AddOptions<MessageDeliveryOptions>().Bind(configuration.GetSection("MessageDelivery"))
             .ValidateDataAnnotations().ValidateOnStart();
+        services.AddSingleton<SmsDailyBudget>();
         services.AddHttpClient<IAuthMessageSender, AuthMessageSender>(client => client.Timeout = TimeSpan.FromSeconds(30));
         services.AddOptions<BackgroundJobOptions>().Bind(configuration.GetSection("BackgroundJobs"))
             .ValidateDataAnnotations().ValidateOnStart();
