@@ -59,6 +59,51 @@ public sealed class AuthSecurityDatabaseTests
         Assert.Equal(AgriSage.Application.Common.Interfaces.PasswordVerification.Success, e.Passwords.Verify(e.User.PasswordHash, "initial-password"));
     }
     [RealDbFact]
+    public async Task Verifying_an_sms_code_leaves_it_usable_for_the_reset_that_follows()
+    {
+        await using var e = await OperationsTestEnvironment.CreateAsync();
+        e.User.UpdateContact(e.User.Email, "09" + Random.Shared.Next(10_000_000, 99_999_999));
+        await e.Context.SaveChangesAsync(Token);
+        await e.Challenges.RequestResetAsync(e.User.PhoneNumber!, Token);
+        var code = Assert.Single(e.Messages.Sent).Token;
+
+        // checking it, even more than once, changes neither the password nor the code
+        await e.Challenges.VerifyResetCodeAsync(e.User.PhoneNumber!, code, Token);
+        await e.Challenges.VerifyResetCodeAsync(e.User.PhoneNumber!, code, Token);
+        Assert.Equal(AgriSage.Application.Common.Interfaces.PasswordVerification.Success, e.Passwords.Verify(e.User.PasswordHash, "initial-password"));
+        var challenge = await e.Context.AuthChallenges.SingleAsync(c => c.UserId == e.User.Id, Token);
+        Assert.Null(challenge.ConsumedAt);
+        Assert.Equal(0, challenge.FailedAttempts);
+
+        await e.Challenges.ResetPasswordWithCodeAsync(e.User.PhoneNumber!, code, "verified-then-reset", Token);
+        Assert.Equal(AgriSage.Application.Common.Interfaces.PasswordVerification.Success, e.Passwords.Verify(e.User.PasswordHash, "verified-then-reset"));
+        // once the reset has used it, it no longer verifies
+        await Assert.ThrowsAsync<BusinessRuleException>(
+            () => e.Challenges.VerifyResetCodeAsync(e.User.PhoneNumber!, code, Token));
+    }
+    [RealDbFact]
+    public async Task Verifying_an_sms_code_rejects_a_wrong_code_and_shares_the_five_attempt_budget()
+    {
+        await using var e = await OperationsTestEnvironment.CreateAsync();
+        e.User.UpdateContact(e.User.Email, "09" + Random.Shared.Next(10_000_000, 99_999_999));
+        await e.Context.SaveChangesAsync(Token);
+        await e.Challenges.RequestResetAsync(e.User.PhoneNumber!, Token);
+        var code = Assert.Single(e.Messages.Sent).Token;
+        var wrong = code == "000000" ? "000001" : "000000";
+
+        await Assert.ThrowsAsync<BusinessRuleException>(
+            () => e.Challenges.VerifyResetCodeAsync("0399999999", code, Token));
+        // a wrong code in the check is not free: the same five attempts are shared with the reset
+        for (var i = 0; i < 5; i++)
+            await Assert.ThrowsAsync<BusinessRuleException>(
+                () => e.Challenges.VerifyResetCodeAsync(e.User.PhoneNumber!, wrong, Token));
+        await Assert.ThrowsAsync<BusinessRuleException>(
+            () => e.Challenges.VerifyResetCodeAsync(e.User.PhoneNumber!, code, Token));
+        await Assert.ThrowsAsync<BusinessRuleException>(
+            () => e.Challenges.ResetPasswordWithCodeAsync(e.User.PhoneNumber!, code, "new-password-1", Token));
+        Assert.Equal(AgriSage.Application.Common.Interfaces.PasswordVerification.Success, e.Passwords.Verify(e.User.PasswordHash, "initial-password"));
+    }
+    [RealDbFact]
     public async Task An_email_reset_token_cannot_be_used_as_an_sms_code()
     {
         await using var e = await OperationsTestEnvironment.CreateAsync();

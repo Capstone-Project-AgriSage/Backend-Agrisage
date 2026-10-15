@@ -31,6 +31,14 @@ public sealed class ResetPasswordRequestValidator : AbstractValidator<ResetPassw
         RuleFor(r => r.NewPassword).MustBeValidPassword();
     }
 }
+public sealed class VerifyResetCodeRequestValidator : AbstractValidator<VerifyResetCodeRequest>
+{
+    public VerifyResetCodeRequestValidator()
+    {
+        RuleFor(r => r.Identifier).NotEmpty().MaximumLength(255);
+        RuleFor(r => r.Code).NotEmpty().Matches("^[0-9]{6}$");
+    }
+}
 public sealed class ConfirmEmailRequestValidator : AbstractValidator<ConfirmEmailRequest>
 {
     public ConfirmEmailRequestValidator() => RuleFor(r => r.Token).NotEmpty().Length(76)

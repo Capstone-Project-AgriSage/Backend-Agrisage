@@ -30,6 +30,8 @@ public sealed class AuthOperationsHttpTests
     [InlineData("/api/auth/reset-password", "{\"token\":\"bad\",\"newPassword\":\"short\"}")]
     [InlineData("/api/auth/reset-password", "{\"identifier\":\"0912345678\",\"code\":\"12\",\"newPassword\":\"password1\"}")]
     [InlineData("/api/auth/reset-password", "{\"newPassword\":\"password1\"}")]
+    [InlineData("/api/auth/reset-password/verify-code", "{\"identifier\":\"0912345678\",\"code\":\"12\"}")]
+    [InlineData("/api/auth/reset-password/verify-code", "{\"code\":\"123456\"}")]
     public async Task Anonymous_requests_validate_before_any_database_query(string path, string json)
     {
         using var factory = new ApiStartupTests.DevelopmentApiFactory(); using var client = factory.CreateClient();

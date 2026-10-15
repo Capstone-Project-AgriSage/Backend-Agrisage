@@ -98,7 +98,15 @@ public sealed class AuthChallengeService(IAgriSageDbContext context, ISecretToke
     public Task ResetPasswordAsync(string tokenValue, string newPassword, CancellationToken token) =>
         ConfirmAsync(Parse(tokenValue).Id, Parse(tokenValue).Secret, AuthChallengePurpose.PasswordReset, newPassword, token);
 
-    public async Task ResetPasswordWithCodeAsync(string identifier, string code, string newPassword, CancellationToken token)
+    public async Task ResetPasswordWithCodeAsync(string identifier, string code, string newPassword, CancellationToken token) =>
+        await ConfirmAsync(await FindSmsResetChallengeAsync(identifier, token), code, AuthChallengePurpose.PasswordReset,
+            newPassword, token);
+
+    public async Task VerifyResetCodeAsync(string identifier, string code, CancellationToken token) =>
+        await ConfirmAsync(await FindSmsResetChallengeAsync(identifier, token), code, AuthChallengePurpose.PasswordReset,
+            null, token, verifyOnly: true);
+
+    private async Task<Guid> FindSmsResetChallengeAsync(string identifier, CancellationToken token)
     {
         // An unknown phone, an account with no live SMS challenge and a wrong code all answer the same way.
         if (!ContactNormalizer.TryNormalizePhone(identifier, out var phone)) throw InvalidChallenge();
@@ -109,8 +117,7 @@ public sealed class AuthChallengeService(IAgriSageDbContext context, ISecretToke
                     && c.ConsumedAt == null
                 orderby c.CreatedAt descending, c.Id descending
                 select (Guid?)c.Id).FirstOrDefaultAsync(token);
-        if (id is null) throw InvalidChallenge();
-        await ConfirmAsync(id.Value, code, AuthChallengePurpose.PasswordReset, newPassword, token);
+        return id ?? throw InvalidChallenge();
     }
 
     public Task ConfirmEmailAsync(string tokenValue, CancellationToken token) =>
@@ -126,7 +133,9 @@ public sealed class AuthChallengeService(IAgriSageDbContext context, ISecretToke
         await ConfirmAsync(id.Value, code, AuthChallengePurpose.PhoneVerification, null, token);
     }
 
-    private async Task ConfirmAsync(Guid id, string secret, AuthChallengePurpose purpose, string? password, CancellationToken token)
+    // verifyOnly checks the secret and spends a failed attempt on a wrong one, but leaves a right one unused.
+    private async Task ConfirmAsync(Guid id, string secret, AuthChallengePurpose purpose, string? password,
+        CancellationToken token, bool verifyOnly = false)
     {
         var targetUser = await context.AuthChallenges.AsNoTracking().Where(c => c.Id == id && c.Purpose == purpose)
             .Select(c => (Guid?)c.UserId).SingleOrDefaultAsync(token);
@@ -149,6 +158,7 @@ public sealed class AuthChallengeService(IAgriSageDbContext context, ISecretToke
             throw InvalidChallenge();
         }
 
+        if (verifyOnly) return; // nothing is written; the transaction is dropped
         challenge.Consume(clock.UtcNow);
         if (purpose == AuthChallengePurpose.PasswordReset)
         {

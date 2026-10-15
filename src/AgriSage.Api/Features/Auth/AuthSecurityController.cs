@@ -43,6 +43,10 @@ public sealed class AuthSecurityController(IAuthSessionService sessions, IAuthCh
         return NoContent();
     }
 
+    [HttpPost("reset-password/verify-code"), AllowAnonymous, EnableRateLimiting(RateLimitingExtensions.AuthPolicy)]
+    public async Task<IActionResult> VerifyResetCode(VerifyResetCodeRequest request, CancellationToken token)
+    { await challenges.VerifyResetCodeAsync(request.Identifier, request.Code, token); return NoContent(); }
+
     [HttpPost("email-verification/request"), EnableRateLimiting(RateLimitingExtensions.AuthPolicy)]
     public async Task<IActionResult> RequestEmail(CancellationToken token)
     { await challenges.RequestVerificationAsync(AuthDeliveryChannel.Email, token); return Accepted(); }

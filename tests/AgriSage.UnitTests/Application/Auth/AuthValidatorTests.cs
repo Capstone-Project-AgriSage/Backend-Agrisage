@@ -113,6 +113,19 @@ public class AuthValidatorTests
         Assert.False(reset.Validate(new ResetPasswordRequest(null, "short", "0912345678", "123456")).IsValid);
     }
 
+    [Fact]
+    public void Verify_reset_code_accepts_a_phone_with_its_six_digit_code() =>
+        Assert.True(new VerifyResetCodeRequestValidator().Validate(new VerifyResetCodeRequest("0912345678", "123456")).IsValid);
+
+    [Theory]
+    [InlineData("", "123456")]
+    [InlineData("0912345678", "")]
+    [InlineData("0912345678", "12345")]
+    [InlineData("0912345678", "1234567")]
+    [InlineData("0912345678", "12345a")]
+    public void Verify_reset_code_rejects_a_missing_phone_or_a_malformed_code(string identifier, string code) =>
+        Assert.False(new VerifyResetCodeRequestValidator().Validate(new VerifyResetCodeRequest(identifier, code)).IsValid);
+
     [Theory]
     [InlineData(RoleCode.Farmer, "FARMER")]
     [InlineData(RoleCode.StoreOwner, "STORE_OWNER")]

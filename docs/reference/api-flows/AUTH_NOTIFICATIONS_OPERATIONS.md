@@ -19,6 +19,7 @@ Passwords, refresh tokens, verification tokens and OTPs never appear in audit/lo
 | DELETE | /api/auth/sessions/{id} | Authenticated; revoke own session; 204, other's id = 404 |
 | POST | /api/auth/forgot-password | Anonymous; `{ identifier }`; uniform 202 |
 | POST | /api/auth/reset-password | Anonymous; `{ token, newPassword }` for the long token an email carries, or `{ identifier, code, newPassword }` (phone + the 6-digit code an SMS carries); exactly one proof, single use; 204 |
+| POST | /api/auth/reset-password/verify-code | Anonymous; `{ identifier, code }` (phone + the 6-digit code an SMS carries); checks the code **without using it**: 204 if right, 422 if wrong/expired/unknown phone. A wrong code spends one of the code's 5 attempts, shared with `reset-password`. Lets a client confirm the code before it asks for the new password; the client then sends the same `{ identifier, code, newPassword }` to `reset-password`, which checks again and is the call that decides. Not used for the email token |
 | POST | /api/auth/email-verification/request | Authenticated; current email only; 202 |
 | POST | /api/auth/email-verification/confirm | Authenticated; `{ token }`; 204 |
 | POST | /api/auth/phone-verification/request | Authenticated; current phone only; 202 |
