@@ -6,6 +6,7 @@ public sealed class MessageDeliveryOptions
 {
     public const string GenericSmsProvider = "Generic";
     public const string AndroidGatewayProvider = "AndroidGateway";
+    public const string SimulatedSmsProvider = "Simulated";
 
     public string? SmtpHost { get; init; }
     [Range(1, 65535)] public int SmtpPort { get; init; } = 587;
@@ -19,7 +20,10 @@ public sealed class MessageDeliveryOptions
     // its own SIM: POST {textMessage:{text}, phoneNumbers:["+84..."]} with Basic auth (SmsUsername + SmsApiKey as the
     // password). SmsGatewayUrl is then the app's /message address, e.g. http://192.168.1.20:8080/message (plain HTTP is
     // accepted only for private-network addresses) or the cloud server over HTTPS.
-    [RegularExpression("^(|Generic|AndroidGateway)$", ErrorMessage = "SmsProvider must be Generic or AndroidGateway.")]
+    // Simulated: no SMS is sent and nothing is charged; the message is kept in an in-memory outbox that a development-only
+    // page shows (GET /api/dev/sms-outbox/view). Development environment only; the API refuses to start otherwise.
+    [RegularExpression("^(|Generic|AndroidGateway|Simulated)$",
+        ErrorMessage = "SmsProvider must be Generic, AndroidGateway or Simulated.")]
     public string SmsProvider { get; init; } = GenericSmsProvider;
     public string? SmsGatewayUrl { get; init; }
     public string? SmsUsername { get; init; }
@@ -33,4 +37,7 @@ public sealed class MessageDeliveryOptions
 
     public bool UsesAndroidGateway =>
         string.Equals(SmsProvider, AndroidGatewayProvider, StringComparison.OrdinalIgnoreCase);
+
+    public bool UsesSimulatedSms =>
+        string.Equals(SmsProvider, SimulatedSmsProvider, StringComparison.OrdinalIgnoreCase);
 }

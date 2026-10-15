@@ -54,6 +54,13 @@ segment. Cost guards for real SMS: `SmsAllowedRecipients` (when not empty, any o
 sending) and `SmsDailyLimit` (per Vietnam day, in memory per API process, 0 = unlimited); a refused or capped send is
 the same "delivery unavailable" outcome as a provider failure and is logged without the number or the code.
 
+`Simulated` is for demos and tests that must not cost money: no SMS leaves the machine, the allow-list and the daily limit
+do not apply, and each message (destination, purpose, the 6-digit code, the text) goes to an in-memory outbox (the last 50,
+empty again when the API restarts) and to the log. It is allowed only in the Development environment; the API refuses to
+start with it anywhere else. Two anonymous routes exist only in this mode and answer 404 otherwise:
+`GET /api/dev/sms-outbox` (JSON, newest first) and `GET /api/dev/sms-outbox/view` (a self-refreshing page that looks like a
+phone's inbox, for a second screen). It replaces SMS only: email is unchanged and still needs SMTP.
+
 An SMS carries a 6-digit code for both phone verification and password reset (2026-10-14, lead decision); an email still
 carries the long token. For an SMS reset the code is only valid together with the phone number (`identifier`), is checked
 against that account's newest unused SMS reset challenge, and shares the challenge rules: single use, 10 minutes, 5

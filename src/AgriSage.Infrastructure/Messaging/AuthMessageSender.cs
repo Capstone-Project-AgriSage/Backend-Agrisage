@@ -16,7 +16,8 @@ namespace AgriSage.Infrastructure.Messaging;
 // Transport only: purpose, recipient and token lifetime are owned by Application. The cost guards (allowed recipients,
 // daily limit) are transport policy for real SMS and are optional collaborators so the sender can be built by hand.
 public sealed class AuthMessageSender(HttpClient http, IOptions<MessageDeliveryOptions> options,
-    SmsDailyBudget? budget = null, IDateTimeProvider? clock = null, ILogger<AuthMessageSender>? logger = null)
+    SmsDailyBudget? budget = null, IDateTimeProvider? clock = null, ILogger<AuthMessageSender>? logger = null,
+    SimulatedSmsOutbox? outbox = null)
     : IAuthMessageSender
 {
     public bool IsConfigured(AuthDeliveryChannel channel)
@@ -56,6 +57,17 @@ public sealed class AuthMessageSender(HttpClient http, IOptions<MessageDeliveryO
 
     private async Task SendSmsAsync(MessageDeliveryOptions o, AuthMessage message, CancellationToken cancellationToken)
     {
+        if (o.UsesSimulatedSms)
+        {
+            // Nothing leaves the machine and nothing is charged, so neither cost guard applies: the message goes to the
+            // in-memory outbox (and the log) that a development-only page shows.
+            var text = SmsText(message);
+            outbox?.Add(new SimulatedSmsMessage(clock?.UtcNow ?? TimeProvider.System.GetUtcNow(), message.Destination,
+                message.Purpose.ToString(), message.Token, text));
+            logger?.LogWarning("SIMULATED SMS to {Destination} (not sent): {Text}", message.Destination, text);
+            return;
+        }
+
         // Stored numbers are already 0xxxxxxxxx; normalising again keeps the allow-list and +84 conversion exact.
         var local = ContactNormalizer.TryNormalizePhone(message.Destination, out var normalized) ? normalized : null;
         if (o.SmsAllowedRecipients.Length > 0 && (local is null || !IsAllowed(o.SmsAllowedRecipients, local)))
@@ -102,6 +114,7 @@ public sealed class AuthMessageSender(HttpClient http, IOptions<MessageDeliveryO
 
     private static bool SmsConfigured(MessageDeliveryOptions o)
     {
+        if (o.UsesSimulatedSms) return true; // no gateway, address or key needed
         if (!Uri.TryCreate(o.SmsGatewayUrl, UriKind.Absolute, out var uri) || string.IsNullOrWhiteSpace(o.SmsApiKey))
             return false;
         if (!o.UsesAndroidGateway) return uri.Scheme == Uri.UriSchemeHttps;
