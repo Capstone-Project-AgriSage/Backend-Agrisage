@@ -1,0 +1,21 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    # Windows, like the machines the team develops on: the suite has only ever been run there.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - run: dotnet restore
+      - run: dotnet build --no-restore
+      # Only the offline suite runs here. Tests that need the real database, Supabase Storage or a provider skip
+      # themselves unless AGRISAGE_DB_TESTS / AGRISAGE_STORAGE_TESTS is set, and CI has no secrets.
+      - run: dotnet test --no-build
