@@ -23,6 +23,9 @@ AgriSage.Infrastructure.Payments.PayOsMode.EnsureAllowed(simulatedPayments, buil
 // AiService:Mode=Simulated returns made-up predictions: Development only, same rule.
 AgriSage.Infrastructure.Ai.AiServiceMode.EnsureAllowed(
     AgriSage.Infrastructure.Ai.AiServiceMode.IsSimulated(builder.Configuration), builder.Environment.IsDevelopment());
+// MessageDelivery:SmsProvider=Simulated sends no SMS and shows the codes in a development-only page: same rule.
+var simulatedSms = AgriSage.Infrastructure.Messaging.SimulatedSmsMode.IsSimulated(builder.Configuration);
+AgriSage.Infrastructure.Messaging.SimulatedSmsMode.EnsureAllowed(simulatedSms, builder.Environment.IsDevelopment());
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.Configure<AgriSage.Application.Features.Diagnosis.AiDiagnosisOptions>(
     options => options.AllowStubResults = builder.Environment.IsDevelopment());
@@ -45,6 +48,11 @@ var app = builder.Build();
 if (simulatedPayments)
 {
     app.Logger.LogWarning("PayOS:Mode=Simulated - online payments are simulated, no money moves and payOS is not called (development only).");
+}
+
+if (simulatedSms)
+{
+    app.Logger.LogWarning("MessageDelivery:SmsProvider=Simulated - no SMS is sent; codes show at /api/dev/sms-outbox/view (development only).");
 }
 
 if (commands.Count > 0)

@@ -18,7 +18,8 @@ Passwords, refresh tokens, verification tokens and OTPs never appear in audit/lo
 | GET | /api/auth/sessions | Authenticated; live own sessions only |
 | DELETE | /api/auth/sessions/{id} | Authenticated; revoke own session; 204, other's id = 404 |
 | POST | /api/auth/forgot-password | Anonymous; `{ identifier }`; uniform 202 |
-| POST | /api/auth/reset-password | Anonymous; `{ token, newPassword }`; single-use token; 204 |
+| POST | /api/auth/reset-password | Anonymous; `{ token, newPassword }` for the long token an email carries, or `{ identifier, code, newPassword }` (phone + the 6-digit code an SMS carries); exactly one proof, single use; 204 |
+| POST | /api/auth/reset-password/verify-code | Anonymous; `{ identifier, code }` (phone + the 6-digit code an SMS carries); checks the code **without using it**: 204 if right, 422 if wrong/expired/unknown phone. A wrong code spends one of the code's 5 attempts, shared with `reset-password`. Lets a client confirm the code before it asks for the new password; the client then sends the same `{ identifier, code, newPassword }` to `reset-password`, which checks again and is the call that decides. Not used for the email token |
 | POST | /api/auth/email-verification/request | Authenticated; current email only; 202 |
 | POST | /api/auth/email-verification/confirm | Authenticated; `{ token }`; 204 |
 | POST | /api/auth/phone-verification/request | Authenticated; current phone only; 202 |
@@ -30,8 +31,8 @@ Password change/reset, staff password reset, account status/role/contact changes
 security version. A lock followed by unlock never revives old sessions. Contact changes clear the
 corresponding verified flag. Concurrent security mutations use row locks or optimistic concurrency.
 
-Email confirmation and password-reset tokens (including future SMS resets) include a challenge id
-and 256-bit secret. SMS phone verification uses
+Email confirmation and password-reset tokens include a challenge id
+and 256-bit secret. Everything delivered by SMS (phone verification and password reset) uses
 6-digit OTPs, keyed hashes, 5 attempts, a 10-minute lifetime and a 60-second resend cooldown. All
 challenge types are single-use, bound to purpose, destination and security version. Reset requests
 are generic for unknown/inactive accounts; delivered messages carry the actual token. Reissuing a
@@ -43,6 +44,31 @@ Anonymous reset requests always acknowledge with 202 even if a configured provid
 are audited, the unsent challenge is invalidated, and no account-existence signal is returned.
 All anonymous and challenge endpoints use the existing auth rate limiter. No account is forced to
 verify contact just to use existing workflows in this release.
+
+SMS providers (`MessageDelivery:SmsProvider`): `Generic` (default) posts `{to, message}` with a Bearer key to an
+HTTPS gateway. `AndroidGateway` uses the open-source "SMS Gateway for Android" app on a phone, which sends through its
+own SIM: `POST {SmsGatewayUrl}` (the app's `/message` address) with Basic auth (`SmsUsername` + `SmsApiKey`) and
+`{ "textMessage": { "text": … }, "phoneNumbers": ["+84…"] }`; plain HTTP is accepted only for private-network
+addresses (LAN, loopback), anything else needs HTTPS. SMS text is ASCII, no timestamp, so a 6-digit OTP fits one
+segment. Cost guards for real SMS: `SmsAllowedRecipients` (when not empty, any other number is refused without
+sending) and `SmsDailyLimit` (per Vietnam day, in memory per API process, 0 = unlimited); a refused or capped send is
+the same "delivery unavailable" outcome as a provider failure and is logged without the number or the code.
+
+`Simulated` is for demos and tests that must not cost money: no SMS leaves the machine, the allow-list and the daily limit
+do not apply, and each message (destination, purpose, the 6-digit code, the text) goes to an in-memory outbox (the last 50,
+empty again when the API restarts) and to the log. It is allowed only in the Development environment; the API refuses to
+start with it anywhere else. Two anonymous routes exist only in this mode and answer 404 otherwise:
+`GET /api/dev/sms-outbox` (JSON, newest first) and `GET /api/dev/sms-outbox/view` (a self-refreshing page that looks like a
+phone's inbox, for a second screen). It replaces SMS only: email is unchanged and still needs SMTP.
+
+An SMS carries a 6-digit code for both phone verification and password reset (2026-10-14, lead decision); an email still
+carries the long token. For an SMS reset the code is only valid together with the phone number (`identifier`), is checked
+against that account's newest unused SMS reset challenge, and shares the challenge rules: single use, 10 minutes, 5
+failed attempts then the challenge is dead, 60-second resend cooldown. An unknown phone, no live challenge and a wrong
+code are the same 422. Residual risk: a 6-digit code is guessable in principle (5 guesses per challenge, a new
+challenge at most every 60 seconds, auth rate limit per IP), so an attacker who keeps requesting resets for one
+victim gets a small but non-zero chance over many hours; a per-account failed-attempt lockout would close it and is
+the deferred lockout item.
 
 ## In-app notifications
 

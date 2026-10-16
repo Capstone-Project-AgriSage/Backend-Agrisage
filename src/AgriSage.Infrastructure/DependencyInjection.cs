@@ -47,6 +47,13 @@ public static class DependencyInjection
             .ValidateDataAnnotations().ValidateOnStart();
         services.AddOptions<MessageDeliveryOptions>().Bind(configuration.GetSection("MessageDelivery"))
             .ValidateDataAnnotations().ValidateOnStart();
+        services.AddSingleton<SmsDailyBudget>();
+        if (SimulatedSmsMode.IsSimulated(configuration))
+        {
+            // Development only (Program refuses this elsewhere): the outbox the simulated SMS provider writes to.
+            services.AddSingleton<SimulatedSmsOutbox>();
+            services.AddSingleton<ISimulatedSmsOutbox>(provider => provider.GetRequiredService<SimulatedSmsOutbox>());
+        }
         services.AddHttpClient<IAuthMessageSender, AuthMessageSender>(client => client.Timeout = TimeSpan.FromSeconds(30));
         services.AddOptions<BackgroundJobOptions>().Bind(configuration.GetSection("BackgroundJobs"))
             .ValidateDataAnnotations().ValidateOnStart();
