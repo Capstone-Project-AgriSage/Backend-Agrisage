@@ -16,11 +16,14 @@ namespace AgriSage.Infrastructure.Payments;
 // link (if payOS made one) is cancelled, so no payable link is left without its payment. Provider errors are logged by
 // type and status only (never keys, signatures or payloads) and surface as PaymentGatewayUnavailableException (503).
 public sealed class PayOsPaymentGateway(
-    HttpClient httpClient,
+    IHttpClientFactory httpClientFactory,
     IOptions<PayOsOptions> options,
     TimeProvider time,
     ILogger<PayOsPaymentGateway> logger) : IPaymentGateway
 {
+    // Name of the HttpClient registration (see DependencyInjection): every SDK client gets a fresh HttpClient of it.
+    public const string HttpClientName = "payos";
+
     public async Task<PaymentLinkResult> CreatePaymentLinkAsync(CreatePaymentLinkRequest request, CancellationToken cancellationToken)
     {
         var settings = RequireConfigured();
@@ -154,13 +157,16 @@ public sealed class PayOsPaymentGateway(
         }
     }
 
+    // The SDK client configures the HttpClient it is given (BaseAddress, headers), and an HttpClient that has already sent
+    // a request cannot be configured again. This gateway makes several calls in one request (state, then cancel, then
+    // create), so each SDK client gets its own HttpClient from the factory; the factory still pools the connections.
     private PayOSClient Client(PayOsOptions settings, int? maxRetries) =>
         new(new PayOSOptions
         {
             ClientId = settings.ClientId!,
             ApiKey = settings.ApiKey!,
             ChecksumKey = settings.ChecksumKey!,
-            HttpClient = httpClient,
+            HttpClient = httpClientFactory.CreateClient(HttpClientName),
             MaxRetries = maxRetries ?? 2
         });
 

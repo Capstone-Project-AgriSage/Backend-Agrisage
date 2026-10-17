@@ -1,3 +1,4 @@
+using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -17,8 +18,14 @@ public class PayOsPaymentGatewayTests
 
     private const string ChecksumKey = "test-only-checksum-key-not-a-secret";
 
-    private static PayOsPaymentGateway Gateway(bool configured = true) => new(
-        new HttpClient(),
+    // Like the real IHttpClientFactory, it hands out a NEW HttpClient on every call (over the optional shared handler).
+    private sealed class ClientFactory(HttpMessageHandler? handler) : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => handler is null ? new HttpClient() : new HttpClient(handler, disposeHandler: false);
+    }
+
+    private static PayOsPaymentGateway Gateway(bool configured = true, HttpMessageHandler? handler = null) => new(
+        new ClientFactory(handler),
         Options.Create(configured
             ? new PayOsOptions
             {
@@ -85,6 +92,42 @@ public class PayOsPaymentGatewayTests
     [InlineData("[]")]
     public async Task A_body_without_data_and_signature_is_the_registration_test(string payload) =>
         Assert.Equal(PaymentWebhookKind.NoData, (await Gateway(configured: false).VerifyWebhookAsync(payload, Token)).Kind);
+
+    // Answers every request with a payOS "bad request" (the SDK does not retry a 400), so each call really reaches the
+    // provider and fails like a refusal.
+    private sealed class RefusingHandler : HttpMessageHandler
+    {
+        public int Requests { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Requests++;
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.BadRequest)
+            {
+                Content = new StringContent("{\"code\":\"20\",\"desc\":\"refused\",\"data\":null}", Encoding.UTF8, "application/json")
+            });
+        }
+    }
+
+    // Cancelling an order that has a pending payment link asks payOS for the link's state and then cancels it; replacing
+    // a link does the same and then creates a new one. All of it goes through ONE gateway in ONE request. The SDK client
+    // configures the HttpClient it is given, and an HttpClient that has sent a request cannot be configured again, so
+    // the second call failed with "This instance has already started one or more requests" (HTTP 500).
+    [Fact]
+    public async Task One_gateway_can_call_payos_several_times_in_one_request()
+    {
+        var handler = new RefusingHandler();
+        var gateway = Gateway(handler: handler);
+
+        await Assert.ThrowsAsync<PaymentGatewayUnavailableException>(() => gateway.GetPaymentLinkAsync(42, Token));
+        await Assert.ThrowsAsync<PaymentGatewayUnavailableException>(() => gateway.CancelPaymentLinkAsync(42, "Cancelled by the customer.", Token));
+        await Assert.ThrowsAsync<PaymentGatewayUnavailableException>(() =>
+            gateway.CreatePaymentLinkAsync(new CreatePaymentLinkRequest(42, 5_000, "PM1"), Token));
+        await Assert.ThrowsAsync<PaymentGatewayUnavailableException>(() => gateway.GetPaymentLinkAsync(42, Token));
+
+        Assert.True(handler.Requests >= 4, $"every call must reach payOS, saw {handler.Requests} requests");
+    }
 
     [Fact]
     public async Task Without_configuration_payos_is_unavailable()
