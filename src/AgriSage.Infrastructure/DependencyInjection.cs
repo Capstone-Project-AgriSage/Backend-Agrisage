@@ -112,7 +112,9 @@ public static class DependencyInjection
         }
         else
         {
-            services.AddHttpClient<IPaymentGateway, PayOsPaymentGateway>(client => client.Timeout = TimeSpan.FromSeconds(30));
+            // A named client, not a typed one: the gateway takes a fresh HttpClient for every SDK client it builds.
+            services.AddHttpClient(PayOsPaymentGateway.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(30));
+            services.AddTransient<IPaymentGateway, PayOsPaymentGateway>();
         }
 
         // Goods receipt Excel template (ClosedXML, stateless).
