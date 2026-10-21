@@ -143,8 +143,8 @@ For DB work, open only exact relevant sections of the full design.
 - Debt is created only for unpaid value after successful credit fulfillment.
 - Payment↔Debt allocation uses `payment_allocations`.
 - payOS webhook processing is idempotent.
-- AI recommendation requires authorized Human Review.
-- AI reviewer = `can_review_ai` permission, not a primary role.
+- No AI Human Review (since 2026-10-21): the Farmer sees the AI result, CONFIDENT or UNCERTAIN, never a probability.
+- AI product suggestions only for a CONFIDENT, non-Healthy result, matched by active ingredient.
 - Production AI classes: Leaf Blast, Bacterial Leaf Blight, Brown Spot, Sheath Blight, Healthy.
 - Promotions are out of scope.
 

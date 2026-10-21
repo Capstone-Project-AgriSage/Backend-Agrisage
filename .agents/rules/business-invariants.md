@@ -21,7 +21,9 @@
 - Return financial settlement reduces attributable unpaid debt first, then refunds paid value.
 - No automatic payOS refund in MVP; external refund is recorded.
 - Product review requires successful purchase/fulfillment.
-- AI diagnosis is not commercially authoritative until authorized Human Review.
-- Human Review decisions: CONFIRMED / CORRECTED / INCONCLUSIVE.
-- Only verified diagnosis can create treatment/product recommendations.
+- AI diagnosis has no Human Review (since 2026-10-21): the Farmer sees the latest successful inference as CONFIDENT
+  (policy passed) or UNCERTAIN, never a probability.
+- Product suggestions only for a CONFIDENT, non-Healthy result (active-ingredient match, sellable products, at most 5);
+  UNCERTAIN shows no CHEMICAL treatment and no product.
+- Cases reviewed before 2026-10-21 stay readable; no new review or recommendation item is written.
 - Promotions are out of scope.

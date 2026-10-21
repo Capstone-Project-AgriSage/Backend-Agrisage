@@ -38,12 +38,12 @@ Use this summary for navigation. For exact schema implications, open the relevan
 33. No automated payOS refund in MVP; external refund is recorded.
 34. Product review requires purchase + successful fulfillment; max one review per Order Item/Farmer.
 35. Production AI scope: Rice — Leaf Blast, Bacterial Leaf Blight, Brown Spot, Sheath Blight, Healthy.
-36. AI inference must be Human Reviewed: CONFIRMED / CORRECTED / INCONCLUSIVE.
-37. Only verified diagnosis may create treatment/product recommendations.
+36. No Human Review (since 2026-10-21, AI_DIAGNOSIS.md 2.0): the Farmer sees the result of the latest successful AI inference at once, marked CONFIDENT (policy passed) or UNCERTAIN (not passed), never as a probability.
+37. Product suggestions only for a CONFIDENT, non-Healthy AI result: store products the catalog sells whose product has an active ingredient of an active treatment of that disease (at most 5, computed at read time). An UNCERTAIN result shows no CHEMICAL treatment and no product.
 38. Reports include Sales Revenue, COGS and Gross Profit; COGS uses actual fulfilled lot cost.
 39. No VAT/e-invoice integration in MVP; supplier invoice reference/file is allowed.
 40. Every DELETE API is soft delete or semantic cancel/void/reverse; no business hard delete.
-41. One primary role per user; extra permission comes through membership (e.g. `can_review_ai`).
+41. One primary role per user; extra permission comes through membership. (`can_review_ai` is kept in the schema but has no effect since 2026-10-21.)
 42. Keep `stores`; expect one active Store; never hard-code Store ID.
 43. Inventory costing is Weighted Average Cost per logical Inventory Lot.
 44. Promotions are removed from scope/database.
@@ -61,8 +61,8 @@ Use this summary for navigation. For exact schema implications, open the relevan
 56. Returned quantity ≤ fulfilled − already returned, where "already returned" counts every other non-rejected, non-cancelled return of the same Order Item; each return line references exactly one fulfillment source matching the Order's fulfillment type (DELIVERY → lot allocation, PICKUP → original sale stock movement item).
 57. Return value = returned base quantity × original unit price ÷ conversion, rounded AwayFromZero to 2 decimals (the only rounded computed money amount).
 58. Inspection fixes the disposition: RESELLABLE → RESTOCK; DAMAGED/EXPIRED/UNUSABLE → WRITE_OFF. Settlement: debt adjustment + refund = total return value; refunds never exceed the refund total.
-59. A Diagnosis Case can be Human Reviewed after AI completes, after AI fails (manual diagnosis), or re-reviewed later; a new review supersedes the old one and deactivates its recommendations. A case with no successful inference cannot be CONFIRMED; CONFIRMED with a primary inference must keep the AI's predicted disease.
-60. Recommendations require a VERIFIED case (whatever `requires_human_review` says) and target exactly one active treatment of the final disease or one active, sellable store product; a Healthy result gets treatment guidance only, no product.
+59. A Diagnosis Case that FAILED (or stayed SUBMITTED after a crash) can be retried by its Farmer; a retry appends a new inference, earlier ones stay. Cases reviewed before 2026-10-21 (VERIFIED / INCONCLUSIVE) keep their review and stay readable; no new review is created.
+60. `recommendation_items` are no longer written (they need a review); suggestions are computed, and the suggested store product ids are recorded in the audit entry of the case's create / retry. A Healthy result gets treatment guidance only, no product. `requires_human_review` is stored and ignored.
 61. Audit Logs are append-only: never updated or deleted.
 
 ## Financial / Inventory Invariants

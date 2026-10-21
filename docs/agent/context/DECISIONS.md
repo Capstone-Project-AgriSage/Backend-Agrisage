@@ -22,7 +22,7 @@ These are stable decisions currently frozen for backend implementation.
 | Online payment | payOS |
 | Automated payOS refund | Out of MVP |
 | AI service | Python FastAPI + PyTorch |
-| AI authority | Human Review required before recommendation |
+| AI authority | No Human Review since 2026-10-21 (lead's decision; AI_DIAGNOSIS.md 2.0): the Farmer sees the AI result at once, CONFIDENT or UNCERTAIN; products only for CONFIDENT, matched by active ingredient. The team improves the model by training instead of a manual gate |
 | Promotions | Removed |
 | Store scope | One active store, real Store table retained |
 | Reporting tables | None initially; query transaction tables |
@@ -41,8 +41,8 @@ These are stable decisions currently frozen for backend implementation.
 | Return quantity limit | "Already returned" counts all other non-rejected/non-cancelled returns; each line references exactly one fulfillment source matching the Order's fulfillment type (DELIVERY → lot allocation, PICKUP → original stock movement item) |
 | Return value rounding | `round2(qty × unit_price ÷ conversion, AwayFromZero)` — the only exception to money-is-never-rounded |
 | Return settlement | Debt adjustment + refund = total return value; Refund is a child of Sales Return; FAILED refund changes status only |
-| Diagnosis review | Allowed after AI completes, after AI fails (manual), and as re-review (supersedes); no CONFIRMED without a SUCCESS inference |
-| Recommendation eligibility | VERIFIED case only (never bypassed by `requires_human_review`); Healthy → treatment guidance only |
+| Diagnosis review | Removed 2026-10-21. Review tables and `can_review_ai` kept for cases decided before; a FAILED case is retried by its Farmer; store staff only read cases |
+| Recommendation eligibility | Computed suggestions for a CONFIDENT, non-Healthy AI result only (sellable store products whose product has an active ingredient of an active treatment of the disease, at most 5); UNCERTAIN → no CHEMICAL treatment, no product; Healthy → guidance only |
 | Content/Notification lifecycle | Only documented invariants (published_at / resolved_at / read_at); no transition graph |
 | Audit Log | Append-only `BaseEntity`, immutable in Domain; separate `Audit` feature folder |
 | Attempt item DB CHECK | DB: `delivered + failed <= attempted` (each ≥ 0); `= attempted` is enforced by the Domain when the attempt completes |

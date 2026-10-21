@@ -1,22 +1,24 @@
-# AI diagnosis — rice leaf disease, Human Review and recommendations
+# AI diagnosis — rice leaf disease, AI result shown to the Farmer, suggestions
 
-Version 1.0 — 2026-10-10 (user-requested extension, same status as `REPORTS.md` and `DYNAMIC_PERMISSIONS.md`).
+Version 2.0 — 2026-10-21. **Human Review is removed** (lead's decision, 2026-10-21): the Farmer sees the AI result as
+soon as the photo is analysed; no staff member confirms it. Version 1.0 (2026-10-10) required a `can_review_ai`
+reviewer before any result or recommendation; its routes for reviewing are gone (§8, §9).
 Conventions, shared shapes and ownership rules: [README.md](README.md). Authorization of every route below follows
 [DYNAMIC_PERMISSIONS.md](DYNAMIC_PERMISSIONS.md).
 
-Sources: `DATABASE_DESIGN.md` §55–63 and §35.12; `BUSINESS_RULES.md` rules 35–37, 41, 59–61;
-`docs/AgriSage_Updated_Documentation_v1.1/AgriSage_AI_Disease_Diagnosis_Master_v2.0.md` §38–42, §50, §53–55;
-the `AI-Service` repository (`README.md`: HTTP contract of the inference service).
+Sources: `DATABASE_DESIGN.md` §55–63 and §35.12; `BUSINESS_RULES.md` rules 35–37, 59–61;
+`docs/AgriSage_Updated_Documentation_v1.1/AgriSage_AI_Disease_Diagnosis_Master_v2.0.md` §38–42, §50, §53–55 (its
+Agent Review sections no longer apply); the `AI-Service` repository (`README.md`: HTTP contract of the inference service).
 
 A Farmer photographs a rice leaf. The Python AI Service returns calibrated class probabilities. **This backend** applies
-the active policy (minimum confidence / margin) and stores the result as evidence. An authorized reviewer
-(`can_review_ai`) then confirms, corrects or marks the case inconclusive. Only a verified case produces treatment
-and product recommendations, and only the verified result is shown to the Farmer.
+the active policy (minimum confidence / margin) and stores the result. The Farmer then sees the predicted disease, how
+sure the AI is (`CONFIDENT` or `UNCERTAIN`, never a probability), the disease's guidance and, only when the AI is
+confident, products of the store whose active ingredient treats that disease. Store staff can read every case to
+follow up with the Farmer; they no longer decide anything.
 
-Already on `main`: Domain (`DiagnosisCase` and children, `AiModel`, `AiPolicyConfig`, `Disease`,
-`DiseaseTreatment`), EF configurations, `DiseaseSeeder` (the five classes), `IAiDiagnosisClient` and its contracts,
-`NotificationWriter`, `AuditTrail`, dynamic permissions. **Nothing above Domain exists yet**: no Application service,
-no controller, no `IAiDiagnosisClient` implementation, no DI registration.
+Why: the model is right on about 0.57 of photos from a source it never saw (AI-Service `research/report.md` §4.2b), and
+the team will improve it by training rather than by a manual gate. The risk of an unverified pesticide suggestion is
+limited by D3 and D13.
 
 ---
 
@@ -25,14 +27,11 @@ no controller, no `IAiDiagnosisClient` implementation, no DI registration.
 | # | Step (screen) | API | Effect |
 |---|---|---|---|
 | 1 | Admin registers the exported model and a policy, activates both | `POST /api/ai-models`, `POST /api/ai-models/{id}/policies`, `…/activate` | one ACTIVE model, one ACTIVE policy |
-| 2 | Owner lets a sales staff member review AI cases | `PUT /api/staff/{userId}/ai-review` | `store_members.can_review_ai = true` |
-| 3 | Farmer photographs a leaf (mobile) | `POST /api/me/diagnosis-cases` | case `AI_COMPLETED` (or `FAILED`), inference stored |
-| 4 | Farmer sees "waiting for a specialist" | `GET /api/me/diagnosis-cases/{id}` | no probabilities, no disease |
-| 5 | Reviewer opens the queue and the case | `GET /api/diagnosis-cases`, `GET /api/diagnosis-cases/{id}` | photo (signed URL), top-k, margin, passed policy |
-| 6 | Reviewer confirms, corrects or marks inconclusive | `POST /api/diagnosis-cases/{id}/review` | case `VERIFIED` / `INCONCLUSIVE`, Farmer notified |
-| 7 | Reviewer attaches treatments and products | `POST /api/diagnosis-cases/{id}/recommendations` | `recommendation_items` |
-| 8 | Farmer reads the result and adds a product to the cart | `GET /api/me/diagnosis-cases/{id}`, cart routes | verified disease, guidance, products |
-| 9 | AI Service is down: case `FAILED`; reviewer diagnoses by hand or reruns the AI | `POST …/review`, `POST …/rerun-ai` | manual review (CORRECTED / INCONCLUSIVE) or a new inference |
+| 2 | Owner enters disease content, treatments with their active ingredients, and links ingredients to products | `PUT /api/diseases/{id}`, `POST /api/diseases/{id}/treatments`, `PUT /api/products/{id}/ingredients` | content and suggestions available |
+| 3 | Farmer photographs a leaf (mobile or Farmer web) | `POST /api/me/diagnosis-cases` | case `AI_COMPLETED` with a `result` (or `FAILED`) |
+| 4 | Farmer reads the result: disease, certainty, guidance, products (confident only) and adds a product to the cart | `GET /api/me/diagnosis-cases/{id}`, cart routes | — |
+| 5 | AI Service is down: case `FAILED`; the Farmer retries once it is back | `POST /api/me/diagnosis-cases/{id}/retry` | a new inference, case `AI_COMPLETED` |
+| 6 | Store staff look at the farmers' cases and call a Farmer | `GET /api/diagnosis-cases`, `GET /api/diagnosis-cases/{id}` | photo, AI evidence, what the Farmer saw |
 
 ---
 
@@ -43,13 +42,15 @@ no controller, no `IAiDiagnosisClient` implementation, no DI registration.
 | F5.1 | AI client adapter (`FastApiDiagnosisClient`, simulated client, options, exceptions) | — |
 | F5.2 | AI models and policies management | — |
 | F5.3 | Private diagnosis image storage and signed URLs | — |
-| F5.4 | Farmer API: create / list / get / cancel own cases | F5.1, F5.2, F5.3 |
-| F5.5 | Reviewer API: queue, detail, start review, review, rerun, recommendations | F5.4 |
-| F5.6 | `can_review_ai` management and the review guard | — |
+| F5.4 | Farmer API: create / list / get / cancel / retry own cases, AI result and suggestions | F5.1, F5.2, F5.3 |
+| F5.5 | Store API: read-only list and detail of cases | F5.4 |
+| F5.6 | ~~`can_review_ai` management and the review guard~~ — retired in 2.0 | — |
 | F5.7 | Disease content and treatments (staff) | — |
 
-Schema: **no new table**. One data-only migration (§12) adds the new permission catalog rows, because the catalog
-is seeded with `HasData`. Tell the lead before creating it.
+Schema: **no new table and no migration** in 2.0. `agent_reviews`, `recommendation_items`,
+`store_members.can_review_ai` and `ai_policy_configs.requires_human_review` stay for the cases decided under 1.0; no
+code writes them any more. The permission codes of the removed routes stay in the catalog (removing `HasData` rows is
+a migration) and are hidden from the permission screens (§11).
 
 ---
 
@@ -58,17 +59,20 @@ is seeded with `HasData`. Tell the lead before creating it.
 | # | Decision |
 |---|---|
 | D1 | **The policy decision lives in the backend.** The AI Service returns calibrated probabilities and never ACCEPTED / INCONCLUSIVE. Backend computes `margin = p1 − p2` and `passed_policy = status SUCCESS AND confidence ≥ minimum_confidence AND (minimum_margin IS NULL OR margin ≥ minimum_margin)`. |
-| D2 | **A failed policy is not INCONCLUSIVE.** Per §35.12 the case still becomes `AI_COMPLETED` with `passed_policy = false` and goes to the queue. `INCONCLUSIVE` is only ever a reviewer's decision. (The AI master document AC-03 reads otherwise; the database design wins, README intro.) |
-| D3 | **Every case goes to human review** (rule 36), whether or not the policy passed. `requires_human_review` is stored but never bypasses it. |
-| D4 | **The AI is called after the case is saved and outside any transaction.** Transaction 1: number, case, image → commit. Then the HTTP call (timeout `AiService:TimeoutSeconds`, default 15). Transaction 2: `StartProcessing` → `RecordInference` → `CompleteAi`/`FailAi`. A crash in between leaves the case `SUBMITTED`, which `rerun-ai` accepts. No transaction is held open across an HTTP call. |
+| D2 | **A failed policy is an UNCERTAIN result, not INCONCLUSIVE.** The case becomes `AI_COMPLETED` with `passed_policy = false`; the Farmer sees the top guess marked `UNCERTAIN` with the hint `RETAKE_PHOTO_OR_ASK_STORE`. `passed_policy` is the value stored at inference time, under the policy effective then; old cases are never re-judged against today's policy. |
+| D3 | **No human review** (2.0). The result of the latest SUCCESS inference is the result. An `UNCERTAIN` result shows no CHEMICAL treatment and no product; a `CONFIDENT` result shows all active treatments and up to five products (D13); the Healthy class never gets products. `requires_human_review` is stored and ignored. |
+| D4 | **The AI is called after the case is saved and outside any transaction.** Transaction 1: number, case, image → commit. Then the HTTP call (timeout `AiService:TimeoutSeconds`, default 15). Transaction 2: `StartProcessing` → `RecordInference` → `CompleteAi`/`FailAi`. A crash in between leaves the case `SUBMITTED`, which the Farmer's retry accepts after two minutes. No transaction is held open across an HTTP call. |
 | D5 | **At most one ACTIVE model** (Application retires the previous one in the activation transaction) and at most one ACTIVE policy effective at a given moment per model. |
-| D6 | **Always ask the service for `top_k = 5`** and store all five in `top_predictions`; the screens show `policy.top_k` of them. Margin is computed from the stored list. |
-| D7 | **Reviewer authorization has two layers.** (a) The endpoint's permission code (`PermissionFilter`, see §11) is the coarse gate. (b) `AiReviewer.EnsureAsync` additionally requires `store_members.can_review_ai = true` for the active store (business rule 41, rule "AI reviewer = can_review_ai, not a primary role"). The member must belong to the active store and be ACTIVE; ADMIN is not exempt, because `agent_reviews.reviewer_member_id` references `store_members` and an Admin has no membership (an Admin can read cases, not decide them). The flag is the single source of truth for who may decide a case; permission codes only open the routes. |
-| D8 | **Farmer sees verified results only.** Before a review the response carries no AI output and no disease. For INCONCLUSIVE it carries the reviewer's comment and a retake hint, never a recommendation. |
+| D6 | **Always ask the service for `top_k = 5`** and store all five in `top_predictions`; the store screens show `policy.top_k` of them. Margin is computed from the stored list. |
+| D7 | ~~Reviewer authorization (`can_review_ai`)~~ — retired in 2.0. Reading cases needs only the permission code `DIAGNOSIS.READ`. |
+| D8 | **The Farmer sees a disease and a certainty, never a number.** The Farmer response carries no probability, margin, top-k, model or policy. It carries the disease (predicted, or final for a 1.0 VERIFIED case), `certainty` and the guidance. |
 | D9 | **Photos are private.** Bucket `diagnosis-images`, objects fetched through short-lived signed URLs (1 hour) created at read time; the stored `image_url` is not directly fetchable. |
 | D10 | **Model identity is checked.** An answer whose `model_version` differs from the ACTIVE model's `version`, or that has `stub = true` outside Development, is recorded as a FAILED inference (`raw_output.error = MODEL_VERSION_MISMATCH` / `STUB_REFUSED`), never as a result. |
-| D11 | **DELETE is semantic.** Cases are cancelled, recommendations deactivated, treatments deactivated. No route removes an inference or a review. |
+| D11 | **DELETE is semantic.** Cases are cancelled, treatments deactivated. No route removes an inference. |
 | D12 | **Case numbers** are `DG-yyyyMMdd-NNNN` (append `DG` to `DocumentNumbers`). |
+| D13 | **Suggested products are matched by active ingredient and computed at read time.** Ingredients = the active ingredients (active) of the predicted disease's active treatments. Products = store products of the active store that the public catalog sells (`CatalogRules.Sellable`: store product active and sellable, product ACTIVE, not deleted) and whose product has one of those ingredients (`product_active_ingredients`). Order: best matching treatment priority, then more matched ingredients, then name; at most 5; `reason` = "Chứa hoạt chất …". Nothing is stored in `recommendation_items` (it needs a review); the suggested ids are written to the audit entry of the create / retry so what was suggested can be traced. |
+| D14 | **The Farmer retries a failed analysis.** `retry` is allowed on a `FAILED` case, or a `SUBMITTED` case older than two minutes (D4 crash). It reruns the AI on the primary image with the active model; an unreachable AI Service gives `503` and records nothing. The store has no rerun any more. |
+| D15 | **Cases decided under 1.0 stay readable.** `VERIFIED` shows the reviewer's final disease and the stored recommendations of the current review (`certainty = VERIFIED`); `INCONCLUSIVE` keeps its comment and retake hint; an old `UNDER_REVIEW` case reads like `AI_COMPLETED`. No status is added or removed (the status check constraint stays). |
 
 ---
 
@@ -107,14 +111,14 @@ Mapping of `POST {BaseUrl}/v1/inference` (multipart: `image`, `top_k`, `case_id`
 
 - Not configured, unreachable, timeout, non-2xx or an unparseable body → `AiServiceUnavailableException`
   (Application, no provider details), exactly like `PaymentGatewayUnavailableException`. Only the HTTP status is
-  logged. The create-case flow turns it into a `FAILED` case (D4); `rerun-ai` returns it as 503.
+  logged. The create-case flow turns it into a `FAILED` case (D4); the Farmer's retry returns it as 503.
 - A label that is not one of the five `diseases.code` values is a FAILED inference (`UNKNOWN_CLASS_LABEL`).
 - `predicted_disease_id` is looked up from `diseases` by code.
 
 `raw_output` shape (jsonb), written by Application:
 
 ```json
-{ "rawConfidence": 0.913020, "modelName": "agrisage-rice-classifier", "modelVersion": "0.1.0",
+{ "rawConfidence": 0.913020, "modelName": "agrisage-rice-classifier", "modelVersion": "0.2.0",
   "stub": false, "margin": 0.7321, "error": null }
 ```
 
@@ -138,13 +142,13 @@ Mapping of `POST {BaseUrl}/v1/inference` (multipart: `image`, `top_k`, `case_id`
 
 ```json
 // AiModelRequest — copy of the exported manifest.json of the AI Service
-{ "name": "agrisage-rice-classifier", "version": "0.1.0", "framework": "pytorch", "architecture": "mobilenet_v2",
+{ "name": "agrisage-rice-classifier", "version": "0.2.0", "framework": "pytorch", "architecture": "resnet50",
   "modelStorageUrl": "https://github.com/…/releases/…", "inputWidth": 224, "inputHeight": 224,
   "classLabels": ["LEAF_BLAST","BACTERIAL_LEAF_BLIGHT","BROWN_SPOT","SHEATH_BLIGHT","HEALTHY"],
-  "metrics": { "testMacroF1": 0.92, "temperature": 1.3962 } }
+  "metrics": { "poolTestMacroF1": 0.9842, "temperature": 1.3925 } }
 
 // AiPolicyRequest
-{ "version": "policy-1", "minimumConfidence": 0.80, "minimumMargin": 0.15, "topK": 3,
+{ "version": "policy-2", "minimumConfidence": 0.77, "minimumMargin": 0.20, "topK": 3,
   "effectiveFrom": "2026-11-01T00:00:00Z", "effectiveTo": null, "parameters": { "note": "…" } }
 ```
 
@@ -153,6 +157,8 @@ Mapping of `POST {BaseUrl}/v1/inference` (multipart: `image`, `top_k`, `case_id`
 - Activating a policy whose effective period overlaps another ACTIVE policy of the same model → `422` naming it.
   A policy can only be activated while its model is ACTIVE.
 - Model status moves DRAFT → ACTIVE → RETIRED only (Domain). Retiring a model does not touch old inferences.
+- The policy is now what separates `CONFIDENT` from `UNCERTAIN` for the Farmer (D2, D3): choose it on photos of
+  sources the model did not train on (AI-Service `training.shift_calibration`).
 
 ---
 
@@ -180,75 +186,82 @@ Identity from the JWT through `CurrentFarmer.GetAsync`; another Farmer's case is
 | GET | `/api/me/diagnosis-cases` | `MY_DIAGNOSIS.READ` | `status`, paging | `200 PagedResult<MyDiagnosisCaseListItem>` |
 | GET | `/api/me/diagnosis-cases/{id}` | `MY_DIAGNOSIS.READ` | — | `200 MyDiagnosisCaseResponse` |
 | POST | `/api/me/diagnosis-cases/{id}/cancel` | `MY_DIAGNOSIS.CANCEL` | `{ "reason": "…" }` optional | `200` |
+| POST | `/api/me/diagnosis-cases/{id}/retry` | `MY_DIAGNOSIS.CREATE` | — | `200 MyDiagnosisCaseResponse`; `422` unless FAILED (or SUBMITTED for more than 2 minutes); `503` when the AI Service is unreachable (nothing recorded) |
 
-Rate limit: the existing `upload` policy (30 / minute / IP) on `POST`.
+Rate limit: the existing `upload` policy (30 / minute / IP) on both `POST` that run the AI.
+
+What the Farmer sees (always from the **latest SUCCESS inference**):
+
+| Case status | `result.certainty` | `treatments` | `products` |
+|---|---|---|---|
+| `AI_COMPLETED` (or a 1.0 `UNDER_REVIEW`), policy passed, not Healthy | `CONFIDENT` | all active treatments of the predicted disease, by priority then title | D13, at most 5 |
+| same, predicted Healthy | `CONFIDENT` | active treatments (care tips) | none |
+| same, policy not passed | `UNCERTAIN`, `hint = RETAKE_PHOTO_OR_ASK_STORE` | active treatments except `CHEMICAL` | none |
+| `VERIFIED` (1.0) | `VERIFIED` | stored recommendations of the current review, as in 1.0 | stored recommendations, filtered with `CatalogRules.Sellable` |
+| `INCONCLUSIVE` (1.0) | `result = null`; `inconclusive` = comment + `RETAKE_PHOTO` | — | — |
+| `FAILED` | `result = null`, `canRetry = true` | — | — |
+| `SUBMITTED` | `result = null`, `canRetry = true` only after 2 minutes | — | — |
+| `PROCESSING`, `CANCELLED` | `result = null` | — | — |
 
 ```json
 // MyDiagnosisCaseResponse
 {
-  "id": "uuid", "caseNumber": "DG-20261110-0001", "status": "VERIFIED",
-  "submittedAt": "2026-11-10T03:12:00Z", "completedAt": "2026-11-10T04:02:00Z",
+  "id": "uuid", "caseNumber": "DG-20261110-0001", "status": "AI_COMPLETED",
+  "submittedAt": "2026-11-10T03:12:00Z", "completedAt": "2026-11-10T03:12:04Z",
   "farmerNote": "Lá vàng từ chóp",
-  "image": { "id": "uuid", "imageUrl": "https://…signed…", "expiresAt": "2026-11-10T05:12:00Z" },
-  "result": {                       // only when status = VERIFIED
+  "image": { "id": "uuid", "imageUrl": "https://…signed…", "expiresAt": "2026-11-10T04:12:00Z" },
+  "result": {
+    "certainty": "CONFIDENT", "hint": null,
     "disease": { "id": "uuid", "code": "LEAF_BLAST", "name": "Đạo ôn", "isHealthy": false,
                  "symptoms": "…", "prevention": "…" },
-    "reviewerComment": "Vết bệnh hình thoi điển hình.",
-    "treatments": [ { "id": "uuid", "type": "CHEMICAL", "title": "…", "instructions": "…", "precautions": "…" } ],
-    "products": [ { "storeProductId": "uuid", "name": "…", "sku": "…", "reason": "…", "rankOrder": 1 } ]
+    "reviewerComment": null,
+    "treatments": [ { "id": "uuid", "type": "CHEMICAL", "title": "…", "instructions": "…", "precautions": "…",
+                      "rankOrder": 1, "reason": null, "activeIngredientName": "Tricyclazole" } ],
+    "products": [ { "storeProductId": "uuid", "productId": "uuid", "name": "…", "sku": "…", "imageUrl": null,
+                    "reason": "Chứa hoạt chất Tricyclazole", "rankOrder": 1 } ]
   },
-  "inconclusive": { "comment": "Ảnh bị mờ, vui lòng chụp lại.", "hint": "RETAKE_PHOTO" }   // only INCONCLUSIVE
+  "inconclusive": null,
+  "canRetry": false
 }
 ```
 
-- Statuses reach the Farmer unchanged (`SUBMITTED`, `PROCESSING`, `AI_COMPLETED`, `UNDER_REVIEW`, `FAILED` all mean
-  "waiting"); the apps show one waiting state. **No AI field, no probability, no model name, ever** (D8).
-- `products` come from `recommendation_items` of the **current** review only, active and sellable at read time;
-  prices are the normal catalog prices (no price in this response, the app fetches the product).
+- `MyDiagnosisCaseListItem` gains `certainty`; `diseaseCode` / `diseaseName` are the predicted disease for
+  `AI_COMPLETED` (and 1.0 `UNDER_REVIEW`) and the final disease for 1.0 `VERIFIED`.
+- **No probability, margin, top-k, model or policy, ever** (D8).
+- Prices are the normal catalog prices (no price in this response, the app opens the product).
 - `POST` flow (D4): validate the image → `IFileStorageService.UploadAsync` → transaction 1 → AI call → transaction 2.
-  The response reflects the state after transaction 2: `AI_COMPLETED` (waiting) or `FAILED` (waiting, manual).
-- Cancel: allowed from SUBMITTED, PROCESSING, AI_COMPLETED, UNDER_REVIEW, FAILED (Domain `Cancel`).
+  The response reflects the state after transaction 2: `AI_COMPLETED` with a `result`, or `FAILED` with `canRetry`.
+- Cancel: allowed from SUBMITTED, PROCESSING, AI_COMPLETED, UNDER_REVIEW, FAILED (Domain `Cancel`); the apps offer it
+  only while the case is waiting or FAILED.
+- Disease content can be empty (it is entered by the store, §10): the apps show a fallback text.
 
 ---
 
-## 8. F5.5 — Reviewer API (`/api/diagnosis-cases`)
-
-Listing and reading a case need only the permission code. Every route that decides or changes a case (`start-review`,
-`review`, `rerun-ai`, recommendations) also needs D7 layer (b).
+## 8. F5.5 — Store API (`/api/diagnosis-cases`, read only)
 
 | Method | Route | Permission | Body / query | Response |
 |---|---|---|---|---|
-| GET | `/api/diagnosis-cases` | `DIAGNOSIS.READ` | `status`, `aiPassed`, `from`, `to`, `search` (case number, Farmer name or phone), paging; default sort `submittedAt` ascending | `200 PagedResult<DiagnosisCaseListItem>` |
+| GET | `/api/diagnosis-cases` | `DIAGNOSIS.READ` | `status`, `aiPassed`, `from`, `to`, `search` (case number, Farmer name or phone), paging; sort `submittedAt` descending | `200 PagedResult<DiagnosisCaseListItem>` |
 | GET | `/api/diagnosis-cases/{id}` | `DIAGNOSIS.READ` | — | `200 DiagnosisCaseResponse` |
-| POST | `/api/diagnosis-cases/{id}/start-review` | `DIAGNOSIS.START_REVIEW` | — | `200`, `AI_COMPLETED → UNDER_REVIEW` |
-| POST | `/api/diagnosis-cases/{id}/review` | `DIAGNOSIS.REVIEW` | `ReviewRequest` | `200 DiagnosisCaseResponse` |
-| POST | `/api/diagnosis-cases/{id}/rerun-ai` | `DIAGNOSIS.RERUN_AI` | — | `200`, or `503` when the AI Service is unreachable |
-| POST | `/api/diagnosis-cases/{id}/recommendations` | `DIAGNOSIS.RECOMMEND` | `RecommendationRequest` | `201` |
-| DELETE | `/api/diagnosis-cases/{id}/recommendations/{recommendationId}` | `DIAGNOSIS.UNRECOMMEND` | — | `204` (deactivates) |
+
+Removed in 2.0: `start-review`, `review`, `rerun-ai`, `recommendations` (POST and DELETE).
 
 ```json
-// ReviewRequest
-{ "decision": "CORRECTED", "finalDiseaseId": "uuid", "primaryAiInferenceId": "uuid", "comment": "…" }
-// RecommendationRequest — exactly one target
-{ "type": "TREATMENT", "diseaseTreatmentId": "uuid", "rankOrder": 1, "reason": "…" }
-{ "type": "PRODUCT",   "storeProductId": "uuid",      "rankOrder": 2, "reason": "…" }
-```
-
-```json
-// DiagnosisCaseResponse (reviewer view)
+// DiagnosisCaseResponse (store view)
 {
-  "id": "uuid", "caseNumber": "DG-…", "status": "AI_COMPLETED", "submittedAt": "…", "completedAt": null,
+  "id": "uuid", "caseNumber": "DG-…", "status": "AI_COMPLETED", "submittedAt": "…", "completedAt": "…",
   "farmer": { "farmerProfileId": "uuid", "fullName": "…", "phoneNumber": "…" },
   "farmerNote": "…", "finalDisease": null,
   "images": [ { "id": "uuid", "imageUrl": "https://…signed…", "isPrimary": true, "fileName": "…", "uploadedAt": "…" } ],
   "inferences": [ {
       "id": "uuid", "diagnosisImageId": "uuid", "status": "SUCCESS", "inferredAt": "…", "durationMs": 83,
-      "model": { "id": "uuid", "name": "agrisage-rice-classifier", "version": "0.1.0" },
-      "policy": { "id": "uuid", "version": "policy-1", "minimumConfidence": 0.80, "minimumMargin": 0.15, "topK": 3 },
+      "model": { "id": "uuid", "name": "agrisage-rice-classifier", "version": "0.2.0" },
+      "policy": { "id": "uuid", "version": "policy-2", "minimumConfidence": 0.77, "minimumMargin": 0.20, "topK": 3 },
       "predictedClassLabel": "LEAF_BLAST", "predictedDiseaseId": "uuid",
       "confidence": 0.842113, "margin": 0.7406, "passedPolicy": true,
       "topPredictions": [ { "classLabel": "LEAF_BLAST", "diseaseId": "uuid", "confidence": 0.842113 } ]
   } ],
+  "farmerResult": { "certainty": "CONFIDENT", "…": "exactly the Farmer's result block" },
   "currentReview": null,
   "reviewHistory": [],
   "recommendations": []
@@ -256,42 +269,24 @@ Listing and reading a case need only the permission code. Every route that decid
 ```
 
 - `topPredictions` is cut to the policy's `topK`; the full list stays in the database.
-- `review` rules (Domain `Review`, §35.12): CONFIRMED needs a SUCCESS inference and the final disease equal to the
-  inference's predicted disease; CORRECTED needs `finalDiseaseId`; INCONCLUSIVE has none. A case with no SUCCESS
-  inference (FAILED) can only be CORRECTED or INCONCLUSIVE. A new review supersedes the current one and deactivates
-  its recommendations; history is kept. `primaryAiInferenceId` defaults to the latest SUCCESS inference.
-- A re-review is two saves in one transaction (`ReleaseCurrentReview`, then `Review`): the database allows one current
-  review per case (`ux_agent_reviews_current`) while the old review points at its successor
-  (`superseded_by_review_id`), so a single INSERT/UPDATE batch cannot satisfy both.
-- `recommendations`: only on a VERIFIED case; PRODUCT must be active and sellable and is refused for the Healthy class
-  (`422`). Duplicate target on the same review → `409`.
-- `rerun-ai`: allowed from SUBMITTED or FAILED (Domain). Runs D4 again for the primary image and appends a new
-  immutable inference; earlier ones stay.
-- Audit actions: `DIAGNOSIS_CASE_CREATED`, `DIAGNOSIS_REVIEWED`, `DIAGNOSIS_RECOMMENDATION_ADDED`,
-  `DIAGNOSIS_RECOMMENDATION_REMOVED`, `AI_MODEL_ACTIVATED`, `AI_MODEL_RETIRED`, `AI_POLICY_ACTIVATED`,
-  `AI_POLICY_DEACTIVATED`, `STAFF_AI_REVIEW_CHANGED`.
-- Notifications to the Farmer come from the existing committed-notification worker
-  (`CommittedNotificationService.DiagnosisAsync`, entity type `DIAGNOSIS_CASE`, keys `diagnosis-ai:`, `diagnosis-review:`,
-  `diagnosis-recommendations:`): `AI_DIAGNOSIS_COMPLETED`, `DIAGNOSIS_REVIEWED` (VERIFIED and INCONCLUSIVE alike) and
-  `DIAGNOSIS_RECOMMENDATIONS`. The use cases write none themselves: an in-transaction notification as well gave the
-  Farmer two alerts per decision (found in the first end-to-end run on 2026-10-10). The worker only reports a review
-  made by a member who still has `can_review_ai`.
+- `currentReview`, `reviewHistory` and `recommendations` are filled only for cases decided under 1.0.
+- `aiPassed` matches the latest SUCCESS inference.
+- Audit actions: `DIAGNOSIS_CASE_CREATED` and `DIAGNOSIS_AI_RETRIED` (both with the suggested store product ids),
+  `AI_MODEL_ACTIVATED`, `AI_MODEL_RETIRED`, `AI_POLICY_ACTIVATED`, `AI_POLICY_DEACTIVATED`. The 1.0 actions
+  `DIAGNOSIS_REVIEWED`, `DIAGNOSIS_RECOMMENDATION_ADDED`, `DIAGNOSIS_RECOMMENDATION_REMOVED` and
+  `STAFF_AI_REVIEW_CHANGED` are no longer written.
+- Notifications to the Farmer come from the committed-notification worker (`CommittedNotificationService.DiagnosisAsync`,
+  entity type `DIAGNOSIS_CASE`, key `diagnosis-ai:{caseId}`): one `AI_DIAGNOSIS_COMPLETED` per case once a SUCCESS
+  inference exists ("Đã có kết quả chẩn đoán …"; a variant for an `UNCERTAIN` result). `DIAGNOSIS_REVIEWED` and
+  `DIAGNOSIS_RECOMMENDATIONS` are no longer sent. The use cases write none themselves.
 
 ---
 
-## 9. F5.6 — `can_review_ai`
+## 9. F5.6 — `can_review_ai` (retired in 2.0)
 
-| Method | Route | Permission | Body | Response |
-|---|---|---|---|---|
-| PUT | `/api/staff/{userId}/ai-review` | `STAFF.SET_AI_REVIEW` | `{ "enabled": true, "reason": "…" }` | `200 StaffResponse` |
-
-- Uses `StoreMember.GrantAiReview()` / `RevokeAiReview()`; audit `STAFF_AI_REVIEW_CHANGED` with old and new value
-  and the reason. Only for ACTIVE SALES_STAFF or STORE_OWNER members of the active store; Admin may target any.
-- `GET /api/auth/me` (`CurrentUserResponse`) gains `canReviewAi` so the web can show or hide the review screens.
-  `GET /api/me/permissions` is unchanged and lists permission codes.
-- `AiReviewer.EnsureAsync(ct)` (Application, shared by F5.5): resolves the caller's `StoreMember` for the active
-  store, `403` when missing, not ACTIVE or `CanReviewAi = false` (ADMIN included, see D7). The reviewer's
-  `store_members.id` becomes `agent_reviews.reviewer_member_id`.
+`PUT /api/staff/{userId}/ai-review` and `canReviewAi` in `GET /api/auth/me` and `StaffResponse` are removed. The column
+`store_members.can_review_ai` and the Domain methods `GrantAiReview` / `RevokeAiReview` stay (no migration); nothing
+reads them.
 
 ---
 
@@ -306,29 +301,34 @@ Listing and reading a case need only the permission code. Every route that decid
 | POST | `/api/disease-treatments/{id}/activate` | `DISEASE_TREATMENTS.ACTIVATE` | — | `200` |
 | DELETE | `/api/disease-treatments/{id}` | `DISEASE_TREATMENTS.DEACTIVATE` | — | `204` (deactivate, D11) |
 
-`treatmentType`: `CULTURAL`, `CHEMICAL`, `PREVENTIVE`, `OTHER`. Reference data is entered through these routes; it is
-not seeded (`SEED_REFERENCE_DATA.md`).
+`treatmentType`: `CULTURAL`, `CHEMICAL`, `PREVENTIVE`, `OTHER`. `activeIngredientId` must be an **active** ingredient.
+Reference data is entered through these routes; it is not seeded (`SEED_REFERENCE_DATA.md`). In 2.0 this content is
+what every Farmer reads directly, and a treatment's active ingredient drives the product suggestions (D13): enter only
+content checked by someone who knows rice diseases. Products get their ingredients through
+`PUT /api/products/{id}/ingredients`.
 
 ---
 
-## 11. Permission catalog additions
+## 11. Permission codes
 
-Added to `PermissionCatalog.Entries` (stable ids) **and** to `PermissionEndpointMap.Codes` for every action — an
-action without a code fails closed with `403`, and the coverage test rejects omissions.
+Every action needs a code in `PermissionEndpointMap.Codes` (an action without a code fails closed with `403`, and the
+coverage test rejects omissions) and the code must exist in `PermissionCatalog.Entries`.
 
-| Module | Codes | Delegable | Default roles |
-|---|---|---|---|
-| `MY_DIAGNOSIS` | `CREATE`, `READ`, `CANCEL` | no | FARMER |
-| `DIAGNOSIS` | `READ`, `START_REVIEW`, `REVIEW`, `RERUN_AI`, `RECOMMEND`, `UNRECOMMEND` | yes | ADMIN, STORE_OWNER, SALES_STAFF (D7: the flag decides who may act) |
-| `AI_MODELS` | `READ`, `CREATE`, `ACTIVATE`, `RETIRE` | no | ADMIN, STORE_OWNER |
-| `AI_POLICIES` | `READ`, `CREATE`, `ACTIVATE`, `DEACTIVATE` | no | ADMIN, STORE_OWNER |
-| `DISEASES` | `READ` (+ SALES_STAFF), `UPDATE` | no | ADMIN, STORE_OWNER |
-| `DISEASE_TREATMENTS` | `CREATE`, `UPDATE`, `ACTIVATE`, `DEACTIVATE` | no | ADMIN, STORE_OWNER |
-| `STAFF` | `SET_AI_REVIEW` | no | ADMIN, STORE_OWNER |
+| Module | Codes in use | Default roles |
+|---|---|---|
+| `MY_DIAGNOSIS` | `CREATE` (create and retry), `READ`, `CANCEL` | FARMER, not delegable |
+| `DIAGNOSIS` | `READ` | ADMIN, STORE_OWNER, SALES_STAFF, delegable |
+| `AI_MODELS` | `READ`, `CREATE`, `ACTIVATE`, `RETIRE` | ADMIN, STORE_OWNER |
+| `AI_POLICIES` | `READ`, `CREATE`, `ACTIVATE`, `DEACTIVATE` | ADMIN, STORE_OWNER |
+| `DISEASES` | `READ` (+ SALES_STAFF), `UPDATE` | ADMIN, STORE_OWNER |
+| `DISEASE_TREATMENTS` | `CREATE`, `UPDATE`, `ACTIVATE`, `DEACTIVATE` | ADMIN, STORE_OWNER |
 
-Controller and action names that key the map: `MeDiagnosisCases.{Create,List,Get,Cancel}`,
-`DiagnosisCases.{List,Get,StartReview,Review,RerunAi,Recommend,Unrecommend}`, `AiModels.*`, `AiPolicies.*`,
-`Diseases.*`, `DiseaseTreatments.*`, `Staff.SetAiReview`.
+**Retired codes** (kept in the catalog because it is seeded with `HasData`; marked retired in code and hidden from
+`GET /api/permissions/catalog` and the member permission screens): `DIAGNOSIS.START_REVIEW`, `DIAGNOSIS.REVIEW`,
+`DIAGNOSIS.RERUN_AI`, `DIAGNOSIS.RECOMMEND`, `DIAGNOSIS.UNRECOMMEND`, `STAFF.SET_AI_REVIEW`.
+
+Controller and action names that key the map: `MeDiagnosisCases.{Create,List,Get,Cancel,Retry}`,
+`DiagnosisCases.{List,Get}`, `AiModels.*`, `AiPolicies.*`, `Diseases.*`, `DiseaseTreatments.*`.
 
 ---
 
@@ -338,13 +338,12 @@ Controller and action names that key the map: `MeDiagnosisCases.{Create,List,Get
   `appsettings.Local.json` (or user secrets): `AiService:ApiKey`. `Mode=Simulated` (Development only) answers with
   deterministic made-up predictions flagged `stub`; register a model whose version is `AiService:SimulatedModelVersion`
   (default `simulated`). Outside Development a `stub` answer is refused (D10).
-- `/api/auth/me` `canReviewAi` is true for an ACTIVE store member with the flag.
-- Migration `AiDiagnosisPermissions` (data only: the new `permissions` rows, plus `role_permissions` defaults
-  through `PermissionSeeder`). Review it as a data migration: no schema operation is expected.
-- Supabase: create the private bucket `diagnosis-images` and set `Storage:DiagnosisImageBucket`. The service key
-  already configured is reused.
+- Migration `AiDiagnosisPermissions` (1.0, data only) is the last one for this flow; 2.0 needs none.
+- Supabase: the private bucket `diagnosis-images`; the service key already configured is reused.
 - Retention of diagnosis photos is not defined in the documents: until decided, photos are kept.
 - Health: the backend does not call `/health` on a schedule; a failing AI Service shows up as `FAILED` cases.
+- Release: the backend, the store web and the Farmer app must go out together (an old web calls removed routes; an
+  old app waits forever for a reviewer).
 
 ---
 
@@ -355,18 +354,17 @@ Controller and action names that key the map: `MeDiagnosisCases.{Create,List,Get
 | F5.1 | field mapping for a normal answer; unreachable / timeout / 5xx / bad JSON → `AiServiceUnavailableException`; unknown label, version mismatch and `stub` are FAILED inferences; `Simulated` refused outside Development; the API key is never logged |
 | F5.2 | `classLabels` set equality (missing, extra, duplicate → 422); one ACTIVE model after two activations; overlapping policy → 422; activation needs an ACTIVE model; 409 on duplicates |
 | F5.3 | bucket mapping for `DiagnosisImages`; signed URL only for a case's own image; oversized / wrong type → 400 |
-| F5.4 | 401 / 403 (not FARMER); another Farmer's case → 404; case saved before the AI call; AI down → `FAILED`, photo kept; two transactions, none open across the HTTP call; response never contains probabilities; cancel states |
-| F5.5 | role + permission + `can_review_ai` matrix (Farmer, Delivery, Sales without flag → 403, Sales with flag, Owner, Admin); passed-policy computed with margin; CONFIRMED vs predicted disease; FAILED → manual CORRECTED; re-review supersedes and deactivates recommendations; PRODUCT refused for Healthy; Farmer notified once (dedup); `rerun-ai` appends an inference |
-| F5.6 | grant / revoke audited; `canReviewAi` in `/api/auth/me`; revoked reviewer is refused on the next call without re-login |
-| F5.7 | `code` and healthy flag immutable; DELETE deactivates; deactivated treatment not recommendable |
-| all | every new action is in `PermissionEndpointMap` (coverage test), Swagger lists the routes, `[RealDbFact]` end-to-end case → inference → review → recommendation, rolled back |
+| F5.4 | 401 / 403 (not FARMER); another Farmer's case → 404; case saved before the AI call; AI down → `FAILED`, photo kept; CONFIDENT result right in the create response with treatments and ingredient-matched products, excluding inactive, unsellable, other-store, non-ACTIVE and deleted products; UNCERTAIN result without CHEMICAL treatments and products; Healthy without products; response never contains a probability or a model name; retry: 503 records nothing, success completes the case, 422 on a completed case; 1.0 VERIFIED / INCONCLUSIVE / UNDER_REVIEW cases still readable; cancel states |
+| F5.5 | read without any review right; `farmerResult` equals the Farmer's result; removed routes answer 404/405; `aiPassed` and the newest-first order |
+| F5.7 | `code` and healthy flag immutable; DELETE deactivates; an inactive ingredient is refused on a treatment |
+| all | every action is in `PermissionEndpointMap` (coverage test), Swagger lists the routes, retired codes hidden from the catalog route, `[RealDbFact]` end-to-end case → inference → result, rolled back; one `AI_DIAGNOSIS_COMPLETED` per case |
 
 ---
 
 ## 14. Open points for the lead
 
-1. Create the data-only migration `AiDiagnosisPermissions` (§12) — one migration at a time, announce first.
-2. Create the private Supabase bucket `diagnosis-images`.
-3. Confirm D7 (two layers) and that D2 (a failed policy still goes to the queue) is accepted over AC-03 of the AI
-   master document, which should then be corrected.
-4. Retention period for diagnosis photos.
+1. Retention period for diagnosis photos.
+2. Disease content, ingredients and product links in agrisage-dev must be entered and checked by someone who knows
+   rice diseases before a demo (D13 suggests pesticides with no human in between).
+3. Correct the AI master document (`AgriSage_AI_Disease_Diagnosis_Master_v2.0.md`, Agent Review and AC-03/AC-05) and
+   the use-case diagrams to the 2.0 flow.

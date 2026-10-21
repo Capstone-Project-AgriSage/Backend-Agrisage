@@ -49,7 +49,7 @@ Dùng constructor `new Role(RoleCode, name, description)`. `RoleCode` lưu ở D
 | Admin | `ADMIN` | Admin |
 
 `name` có thể đổi sang tiếng Việt nếu team muốn. Cần xác nhận (mục 7).
-AI reviewer là quyền `can_review_ai`, **không** phải role riêng (không tạo role AI reviewer).
+Không có role AI reviewer. Từ 21/10/2026 không còn bước duyệt AI; cột `can_review_ai` giữ lại nhưng không còn tác dụng.
 
 ### 4.2 Units
 

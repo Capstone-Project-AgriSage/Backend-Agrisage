@@ -119,7 +119,7 @@ Orders created before this event was added are not backfilled automatically. No 
 | Return approved, rejected, cancelled, inspected; refund completed, failed, cancelled | — | — | Own order |
 | Credit limit changed | Yes | — | Own credit profile |
 | Persisted successful AI result | — | — | Own diagnosis |
-| Current authorized human review / approved recommendations | — | — | Own diagnosis |
+| ~~Current authorized human review / approved recommendations~~ (no Human Review since 2026-10-21) | — | — | — |
 
 Recipients must have active accounts and active, non-deleted primary roles. Staff must be active
 members of the event's store; delivery assignments still target the assigned active member. Missing,
@@ -133,8 +133,9 @@ records without a notification to be delivered. It never posts stock, invokes AI
 These alerts require real persisted results. The diagnosis APIs exist (`AI_DIAGNOSIS.md`); an alert
 carries `entityType = DIAGNOSIS_CASE` and the case id so a client can open `GET /api/me/diagnosis-cases/{id}`.
 The diagnosis use cases do not write notifications themselves, only this worker does (one alert per decision).
-Recommendations require a current verified review by an active member with `can_review_ai`, and
-approval by an active authorized reviewer. Raw AI output never creates product recommendations.
+Since 2026-10-21 (`AI_DIAGNOSIS.md` 2.0) there is no Human Review: the only diagnosis alert is
+`AI_DIAGNOSIS_COMPLETED`, one per case once a successful inference exists; review and recommendation alerts
+are no longer sent.
 Debt reminders and inventory alerts must be enabled; they do not mutate inventory/debt ledgers.
 
 ## Background operations

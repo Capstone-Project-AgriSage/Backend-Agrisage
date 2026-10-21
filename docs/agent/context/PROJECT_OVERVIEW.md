@@ -8,7 +8,7 @@ AgriSage is an agricultural-input store management and advisory system combining
 - retail/counter and Farmer orders;
 - payment, credit, accounts receivable, delivery and debt collection;
 - return/refund tracking;
-- AI-assisted rice disease diagnosis with Human Review.
+- AI-assisted rice disease diagnosis shown directly to the Farmer (CONFIDENT / UNCERTAIN; no Human Review since 2026-10-21).
 
 ## Human Roles
 
@@ -19,8 +19,8 @@ Primary roles:
 4. DELIVERY_STAFF
 5. ADMIN
 
-AI Reviewer is not a sixth role.
-Review capability is granted to eligible Store Members through `can_review_ai`.
+AI Reviewer is not a sixth role. Since 2026-10-21 there is no AI review at all; the `can_review_ai`
+membership flag is kept in the schema and has no effect.
 
 ## Main Applications
 
