@@ -70,7 +70,7 @@ a migration) and are hidden from the permission screens (§11).
 | D10 | **Model identity is checked.** An answer whose `model_version` differs from the ACTIVE model's `version`, or that has `stub = true` outside Development, is recorded as a FAILED inference (`raw_output.error = MODEL_VERSION_MISMATCH` / `STUB_REFUSED`), never as a result. |
 | D11 | **DELETE is semantic.** Cases are cancelled, treatments deactivated. No route removes an inference. |
 | D12 | **Case numbers** are `DG-yyyyMMdd-NNNN` (append `DG` to `DocumentNumbers`). |
-| D13 | **Suggested products are matched by active ingredient and computed at read time.** Ingredients = the active ingredients (active) of the predicted disease's active treatments. Products = store products of the active store that the public catalog sells (`CatalogRules.Sellable`: store product active and sellable, product ACTIVE, not deleted) and whose product has one of those ingredients (`product_active_ingredients`). Order: best matching treatment priority, then more matched ingredients, then name; at most 5; `reason` = "Chứa hoạt chất …". Nothing is stored in `recommendation_items` (it needs a review); the suggested ids are written to the audit entry of the create / retry so what was suggested can be traced. |
+| D13 | **Suggested products are matched by active ingredient and computed at read time.** Ingredients = the active ingredients (active) of the predicted disease's active treatments. Products = store products of the active store that the public catalog sells (`CatalogRules.Sellable`: store product active and sellable, product ACTIVE, not deleted) and whose product has one of those ingredients (`product_active_ingredients`). Order: best matching treatment priority, then more matched ingredients, then name; at most 5; `reason` = "Chứa hoạt chất …". Nothing is stored in `recommendation_items` (it needs a review); each successful AI run writes a `DIAGNOSIS_AI_RESULT` audit entry with the certainty and the suggested store product ids, so what was suggested can be traced. |
 | D14 | **The Farmer retries a failed analysis.** `retry` is allowed on a `FAILED` case, or a `SUBMITTED` case older than two minutes (D4 crash). It reruns the AI on the primary image with the active model; an unreachable AI Service gives `503` and records nothing. The store has no rerun any more. |
 | D15 | **Cases decided under 1.0 stay readable.** `VERIFIED` shows the reviewer's final disease and the stored recommendations of the current review (`certainty = VERIFIED`); `INCONCLUSIVE` keeps its comment and retake hint; an old `UNDER_REVIEW` case reads like `AI_COMPLETED`. No status is added or removed (the status check constraint stays). |
 
@@ -271,8 +271,8 @@ Removed in 2.0: `start-review`, `review`, `rerun-ai`, `recommendations` (POST an
 - `topPredictions` is cut to the policy's `topK`; the full list stays in the database.
 - `currentReview`, `reviewHistory` and `recommendations` are filled only for cases decided under 1.0.
 - `aiPassed` matches the latest SUCCESS inference.
-- Audit actions: `DIAGNOSIS_CASE_CREATED` and `DIAGNOSIS_AI_RETRIED` (both with the suggested store product ids),
-  `AI_MODEL_ACTIVATED`, `AI_MODEL_RETIRED`, `AI_POLICY_ACTIVATED`, `AI_POLICY_DEACTIVATED`. The 1.0 actions
+- Audit actions: `DIAGNOSIS_CASE_CREATED`, `DIAGNOSIS_AI_RETRIED`, `DIAGNOSIS_AI_RESULT` (each successful AI run:
+  certainty, disease code, suggested store product ids), `DIAGNOSIS_CASE_CANCELLED`, `AI_MODEL_ACTIVATED`, `AI_MODEL_RETIRED`, `AI_POLICY_ACTIVATED`, `AI_POLICY_DEACTIVATED`. The 1.0 actions
   `DIAGNOSIS_REVIEWED`, `DIAGNOSIS_RECOMMENDATION_ADDED`, `DIAGNOSIS_RECOMMENDATION_REMOVED` and
   `STAFF_AI_REVIEW_CHANGED` are no longer written.
 - Notifications to the Farmer come from the committed-notification worker (`CommittedNotificationService.DiagnosisAsync`,

@@ -4958,8 +4958,8 @@ Recommended indexes:
 Stores final treatment/product recommendations attached to the current verified Human Review.
 
 > Not written since 2026-10-21: suggestions for a CONFIDENT AI result are computed at read time from the flow below
-> (without the reviewer step) and their store product ids are recorded in the case's audit entry. Kept for the cases
-> reviewed before.
+> (without the reviewer step) and their store product ids are recorded in a `DIAGNOSIS_AI_RESULT` audit entry. Kept
+> for the cases reviewed before.
 
 ```text
 recommendation_items

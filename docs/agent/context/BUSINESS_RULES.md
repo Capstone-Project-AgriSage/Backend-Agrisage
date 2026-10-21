@@ -62,7 +62,7 @@ Use this summary for navigation. For exact schema implications, open the relevan
 57. Return value = returned base quantity × original unit price ÷ conversion, rounded AwayFromZero to 2 decimals (the only rounded computed money amount).
 58. Inspection fixes the disposition: RESELLABLE → RESTOCK; DAMAGED/EXPIRED/UNUSABLE → WRITE_OFF. Settlement: debt adjustment + refund = total return value; refunds never exceed the refund total.
 59. A Diagnosis Case that FAILED (or stayed SUBMITTED after a crash) can be retried by its Farmer; a retry appends a new inference, earlier ones stay. Cases reviewed before 2026-10-21 (VERIFIED / INCONCLUSIVE) keep their review and stay readable; no new review is created.
-60. `recommendation_items` are no longer written (they need a review); suggestions are computed, and the suggested store product ids are recorded in the audit entry of the case's create / retry. A Healthy result gets treatment guidance only, no product. `requires_human_review` is stored and ignored.
+60. `recommendation_items` are no longer written (they need a review); suggestions are computed, and the suggested store product ids are recorded in a `DIAGNOSIS_AI_RESULT` audit entry for each successful AI run. A Healthy result gets treatment guidance only, no product. `requires_human_review` is stored and ignored.
 61. Audit Logs are append-only: never updated or deleted.
 
 ## Financial / Inventory Invariants
