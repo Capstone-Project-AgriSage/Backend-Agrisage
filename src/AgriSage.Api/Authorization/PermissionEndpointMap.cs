@@ -289,13 +289,10 @@ public static class PermissionEndpointMap
         ["MeDiagnosisCases.List"] = "MY_DIAGNOSIS.READ",
         ["MeDiagnosisCases.Get"] = "MY_DIAGNOSIS.READ",
         ["MeDiagnosisCases.Cancel"] = "MY_DIAGNOSIS.CANCEL",
+        // A retry runs the AI again, like creating the case (AI_DIAGNOSIS.md 2.0, section 11): no new code, no migration.
+        ["MeDiagnosisCases.Retry"] = "MY_DIAGNOSIS.CREATE",
         ["DiagnosisCases.List"] = "DIAGNOSIS.READ",
         ["DiagnosisCases.Get"] = "DIAGNOSIS.READ",
-        ["DiagnosisCases.StartReview"] = "DIAGNOSIS.START_REVIEW",
-        ["DiagnosisCases.Review"] = "DIAGNOSIS.REVIEW",
-        ["DiagnosisCases.RerunAi"] = "DIAGNOSIS.RERUN_AI",
-        ["DiagnosisCases.Recommend"] = "DIAGNOSIS.RECOMMEND",
-        ["DiagnosisCases.Unrecommend"] = "DIAGNOSIS.UNRECOMMEND",
         ["AiModels.List"] = "AI_MODELS.READ",
         ["AiModels.Get"] = "AI_MODELS.READ",
         ["AiModels.Create"] = "AI_MODELS.CREATE",
@@ -311,7 +308,6 @@ public static class PermissionEndpointMap
         ["DiseaseTreatments.Update"] = "DISEASE_TREATMENTS.UPDATE",
         ["DiseaseTreatments.Activate"] = "DISEASE_TREATMENTS.ACTIVATE",
         ["DiseaseTreatments.Delete"] = "DISEASE_TREATMENTS.DEACTIVATE",
-        ["Staff.SetAiReview"] = "STAFF.SET_AI_REVIEW",
     };
     public static string? CodeFor(ControllerActionDescriptor action) => Codes.GetValueOrDefault(action.ControllerName + "." + action.ActionName);
     public static bool IsException(ControllerActionDescriptor action) => IdentityAndPublicControllers.Contains(action.ControllerName)

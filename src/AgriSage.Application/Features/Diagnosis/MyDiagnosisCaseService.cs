@@ -4,6 +4,7 @@ using AgriSage.Application.Common.Interfaces;
 using AgriSage.Application.Common.Models;
 using AgriSage.Application.Features.Customers;
 using AgriSage.Application.Features.Files;
+using AgriSage.Domain.Features.Diagnosis;
 using AgriSage.Domain.Features.Diagnosis.Entities;
 using AgriSage.Domain.Features.Diagnosis.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -15,13 +16,16 @@ namespace AgriSage.Application.Features.Diagnosis;
 // The Farmer's own diagnosis cases (/api/me/diagnosis-cases). Identity comes from the JWT; another Farmer's case is 404.
 //
 // Create (AI_DIAGNOSIS.md D4): upload the photo, commit the case (SUBMITTED), call the AI with no transaction open, then
-// record the inference (DiagnosisAiRunner). The Farmer only ever sees a verified result (D8).
+// record the inference (DiagnosisAiRunner). The answer already carries the AI result (2.0, no Human Review): a disease
+// and a certainty, never a probability (D8). A failed analysis is retried by the Farmer (D14).
 public sealed class MyDiagnosisCaseService(
     IAgriSageDbContext context,
     CurrentFarmer currentFarmer,
     IFileStorageService storage,
+    IPrivateFileStore privateFiles,
     IDateTimeProvider clock,
     DiagnosisAiRunner runner,
+    DiagnosisResultBuilder results,
     DiagnosisImageUrls imageUrls,
     AuditTrail audit,
     ILogger<MyDiagnosisCaseService> logger) : IMyDiagnosisCaseService
@@ -99,16 +103,38 @@ public sealed class MyDiagnosisCaseService(
                 c.Status,
                 c.SubmittedAt,
                 c.CompletedAt,
-                // The disease is shown only once a reviewer verified it.
-                Code = c.Status == DiagnosisCaseStatus.Verified && c.FinalDisease != null ? c.FinalDisease.Code : null,
-                Name = c.Status == DiagnosisCaseStatus.Verified && c.FinalDisease != null ? c.FinalDisease.Name : null
+                FinalCode = c.FinalDisease != null ? c.FinalDisease.Code : null,
+                FinalName = c.FinalDisease != null ? c.FinalDisease.Name : null
             })
             .ToListAsync(cancellationToken);
 
-        var items = rows
-            .Select(r => new MyDiagnosisCaseListItem(
-                r.Id, r.CaseNumber, EnumText.Format(r.Status), r.SubmittedAt, r.CompletedAt, r.Code, r.Name))
-            .ToList();
+        var latest = await results.LatestAsync(rows.Select(r => r.Id).ToList(), cancellationToken);
+        var diseases = (await context.Diseases.AsNoTracking().Select(d => new { d.Id, d.Code, d.Name }).ToListAsync(cancellationToken))
+            .ToDictionary(d => d.Id);
+
+        var items = rows.Select(r =>
+        {
+            var inference = latest.GetValueOrDefault(r.Id);
+            var certainty = DiagnosisResultPolicy.CertaintyOf(r.Status, inference?.PassedPolicy);
+            string? code = null;
+            string? name = null;
+
+            if (certainty == DiagnosisCertainty.Verified)
+            {
+                code = r.FinalCode;
+                name = r.FinalName;
+            }
+            else if (certainty is not null && inference?.PredictedDiseaseId is { } diseaseId
+                && diseases.TryGetValue(diseaseId, out var disease))
+            {
+                code = disease.Code;
+                name = disease.Name;
+            }
+
+            return new MyDiagnosisCaseListItem(
+                r.Id, r.CaseNumber, EnumText.Format(r.Status), r.SubmittedAt, r.CompletedAt, code, name,
+                code is null || certainty is null ? null : EnumText.Format(certainty.Value));
+        }).ToList();
 
         return new PagedResult<MyDiagnosisCaseListItem>(items, request.Page, request.PageSize, total);
     }
@@ -123,23 +149,17 @@ public sealed class MyDiagnosisCaseService(
             ?? throw new NotFoundException("Diagnosis case", id);
 
         var images = await imageUrls.ForAsync(diagnosisCase.Images, cancellationToken);
-        DiagnosisResultResponse? result = null;
+        var result = await results.ForCaseAsync(id, diagnosisCase.Status, diagnosisCase.FinalDisease, cancellationToken);
         DiagnosisInconclusiveResponse? inconclusive = null;
 
-        if (diagnosisCase.Status is DiagnosisCaseStatus.Verified or DiagnosisCaseStatus.Inconclusive)
+        // Decided INCONCLUSIVE by a reviewer before 2.0: the comment and a retake hint stay readable (D15).
+        if (diagnosisCase.Status == DiagnosisCaseStatus.Inconclusive)
         {
-            var review = await context.AgentReviews.AsNoTracking()
+            var comment = await context.AgentReviews.AsNoTracking()
                 .Where(r => r.DiagnosisCaseId == id && r.IsCurrent)
+                .Select(r => r.Comment)
                 .FirstOrDefaultAsync(cancellationToken);
-
-            if (diagnosisCase.Status == DiagnosisCaseStatus.Verified && review is not null && diagnosisCase.FinalDisease is { } disease)
-            {
-                result = await BuildResultAsync(id, review, disease, cancellationToken);
-            }
-            else if (diagnosisCase.Status == DiagnosisCaseStatus.Inconclusive)
-            {
-                inconclusive = new DiagnosisInconclusiveResponse(review?.Comment, "RETAKE_PHOTO");
-            }
+            inconclusive = new DiagnosisInconclusiveResponse(comment, "RETAKE_PHOTO");
         }
 
         return new MyDiagnosisCaseResponse(
@@ -151,7 +171,8 @@ public sealed class MyDiagnosisCaseService(
             diagnosisCase.FarmerNote,
             images.FirstOrDefault(),
             result,
-            inconclusive);
+            inconclusive,
+            DiagnosisResultPolicy.CanRetry(diagnosisCase.Status, diagnosisCase.SubmittedAt, clock.UtcNow));
     }
 
     public async Task<MyDiagnosisCaseResponse> CancelAsync(Guid id, CancelDiagnosisRequest request, CancellationToken cancellationToken)
@@ -172,46 +193,44 @@ public sealed class MyDiagnosisCaseService(
         return await GetAsync(id, cancellationToken);
     }
 
-    private async Task<DiagnosisResultResponse> BuildResultAsync(
-        Guid caseId, AgentReview review, Disease disease, CancellationToken cancellationToken)
+    public async Task<MyDiagnosisCaseResponse> RetryAsync(Guid id, CancellationToken cancellationToken)
     {
-        var items = await context.RecommendationItems.AsNoTracking()
-            .Include(r => r.DiseaseTreatment)
-            .Include(r => r.StoreProduct).ThenInclude(p => p!.Product)
-            .Where(r => r.DiagnosisCaseId == caseId && r.AgentReviewId == review.Id && r.IsActive)
-            .OrderBy(r => r.RankOrder).ThenBy(r => r.ApprovedAt)
-            .ToListAsync(cancellationToken);
+        var farmer = await currentFarmer.GetAsync(cancellationToken);
+        var storeId = await ActiveStore.GetIdAsync(context, cancellationToken);
+        var found = await context.DiagnosisCases.AsNoTracking()
+                .Where(c => c.Id == id && c.FarmerProfileId == farmer.FarmerProfileId)
+                .Select(c => new
+                {
+                    c.Status,
+                    c.SubmittedAt,
+                    Photo = c.Images.Where(i => i.DeletedAt == null)
+                        .OrderByDescending(i => i.IsPrimary)
+                        .Select(i => new { i.StorageKey, i.MimeType })
+                        .FirstOrDefault()
+                })
+                .FirstOrDefaultAsync(cancellationToken)
+            ?? throw new NotFoundException("Diagnosis case", id);
 
-        var treatments = items
-            .Where(r => r is { RecommendationType: RecommendationType.Treatment, DiseaseTreatment: { IsActive: true } })
-            .Select(r => new TreatmentResponse(
-                r.DiseaseTreatment!.Id,
-                EnumText.Format(r.DiseaseTreatment.TreatmentType),
-                r.DiseaseTreatment.Title,
-                r.DiseaseTreatment.Instructions,
-                r.DiseaseTreatment.Precautions,
-                r.RankOrder,
-                r.Reason))
-            .ToList();
+        if (!DiagnosisResultPolicy.CanRetry(found.Status, found.SubmittedAt, clock.UtcNow))
+        {
+            throw new BusinessRuleException("Only a case whose analysis failed can be analysed again.");
+        }
 
-        // Only what can still be bought today: the catalog may have changed since the review.
-        var products = items
-            .Where(r => r is { RecommendationType: RecommendationType.Product, StoreProduct: { IsActive: true, IsSellable: true } })
-            .Select(r => new RecommendedProductResponse(
-                r.StoreProduct!.Id,
-                r.StoreProduct.ProductId,
-                r.StoreProduct.Product.Name,
-                r.StoreProduct.StoreSku ?? r.StoreProduct.Product.Sku,
-                r.StoreProduct.Product.ImageUrl,
-                r.Reason,
-                r.RankOrder))
-            .ToList();
+        var photo = found.Photo ?? throw new BusinessRuleException("The case has no photo to analyse.");
+        var bytes = await privateFiles.ReadAsync(photo.StorageKey, StorageArea.DiagnosisImages, cancellationToken);
+        var contentType = photo.MimeType ?? ImageRules.ContentTypeOf(photo.StorageKey) ?? "image/jpeg";
 
-        return new DiagnosisResultResponse(
-            new DiseaseSummary(disease.Id, disease.Code, disease.Name, disease.IsHealthyClass, disease.Symptoms, disease.Prevention),
-            review.Comment,
-            treatments,
-            products);
+        // An unreachable AI Service throws (503) and records nothing, so retrying while it is down piles up no FAILED rows.
+        await runner.RunAsync(id, bytes, contentType, "photo", cancellationToken, failWhenUnavailable: true);
+
+        var after = await context.DiagnosisCases.AsNoTracking()
+            .Where(c => c.Id == id).Select(c => c.Status).FirstAsync(cancellationToken);
+        audit.Record(
+            "DIAGNOSIS_AI_RETRIED", "DIAGNOSIS_CASE", id, storeId,
+            new { Status = EnumText.Format(found.Status) }, new { Status = EnumText.Format(after) });
+        await context.SaveChangesAsync(cancellationToken);
+
+        return await GetAsync(id, cancellationToken);
     }
 
     // A display name only: no path, no control characters, bounded.

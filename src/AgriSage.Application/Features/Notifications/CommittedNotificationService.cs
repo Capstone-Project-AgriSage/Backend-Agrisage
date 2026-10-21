@@ -37,9 +37,10 @@ public sealed class CommittedNotificationService(IAgriSageDbContext context, Not
         await context.SaveChangesAsync(token);
     }
 
+    // One alert per case once its AI result exists (AI_DIAGNOSIS.md 2.0, section 8). There is no Human Review any more, so
+    // no review or recommendation alert; the text differs when the AI was not sure (D2).
     public async Task DiagnosisAsync(int batchSize, CancellationToken token)
     {
-        var store = await ActiveStore.GetIdAsync(context, token);
         var cases = context.DiagnosisCases.AsNoTracking().Where(c => c.FarmerProfile.User.Status == UserStatus.Active
             && c.FarmerProfile.User.Role.IsActive);
         var ai = await cases.Where(c => (c.Status == DiagnosisCaseStatus.AiCompleted || c.Status == DiagnosisCaseStatus.UnderReview
@@ -48,38 +49,24 @@ public sealed class CommittedNotificationService(IAgriSageDbContext context, Not
             && !context.Notifications.IgnoreQueryFilters().Any(n => n.UserId == c.FarmerProfile.UserId
                 && n.DeduplicationKey == "diagnosis-ai:" + c.Id.ToString()))
             .OrderBy(c => c.SubmittedAt).ThenBy(c => c.Id).Take(batchSize)
-            .Select(c => new { c.Id, c.CaseNumber, c.FarmerProfile.UserId }).ToListAsync(token);
+            .Select(c => new
+            {
+                c.Id,
+                c.CaseNumber,
+                c.FarmerProfile.UserId,
+                Passed = context.AiInferences
+                    .Where(i => i.DiagnosisCaseId == c.Id && i.Status == AiInferenceStatus.Success)
+                    .OrderByDescending(i => i.InferredAt).ThenByDescending(i => i.Id)
+                    .Select(i => (bool?)i.PassedPolicy)
+                    .FirstOrDefault()
+            })
+            .ToListAsync(token);
         foreach (var row in ai)
-            await writer.AddAsync([row.UserId], "AI_DIAGNOSIS_COMPLETED", "Đã có kết quả AI chẩn đoán",
-                $"Hồ sơ {row.CaseNumber} đã có kết quả AI. Kết quả cần chuyên gia xét duyệt trước khi sử dụng khuyến nghị điều trị.",
+            await writer.AddAsync([row.UserId], "AI_DIAGNOSIS_COMPLETED", "Đã có kết quả chẩn đoán",
+                row.Passed == true
+                    ? $"Hồ sơ {row.CaseNumber} đã có kết quả chẩn đoán từ AI. Mở để xem bệnh và cách xử lý."
+                    : $"Hồ sơ {row.CaseNumber}: AI chưa chắc chắn về bệnh. Mở để xem gợi ý; nên chụp lại ảnh rõ hơn hoặc hỏi cửa hàng.",
                 $"diagnosis-ai:{row.Id}", "DIAGNOSIS_CASE", row.Id, token);
-
-        var authorized = context.StoreMembers.AsNoTracking().Where(m => m.StoreId == store && m.Status == StoreMemberStatus.Active
-            && m.CanReviewAi && m.User.Status == UserStatus.Active && m.User.Role.IsActive);
-        var reviews = from r in context.AgentReviews.AsNoTracking()
-                      join c in cases on r.DiagnosisCaseId equals c.Id
-                      where r.IsCurrent && authorized.Any(m => m.Id == r.ReviewerMemberId)
-                          && (c.Status == DiagnosisCaseStatus.Verified || c.Status == DiagnosisCaseStatus.Inconclusive)
-                      select new { ReviewId = r.Id, CaseId = c.Id, c.CaseNumber, c.FarmerProfile.UserId, r.Decision, c.Status };
-        var reviewed = await reviews.Where(r => !context.Notifications.IgnoreQueryFilters().Any(n => n.UserId == r.UserId
-                && n.DeduplicationKey == "diagnosis-review:" + r.ReviewId.ToString()))
-            .OrderBy(r => r.ReviewId).Take(batchSize).ToListAsync(token);
-        foreach (var row in reviewed)
-            await writer.AddAsync([row.UserId], "DIAGNOSIS_REVIEWED", "Chuyên gia đã xét duyệt chẩn đoán",
-                $"Hồ sơ {row.CaseNumber} đã được xét duyệt. Vui lòng xem kết luận và hướng dẫn của chuyên gia.",
-                $"diagnosis-review:{row.ReviewId}", "DIAGNOSIS_CASE", row.CaseId, token);
-
-        var recommended = await reviews.Where(r => r.Status == DiagnosisCaseStatus.Verified
-            && (r.Decision == AgentReviewDecision.Confirmed || r.Decision == AgentReviewDecision.Corrected)
-            && context.RecommendationItems.Any(i => i.AgentReviewId == r.ReviewId && i.DiagnosisCaseId == r.CaseId && i.IsActive
-                && authorized.Any(m => m.UserId == i.ApprovedBy))
-            && !context.Notifications.IgnoreQueryFilters().Any(n => n.UserId == r.UserId
-                && n.DeduplicationKey == "diagnosis-recommendations:" + r.ReviewId.ToString()))
-            .OrderBy(r => r.ReviewId).Take(batchSize).ToListAsync(token);
-        foreach (var row in recommended)
-            await writer.AddAsync([row.UserId], "DIAGNOSIS_RECOMMENDATIONS", "Đã có khuyến nghị được chuyên gia phê duyệt",
-                $"Hồ sơ {row.CaseNumber} đã có khuyến nghị được chuyên gia phê duyệt. Vui lòng xem hướng dẫn phù hợp với kết luận xét duyệt.",
-                $"diagnosis-recommendations:{row.ReviewId}", "DIAGNOSIS_CASE", row.CaseId, token);
         await context.SaveChangesAsync(token);
     }
 }

@@ -125,6 +125,6 @@ public sealed class CatalogService(IAgriSageDbContext context, IDateTimeProvider
             ingredients);
     }
 
-    private IQueryable<StoreProduct> Sellable(Guid storeId) => context.StoreProducts.AsNoTracking()
-        .Where(sp => sp.StoreId == storeId && sp.IsActive && sp.IsSellable && sp.Product.Status == ProductStatus.Active);
+    private IQueryable<StoreProduct> Sellable(Guid storeId) =>
+        CatalogRules.Sellable(context.StoreProducts.AsNoTracking(), storeId);
 }

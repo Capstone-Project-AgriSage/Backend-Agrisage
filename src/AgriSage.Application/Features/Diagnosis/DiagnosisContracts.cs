@@ -12,7 +12,8 @@ public sealed record DiagnosisImageResponse(
     Guid Id, string ImageUrl, DateTimeOffset ExpiresAt, bool IsPrimary, string? FileName, DateTimeOffset UploadedAt);
 
 public sealed record TreatmentResponse(
-    Guid Id, string Type, string Title, string Instructions, string? Precautions, int RankOrder, string? Reason);
+    Guid Id, string Type, string Title, string Instructions, string? Precautions, int RankOrder, string? Reason,
+    string? ActiveIngredientName = null);
 
 public sealed record RecommendedProductResponse(
     Guid StoreProductId, Guid ProductId, string Name, string Sku, string? ImageUrl, string? Reason, int RankOrder);
@@ -24,19 +25,26 @@ public sealed record MyDiagnosisCaseListRequest : PaginationRequest
     public string? Status { get; init; }
 }
 
+// DiseaseCode / DiseaseName: the predicted disease of an AI result, or the final disease of a case reviewed before 2.0.
+// Certainty: CONFIDENT, UNCERTAIN or VERIFIED, null while there is no result.
 public sealed record MyDiagnosisCaseListItem(
     Guid Id, string CaseNumber, string Status, DateTimeOffset SubmittedAt, DateTimeOffset? CompletedAt,
-    string? DiseaseCode, string? DiseaseName);
+    string? DiseaseCode, string? DiseaseName, string? Certainty);
 
+// Certainty: CONFIDENT (the AI passed the policy), UNCERTAIN (it did not: Hint = RETAKE_PHOTO_OR_ASK_STORE, no chemical
+// treatment, no product) or VERIFIED (decided by a reviewer before 2.0). ReviewerComment only for VERIFIED.
 public sealed record DiagnosisResultResponse(
     DiseaseSummary Disease,
     string? ReviewerComment,
     IReadOnlyList<TreatmentResponse> Treatments,
-    IReadOnlyList<RecommendedProductResponse> Products);
+    IReadOnlyList<RecommendedProductResponse> Products,
+    string Certainty,
+    string? Hint);
 
 public sealed record DiagnosisInconclusiveResponse(string? Comment, string Hint);
 
-// What the Farmer sees: never an AI probability, a model name or a disease before a reviewer decided (rule 36, D8).
+// What the Farmer sees (AI_DIAGNOSIS.md 2.0, section 7): a disease and a certainty, never a probability, a top-k, a model
+// or a policy (D8). CanRetry: the AI failed (or the case was interrupted) and may be run again by the Farmer (D14).
 public sealed record MyDiagnosisCaseResponse(
     Guid Id,
     string CaseNumber,
@@ -46,7 +54,8 @@ public sealed record MyDiagnosisCaseResponse(
     string? FarmerNote,
     DiagnosisImageResponse? Image,
     DiagnosisResultResponse? Result,
-    DiagnosisInconclusiveResponse? Inconclusive);
+    DiagnosisInconclusiveResponse? Inconclusive,
+    bool CanRetry);
 
 public sealed record CancelDiagnosisRequest(string? Reason = null);
 
@@ -59,9 +68,12 @@ public interface IMyDiagnosisCaseService
     Task<MyDiagnosisCaseResponse> GetAsync(Guid id, CancellationToken cancellationToken);
 
     Task<MyDiagnosisCaseResponse> CancelAsync(Guid id, CancelDiagnosisRequest request, CancellationToken cancellationToken);
+
+    // Runs the AI again on a FAILED case (or one left SUBMITTED); 503 when the AI Service cannot be reached (D14).
+    Task<MyDiagnosisCaseResponse> RetryAsync(Guid id, CancellationToken cancellationToken);
 }
 
-// ---- Reviewer (/api/diagnosis-cases) ----
+// ---- Store, read only (/api/diagnosis-cases) ----
 
 public sealed record DiagnosisCaseListRequest : PaginationRequest
 {
@@ -154,34 +166,19 @@ public sealed record DiagnosisCaseResponse(
     DiseaseSummary? FinalDisease,
     IReadOnlyList<DiagnosisImageResponse> Images,
     IReadOnlyList<AiInferenceResponse> Inferences,
+    // Filled only for cases reviewed before 2.0.
     AgentReviewResponse? CurrentReview,
     IReadOnlyList<AgentReviewResponse> ReviewHistory,
-    IReadOnlyList<RecommendationResponse> Recommendations);
-
-// Decision: CONFIRMED, CORRECTED or INCONCLUSIVE. FinalDiseaseId is required for the first two and absent for the last.
-// PrimaryAiInferenceId defaults to the latest successful inference of the case when there is one.
-public sealed record ReviewRequest(
-    string Decision, Guid? FinalDiseaseId = null, Guid? PrimaryAiInferenceId = null, string? Comment = null);
-
-// Type: TREATMENT (DiseaseTreatmentId) or PRODUCT (StoreProductId): exactly one target.
-public sealed record RecommendationRequest(
-    string Type, Guid? DiseaseTreatmentId = null, Guid? StoreProductId = null, int RankOrder = 0, string? Reason = null);
+    IReadOnlyList<RecommendationResponse> Recommendations,
+    // Exactly what the Farmer reads for this case (null when there is no result).
+    DiagnosisResultResponse? FarmerResult);
 
 public interface IDiagnosisCaseService
 {
+    // Newest first.
     Task<PagedResult<DiagnosisCaseListItem>> ListAsync(DiagnosisCaseListRequest request, CancellationToken cancellationToken);
 
     Task<DiagnosisCaseResponse> GetAsync(Guid id, CancellationToken cancellationToken);
-
-    Task<DiagnosisCaseResponse> StartReviewAsync(Guid id, CancellationToken cancellationToken);
-
-    Task<DiagnosisCaseResponse> ReviewAsync(Guid id, ReviewRequest request, CancellationToken cancellationToken);
-
-    Task<DiagnosisCaseResponse> RerunAiAsync(Guid id, CancellationToken cancellationToken);
-
-    Task<RecommendationResponse> RecommendAsync(Guid id, RecommendationRequest request, CancellationToken cancellationToken);
-
-    Task UnrecommendAsync(Guid id, Guid recommendationId, CancellationToken cancellationToken);
 }
 
 // ---- AI models and policies (Manage) ----
@@ -322,9 +319,6 @@ public interface IDiseaseService
 
     Task<TreatmentItem> SetTreatmentActiveAsync(Guid id, bool active, CancellationToken cancellationToken);
 }
-
-// Whether a review right is held; the staff endpoint (F5.6).
-public sealed record SetAiReviewRequest(bool Enabled, string? Reason = null);
 
 // Application-level switches of the diagnosis flow, set by the host.
 public sealed class AiDiagnosisOptions

@@ -15,7 +15,7 @@ namespace AgriSage.Api.Features.Diagnosis;
 public sealed class MeDiagnosisCasesController(IMyDiagnosisCaseService service) : ControllerBase
 {
     // multipart/form-data: field "image" (JPEG, PNG or WebP, at most 5 MB) and an optional text field "note".
-    // The answer is the case after the AI ran: waiting for a reviewer in both the AI_COMPLETED and the FAILED case.
+    // The answer is the case after the AI ran: AI_COMPLETED with its result, or FAILED (retry later).
     [HttpPost]
     [EnableRateLimiting(RateLimitingExtensions.UploadPolicy)]
     [RequestSizeLimit(ImageRules.MaxDiagnosisBytes + 512 * 1024)]
@@ -39,9 +39,15 @@ public sealed class MeDiagnosisCasesController(IMyDiagnosisCaseService service) 
     public async Task<ActionResult<MyDiagnosisCaseResponse>> Get(Guid id, CancellationToken cancellationToken) =>
         await service.GetAsync(id, cancellationToken);
 
-    // Allowed until a reviewer has decided; semantic cancel, the case and its photo are kept.
+    // Semantic cancel: the case and its photo are kept.
     [HttpPost("{id:guid}/cancel")]
     public async Task<ActionResult<MyDiagnosisCaseResponse>> Cancel(
         Guid id, CancelDiagnosisRequest? request, CancellationToken cancellationToken) =>
         await service.CancelAsync(id, request ?? new CancelDiagnosisRequest(), cancellationToken);
+
+    // Runs the AI again on a case whose analysis failed (AI_DIAGNOSIS.md D14); 503 while the AI Service is unreachable.
+    [HttpPost("{id:guid}/retry")]
+    [EnableRateLimiting(RateLimitingExtensions.UploadPolicy)]
+    public async Task<ActionResult<MyDiagnosisCaseResponse>> Retry(Guid id, CancellationToken cancellationToken) =>
+        await service.RetryAsync(id, cancellationToken);
 }

@@ -27,7 +27,8 @@ public sealed class PermissionConfigurationService(IAgriSageDbContext db, ICurre
     {
         await ManagerAsync(token);
         var active = await db.Permissions.AsNoTracking().Where(p => p.IsActive).Select(p => p.Code).ToListAsync(token);
-        return PermissionCatalog.Entries.Where(p => active.Contains(p.Code)).Select(p => new PermissionResponse(p.Id, p.Code,
+        return PermissionCatalog.Entries.Where(p => active.Contains(p.Code) && !PermissionCatalog.Retired.Contains(p.Code))
+            .Select(p => new PermissionResponse(p.Id, p.Code,
             p.Module, p.Name, p.Delegable, p.DefaultRoles,
             new[] { "ADMIN", "STORE_OWNER", "SALES_STAFF", "DELIVERY_STAFF", "FARMER" }.Where(p.AllowsRole).ToList())).ToList();
     }
@@ -41,8 +42,9 @@ public sealed class PermissionConfigurationService(IAgriSageDbContext db, ICurre
     }
     private async Task<RolePermissionsResponse> RoleAsync(Role role, CancellationToken token) =>
         new(role.Id, EnumText.Format(role.Code), role.Name, role.Description, role.Version, role.Code != RoleCode.Admin,
-            role.Code == RoleCode.Admin ? await db.Permissions.AsNoTracking().Where(p => p.IsActive).OrderBy(p => p.Code).Select(p => p.Code).ToListAsync(token)
-                : (await permissions.RoleDefaultsAsync(role.Id, token)).Order(StringComparer.Ordinal).ToList());
+            (role.Code == RoleCode.Admin ? await db.Permissions.AsNoTracking().Where(p => p.IsActive).OrderBy(p => p.Code).Select(p => p.Code).ToListAsync(token)
+                : (await permissions.RoleDefaultsAsync(role.Id, token)).Order(StringComparer.Ordinal).ToList())
+            .Where(c => !PermissionCatalog.Retired.Contains(c)).ToList());
 
     public async Task<RolePermissionsResponse> SetRoleAsync(Guid roleId, SetRolePermissionsRequest request, CancellationToken token)
     {
@@ -96,7 +98,8 @@ public sealed class PermissionConfigurationService(IAgriSageDbContext db, ICurre
         var overrides = await (from o in db.StoreMemberPermissions.AsNoTracking()
             join p in db.Permissions.AsNoTracking() on o.PermissionId equals p.Id
             where o.StoreMemberId == member.Id && p.IsActive orderby p.Code select new PermissionOverride(p.Code, o.IsGranted)).ToListAsync(token);
-        var active = await db.Permissions.AsNoTracking().Where(p => p.IsActive && p.IsDelegable).Select(p => p.Code).ToListAsync(token);
+        var active = (await db.Permissions.AsNoTracking().Where(p => p.IsActive && p.IsDelegable).Select(p => p.Code).ToListAsync(token))
+            .Where(c => !PermissionCatalog.Retired.Contains(c)).ToList();
         var effective = await permissions.ForUserAsync(member.UserId, token);
         return new(member.UserId, member.User.FullName, "SALES_STAFF", member.StoreId, member.Version, member.User.Role.Version,
             (await permissions.RoleDefaultsAsync(member.User.RoleId, token)).Order(StringComparer.Ordinal).ToList(), effective.Permissions,

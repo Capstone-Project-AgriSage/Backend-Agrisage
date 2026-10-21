@@ -8,6 +8,4 @@ public sealed record CurrentUserResponse(
     string Role,
     string Status,
     bool PhoneVerified,
-    bool EmailVerified,
-    // Whether this account may decide AI diagnosis cases (store_members.can_review_ai); web screens use it to show them.
-    bool CanReviewAi = false);
+    bool EmailVerified);

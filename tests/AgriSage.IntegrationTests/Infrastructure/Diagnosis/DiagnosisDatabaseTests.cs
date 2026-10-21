@@ -12,6 +12,7 @@ using AgriSage.Domain.Features.Diagnosis.Enums;
 using AgriSage.Domain.Features.Identity.Entities;
 using AgriSage.Domain.Features.Identity.Enums;
 using AgriSage.Domain.Features.Products.Entities;
+using AgriSage.Domain.Features.Products.Enums;
 using AgriSage.Domain.Features.Stores.Entities;
 using AgriSage.Domain.Features.Stores.Enums;
 using AgriSage.Infrastructure.Persistence;
@@ -24,6 +25,7 @@ namespace AgriSage.IntegrationTests.Infrastructure.Diagnosis;
 
 // The AI diagnosis use cases against the real PostgreSQL development database, inside a transaction that is always
 // rolled back (AGRISAGE_DB_TESTS=1). The AI service and the storage are fakes; everything else is the production code.
+// AI_DIAGNOSIS.md 2.0: no Human Review, the Farmer reads the AI result at once.
 public sealed class DiagnosisDatabaseTests
 {
     private static CancellationToken Token => TestContext.Current.CancellationToken;
@@ -96,9 +98,8 @@ public sealed class DiagnosisDatabaseTests
         Guid FarmerUserId,
         Guid FarmerProfileId,
         Guid OtherFarmerUserId,
-        Guid ReviewerUserId,
-        Guid ReviewerMemberId,
-        Guid OutsiderUserId,
+        Guid StaffUserId,
+        Guid StaffMemberId,
         Guid StoreId,
         Guid ModelId,
         Guid PolicyId,
@@ -118,32 +119,31 @@ public sealed class DiagnosisDatabaseTests
             As(userId ?? FarmerUserId, "FARMER");
             await using var db = Session.NewContext();
             var clock = new Clock();
-            var runner = new DiagnosisAiRunner(db, Ai, clock, Options, NullLogger<DiagnosisAiRunner>.Instance);
+            var audit = new AuditTrail(db, Session.CurrentUser, clock);
+            var results = new DiagnosisResultBuilder(db);
+            var runner = new DiagnosisAiRunner(
+                db, Ai, clock, new RowLockService(db), results, audit, Options, NullLogger<DiagnosisAiRunner>.Instance);
             var urls = new DiagnosisImageUrls(Files, clock, NullLogger<DiagnosisImageUrls>.Instance);
             var service = new MyDiagnosisCaseService(
-                db, new CurrentFarmer(db, Session.CurrentUser), Files, clock, runner, urls,
-                new AuditTrail(db, Session.CurrentUser, clock), NullLogger<MyDiagnosisCaseService>.Instance);
+                db, new CurrentFarmer(db, Session.CurrentUser), Files, Files, clock, runner, results, urls, audit,
+                NullLogger<MyDiagnosisCaseService>.Instance);
 
             return await call(service);
         }
 
-        public async Task<T> Reviewer<T>(Func<IDiagnosisCaseService, Task<T>> call, Guid? userId = null, string role = "SALES_STAFF")
+        public async Task<T> Staff<T>(Func<IDiagnosisCaseService, Task<T>> call, Guid? userId = null, string role = "SALES_STAFF")
         {
-            As(userId ?? ReviewerUserId, role);
+            As(userId ?? StaffUserId, role);
             await using var db = Session.NewContext();
             var clock = new Clock();
-            var runner = new DiagnosisAiRunner(db, Ai, clock, Options, NullLogger<DiagnosisAiRunner>.Instance);
             var urls = new DiagnosisImageUrls(Files, clock, NullLogger<DiagnosisImageUrls>.Instance);
-            var service = new DiagnosisCaseService(
-                db, Session.CurrentUser, clock, new AiReviewer(db, Session.CurrentUser), runner, urls, Files,
-                new AuditTrail(db, Session.CurrentUser, clock));
 
-            return await call(service);
+            return await call(new DiagnosisCaseService(db, new DiagnosisResultBuilder(db), urls));
         }
 
         public async Task<T> Models<T>(Func<IAiModelService, Task<T>> call)
         {
-            As(ReviewerUserId, "STORE_OWNER");
+            As(StaffUserId, "STORE_OWNER");
             await using var db = Session.NewContext();
             var clock = new Clock();
 
@@ -152,6 +152,20 @@ public sealed class DiagnosisDatabaseTests
 
         public Task<MyDiagnosisCaseResponse> Submit(string? note = "Lá vàng từ chóp") =>
             Farmer(s => s.CreateAsync(new MemoryStream(Photo()), "leaf.jpg", note, Token));
+    }
+
+    // Leaf Blast guidance and products of this test only (the development database may hold other content).
+    private sealed record Catalog(
+        Guid ChemicalId,
+        Guid CulturalId,
+        Guid Suggested,
+        Guid NotSellable,
+        Guid InactiveProduct,
+        Guid OtherStore,
+        Guid DeletedLink,
+        Guid NoIngredient)
+    {
+        public Guid[] All => [Suggested, NotSellable, InactiveProduct, OtherStore, DeletedLink, NoIngredient];
     }
 
     private static byte[] Photo() => [0xFF, 0xD8, 0xFF, 0xE0, 0, 1, 2, 3, 4, 5, 6, 7, 8];
@@ -165,7 +179,7 @@ public sealed class DiagnosisDatabaseTests
         return new AiPredictionResult(label, confidence, scores, version, 12, confidence, "agrisage-rice-classifier", stub);
     }
 
-    private static async Task<Env> PrepareAsync(RealDb.Session session, bool withModel = true, bool reviewerMayReview = true)
+    private static async Task<Env> PrepareAsync(RealDb.Session session, bool withModel = true)
     {
         await using var db = session.NewContext();
         var tag = Guid.NewGuid().ToString("N")[..10];
@@ -187,8 +201,7 @@ public sealed class DiagnosisDatabaseTests
 
         var farmerUser = await Actor(RoleCode.Farmer, "Farmer One");
         var otherFarmerUser = await Actor(RoleCode.Farmer, "Farmer Two");
-        var reviewerUser = await Actor(RoleCode.SalesStaff, "Reviewer");
-        var outsiderUser = await Actor(RoleCode.SalesStaff, "Outsider");
+        var staffUser = await Actor(RoleCode.SalesStaff, "Staff");
         var farmer = new FarmerProfile(farmerUser.Id);
         var otherFarmer = new FarmerProfile(otherFarmerUser.Id);
         db.FarmerProfiles.AddRange(farmer, otherFarmer);
@@ -200,13 +213,9 @@ public sealed class DiagnosisDatabaseTests
             db.Stores.Add(store);
         }
 
-        var reviewer = new StoreMember(store.Id, reviewerUser.Id);
-        if (reviewerMayReview)
-        {
-            reviewer.GrantAiReview();
-        }
-
-        db.StoreMembers.AddRange(reviewer, new StoreMember(store.Id, outsiderUser.Id));
+        // A sales member WITHOUT the old review flag: since 2.0 nobody needs it.
+        var staff = new StoreMember(store.Id, staffUser.Id);
+        db.StoreMembers.Add(staff);
 
         var diseases = new Dictionary<string, Guid>();
         foreach (var code in Codes)
@@ -232,11 +241,11 @@ public sealed class DiagnosisDatabaseTests
         if (withModel)
         {
             var model = new AiModel(
-                $"test-model-{tag}", "0.1.0", "pytorch", "https://example.test/model", JsonSerializer.Serialize(Codes), reviewerUser.Id,
+                $"test-model-{tag}", "0.1.0", "pytorch", "https://example.test/model", JsonSerializer.Serialize(Codes), staffUser.Id,
                 "mobilenet_v2", 224, 224);
             model.Activate(DateTimeOffset.UtcNow.AddMinutes(-5));
             var policy = new AiPolicyConfig(
-                model.Id, "p1", 0.80m, DateTimeOffset.UtcNow.AddDays(-1), reviewerUser.Id, topK: 3, minimumMargin: 0.15m);
+                model.Id, "p1", 0.80m, DateTimeOffset.UtcNow.AddDays(-1), staffUser.Id, topK: 3, minimumMargin: 0.15m);
             policy.Activate();
             db.AiModels.Add(model);
             db.AiPolicyConfigs.Add(policy);
@@ -247,160 +256,204 @@ public sealed class DiagnosisDatabaseTests
         await db.SaveChangesAsync(Token);
 
         return new Env(
-            session, new FakeFiles(), new FakeAi(), farmerUser.Id, farmer.Id, otherFarmerUser.Id, reviewerUser.Id, reviewer.Id,
-            outsiderUser.Id, store.Id, modelId, policyId, diseases, tag);
+            session, new FakeFiles(), new FakeAi(), farmerUser.Id, farmer.Id, otherFarmerUser.Id, staffUser.Id, staff.Id,
+            store.Id, modelId, policyId, diseases, tag);
+    }
+
+    // A chemical treatment of Leaf Blast with a new active ingredient and products around it: one the Farmer can buy, and
+    // five that must never be suggested.
+    private static async Task<Catalog> LeafBlastCatalogAsync(Env env)
+    {
+        await using var db = env.Session.NewContext();
+        var ingredient = new ActiveIngredient($"Tricyclazole {env.Tag}", $"I-{env.Tag}");
+        var category = new Category($"C-{env.Tag}", "Test");
+        db.AddRange(ingredient, category);
+
+        // Priority 1000 (the highest a treatment may have) keeps these first among any real content of the disease.
+        var chemical = new DiseaseTreatment(
+            env.Diseases["LEAF_BLAST"], TreatmentType.Chemical, $"Phun thuốc {env.Tag}", "Theo nhãn.", ingredient.Id,
+            "Đeo khẩu trang.", priority: 1000);
+        var cultural = new DiseaseTreatment(
+            env.Diseases["LEAF_BLAST"], TreatmentType.Cultural, $"Giảm đạm {env.Tag}", "Bón cân đối.", priority: 999);
+        db.AddRange(chemical, cultural);
+
+        StoreProduct Sold(string name, Guid storeId, ProductStatus status = ProductStatus.Active, bool withIngredient = true)
+        {
+            var product = new Product(category.Id, $"P-{env.Tag}-{name}", $"{name} {env.Tag}", status: status);
+            var storeProduct = new StoreProduct(storeId, product.Id);
+            db.AddRange(product, storeProduct);
+            if (withIngredient)
+            {
+                db.Add(new ProductActiveIngredient(product.Id, ingredient.Id, "75WP"));
+            }
+
+            return storeProduct;
+        }
+
+        var suggested = Sold("Beam", env.StoreId);
+        var notSellable = Sold("NotSellable", env.StoreId);
+        notSellable.MarkNotSellable();
+        var inactiveProduct = Sold("Inactive", env.StoreId, ProductStatus.Inactive);
+        var otherStore = new Store($"S2-{env.Tag}", "Other", "Address", "Province", status: StoreStatus.Inactive);
+        db.Add(otherStore);
+        var elsewhere = Sold("Elsewhere", otherStore.Id);
+        var deletedLink = Sold("DeletedLink", env.StoreId);
+        var noIngredient = Sold("NoIngredient", env.StoreId, withIngredient: false);
+        await db.SaveChangesAsync(Token);
+
+        var link = await db.ProductActiveIngredients.SingleAsync(l => l.ProductId == deletedLink.ProductId, Token);
+        db.Remove(link); // soft delete
+        await db.SaveChangesAsync(Token);
+
+        return new Catalog(
+            chemical.Id, cultural.Id, suggested.Id, notSellable.Id, inactiveProduct.Id, elsewhere.Id, deletedLink.Id, noIngredient.Id);
     }
 
     [RealDbFact]
-    public async Task A_case_goes_from_the_photo_to_a_verified_result_with_recommendations()
+    public async Task A_confident_result_is_shown_at_once_with_treatments_and_products_matched_by_active_ingredient()
     {
         await using var session = await RealDb.Session.StartAsync();
         var env = await PrepareAsync(session);
+        var catalog = await LeafBlastCatalogAsync(env);
         env.Ai.Answer = _ => Answer("LEAF_BLAST", 0.912345m, others: [("BROWN_SPOT", 0.06m), ("HEALTHY", 0.02m)]);
 
-        // 1. The Farmer sends a photo: the AI runs, the case waits for a reviewer, nothing is revealed.
+        // 1. The Farmer sends a photo: the answer already carries the result.
         var created = await env.Submit();
         Assert.Matches(@"^DG-\d{8}-\d{4}$", created.CaseNumber);
         Assert.Equal("AI_COMPLETED", created.Status);
-        Assert.Null(created.Result);
+        Assert.False(created.CanRetry);
         Assert.Null(created.Inconclusive);
-        Assert.NotNull(created.Image);
         Assert.StartsWith("https://storage.test/signed/", created.Image!.ImageUrl);
         Assert.Equal(1, env.Ai.Calls);
-        Assert.Single(env.Files.Objects);
 
-        // 2. The reviewer sees the evidence the Farmer does not.
-        var detail = await env.Reviewer(s => s.GetAsync(created.Id, Token));
+        var result = created.Result!;
+        Assert.Equal("CONFIDENT", result.Certainty);
+        Assert.Null(result.Hint);
+        Assert.Null(result.ReviewerComment);
+        Assert.Equal("LEAF_BLAST", result.Disease.Code);
+        var chemical = Assert.Single(result.Treatments, t => t.Id == catalog.ChemicalId);
+        Assert.Equal("CHEMICAL", chemical.Type);
+        Assert.Equal($"Tricyclazole {env.Tag}", chemical.ActiveIngredientName);
+        Assert.Contains(result.Treatments, t => t.Id == catalog.CulturalId);
+
+        // Only the product the Farmer can buy in this store, and its reason names the ingredient.
+        var mine = result.Products.Where(p => catalog.All.Contains(p.StoreProductId)).ToList();
+        var product = Assert.Single(mine);
+        Assert.Equal(catalog.Suggested, product.StoreProductId);
+        Assert.Equal($"Chứa hoạt chất Tricyclazole {env.Tag}", product.Reason);
+        Assert.True(result.Products.Count <= 5);
+
+        // 2. The store sees the evidence and exactly what the Farmer saw.
+        var detail = await env.Staff(s => s.GetAsync(created.Id, Token));
         var inference = Assert.Single(detail.Inferences);
-        Assert.Equal("SUCCESS", inference.Status);
-        Assert.Equal("LEAF_BLAST", inference.PredictedClassLabel);
         Assert.Equal(0.912345m, inference.Confidence);
         Assert.Equal(0.852345m, inference.Margin);
         Assert.True(inference.PassedPolicy);
-        Assert.Equal(0.80m, inference.Policy.MinimumConfidence);
         Assert.Equal(3, inference.TopPredictions.Count);
-        Assert.Equal(env.Diseases["LEAF_BLAST"], inference.PredictedDiseaseId);
-        Assert.Equal($"test-model-{env.Tag}", inference.Model.Name);
-        Assert.Equal("0.1.0", inference.Model.Version);
+        Assert.Equal(JsonSerializer.Serialize(result), JsonSerializer.Serialize(detail.FarmerResult));
+        Assert.Null(detail.CurrentReview);
+        Assert.Empty(detail.Recommendations);
 
-        // 3. Review: the queue shows it, then CONFIRMED verifies it.
-        var queue = await env.Reviewer(s => s.ListAsync(new DiagnosisCaseListRequest { Status = "AI_COMPLETED", Search = created.CaseNumber }, Token));
-        var row = Assert.Single(queue.Items);
-        Assert.Equal(created.Id, row.Id);
-        Assert.True(row.PassedPolicy);
+        // 3. The list shows the disease and the certainty.
+        var item = Assert.Single((await env.Farmer(s => s.ListAsync(new MyDiagnosisCaseListRequest(), Token))).Items);
+        Assert.Equal("LEAF_BLAST", item.DiseaseCode);
+        Assert.Equal("CONFIDENT", item.Certainty);
 
-        var started = await env.Reviewer(s => s.StartReviewAsync(created.Id, Token));
-        Assert.Equal("UNDER_REVIEW", started.Status);
+        // 4. What was suggested is in the audit; the Farmer gets one alert, however often the worker runs.
+        await using var db = session.NewContext();
+        var audit = await db.AuditLogs.SingleAsync(a => a.EntityId == created.Id && a.Action == "DIAGNOSIS_AI_RESULT", Token);
+        Assert.Contains(catalog.Suggested.ToString(), audit.NewValues);
+        Assert.Contains("CONFIDENT", audit.NewValues);
 
-        var reviewed = await env.Reviewer(s => s.ReviewAsync(
-            created.Id, new ReviewRequest("CONFIRMED", env.Diseases["LEAF_BLAST"], Comment: "Vết hình thoi điển hình."), Token));
-        Assert.Equal("VERIFIED", reviewed.Status);
-        Assert.Equal("CONFIRMED", reviewed.CurrentReview!.Decision);
-        Assert.Equal("LEAF_BLAST", reviewed.FinalDisease!.Code);
-        Assert.Equal(inference.Id, reviewed.CurrentReview.PrimaryAiInferenceId);
-        Assert.Equal(env.ReviewerMemberId, reviewed.CurrentReview.ReviewerMemberId);
-
-        // 4. Recommendations: a treatment and a product.
-        await using (var db = session.NewContext())
-        {
-            var category = new Category($"C-{env.Tag}", "Test");
-            var product = new Product(category.Id, $"P-{env.Tag}", "Thuốc đạo ôn thử nghiệm");
-            var storeProduct = new StoreProduct(env.StoreId, product.Id);
-            var treatment = new DiseaseTreatment(
-                env.Diseases["LEAF_BLAST"], TreatmentType.Cultural, "Giảm đạm", "Bón cân đối.", precautions: "Đeo găng.", priority: 5);
-            db.AddRange(category, product, storeProduct, treatment);
-            await db.SaveChangesAsync(Token);
-
-            var treatmentRec = await env.Reviewer(s => s.RecommendAsync(
-                created.Id, new RecommendationRequest("TREATMENT", DiseaseTreatmentId: treatment.Id, RankOrder: 1, Reason: "Bước đầu"), Token));
-            var productRec = await env.Reviewer(s => s.RecommendAsync(
-                created.Id, new RecommendationRequest("PRODUCT", StoreProductId: storeProduct.Id, RankOrder: 2), Token));
-            Assert.Equal("TREATMENT", treatmentRec.Type);
-            Assert.Equal("Thuốc đạo ôn thử nghiệm", productRec.ProductName);
-
-            await Assert.ThrowsAsync<ConflictException>(() => env.Reviewer(s => s.RecommendAsync(
-                created.Id, new RecommendationRequest("PRODUCT", StoreProductId: storeProduct.Id), Token)));
-        }
-
-        // 5. The review writes no notification of its own; the committed-notification worker tells the Farmer once, and
-        //    running it again changes nothing. Then the Farmer sees the verified result with the guidance.
-        await using (var db = session.NewContext())
-        {
-            Assert.False(await db.Notifications.AnyAsync(
-                n => n.UserId == env.FarmerUserId && n.DeduplicationKey!.StartsWith("diagnosis"), Token));
-
-            var collector = new CommittedNotificationService(db, new NotificationWriter(db));
-            await collector.DiagnosisAsync(100, Token);
-            await collector.DiagnosisAsync(100, Token);
-
-            var types = await db.Notifications
-                .Where(n => n.UserId == env.FarmerUserId && n.DeduplicationKey!.StartsWith("diagnosis"))
-                .Select(n => n.NotificationType).ToListAsync(Token);
-            Assert.Equal(["AI_DIAGNOSIS_COMPLETED", "DIAGNOSIS_RECOMMENDATIONS", "DIAGNOSIS_REVIEWED"], types.Order().ToArray());
-        }
-
-        var mine = await env.Farmer(s => s.GetAsync(created.Id, Token));
-        Assert.Equal("VERIFIED", mine.Status);
-        Assert.Equal("LEAF_BLAST", mine.Result!.Disease.Code);
-        Assert.Equal("Vết hình thoi điển hình.", mine.Result.ReviewerComment);
-        Assert.Single(mine.Result.Treatments);
-        Assert.Single(mine.Result.Products);
-
-        var list = await env.Farmer(s => s.ListAsync(new MyDiagnosisCaseListRequest(), Token));
-        Assert.Equal("LEAF_BLAST", Assert.Single(list.Items).DiseaseCode);
+        var collector = new CommittedNotificationService(db, new NotificationWriter(db));
+        await collector.DiagnosisAsync(100, Token);
+        await collector.DiagnosisAsync(100, Token);
+        var alert = await db.Notifications.SingleAsync(
+            n => n.UserId == env.FarmerUserId && n.DeduplicationKey!.StartsWith("diagnosis"), Token);
+        Assert.Equal("AI_DIAGNOSIS_COMPLETED", alert.NotificationType);
+        Assert.Contains("xem bệnh và cách xử lý", alert.Message);
     }
 
     [RealDbFact]
-    public async Task The_farmer_never_sees_the_ai_result_before_a_review_and_not_other_farmers_cases()
+    public async Task The_farmer_never_sees_a_probability_or_a_model_and_not_other_farmers_cases()
     {
         await using var session = await RealDb.Session.StartAsync();
         var env = await PrepareAsync(session);
-        env.Ai.Answer = _ => Answer("BROWN_SPOT", 0.95m, others: [("LEAF_BLAST", 0.03m)]);
+        env.Ai.Answer = _ => Answer("BROWN_SPOT", 0.951234m, others: [("LEAF_BLAST", 0.03m)]);
 
         var created = await env.Submit();
 
         var json = JsonSerializer.Serialize(created);
+        Assert.Contains("BROWN_SPOT", json);
         Assert.DoesNotContain("0.95", json);
-        Assert.DoesNotContain("BROWN_SPOT", json);
         Assert.DoesNotContain("agrisage-rice-classifier", json);
-        var list = await env.Farmer(s => s.ListAsync(new MyDiagnosisCaseListRequest(), Token));
-        Assert.Null(Assert.Single(list.Items).DiseaseCode);
+        Assert.DoesNotContain("test-model", json);
 
         await Assert.ThrowsAsync<NotFoundException>(() => env.Farmer(s => s.GetAsync(created.Id, Token), env.OtherFarmerUserId));
         await Assert.ThrowsAsync<NotFoundException>(() => env.Farmer(
             s => s.CancelAsync(created.Id, new CancelDiagnosisRequest(), Token), env.OtherFarmerUserId));
+        await Assert.ThrowsAsync<NotFoundException>(() => env.Farmer(s => s.RetryAsync(created.Id, Token), env.OtherFarmerUserId));
         Assert.Empty((await env.Farmer(s => s.ListAsync(new MyDiagnosisCaseListRequest(), Token), env.OtherFarmerUserId)).Items);
     }
 
     [RealDbFact]
-    public async Task A_confidence_or_margin_below_the_policy_still_goes_to_review_without_passing()
+    public async Task Below_the_policy_the_result_is_uncertain_without_chemical_treatment_or_products()
     {
         await using var session = await RealDb.Session.StartAsync();
         var env = await PrepareAsync(session);
+        var catalog = await LeafBlastCatalogAsync(env);
 
         // Confident but too close to the second class: margin 0.05 < 0.15.
         env.Ai.Answer = _ => Answer("LEAF_BLAST", 0.85m, others: [("BROWN_SPOT", 0.80m)]);
         var narrow = await env.Submit();
         // Not confident enough: 0.60 < 0.80.
-        env.Ai.Answer = _ => Answer("HEALTHY", 0.60m, others: [("BROWN_SPOT", 0.10m)]);
+        env.Ai.Answer = _ => Answer("LEAF_BLAST", 0.60m, others: [("BROWN_SPOT", 0.10m)]);
         var weak = await env.Submit();
 
         foreach (var created in new[] { narrow, weak })
         {
             Assert.Equal("AI_COMPLETED", created.Status);
-            var detail = await env.Reviewer(s => s.GetAsync(created.Id, Token));
-            Assert.False(Assert.Single(detail.Inferences).PassedPolicy);
+            var result = created.Result!;
+            Assert.Equal("UNCERTAIN", result.Certainty);
+            Assert.Equal("RETAKE_PHOTO_OR_ASK_STORE", result.Hint);
+            Assert.Equal("LEAF_BLAST", result.Disease.Code);
+            Assert.DoesNotContain(result.Treatments, t => t.Type == "CHEMICAL");
+            Assert.Contains(result.Treatments, t => t.Id == catalog.CulturalId);
+            Assert.Empty(result.Products);
         }
 
-        var failed = await env.Reviewer(s => s.ListAsync(new DiagnosisCaseListRequest { AiPassed = false }, Token));
+        var failed = await env.Staff(s => s.ListAsync(new DiagnosisCaseListRequest { AiPassed = false }, Token));
         Assert.Contains(failed.Items, i => i.Id == narrow.Id);
         Assert.Contains(failed.Items, i => i.Id == weak.Id);
-        var passed = await env.Reviewer(s => s.ListAsync(new DiagnosisCaseListRequest { AiPassed = true }, Token));
+        var passed = await env.Staff(s => s.ListAsync(new DiagnosisCaseListRequest { AiPassed = true }, Token));
         Assert.DoesNotContain(passed.Items, i => i.Id == narrow.Id || i.Id == weak.Id);
+
+        var item = (await env.Farmer(s => s.ListAsync(new MyDiagnosisCaseListRequest(), Token))).Items.First(i => i.Id == weak.Id);
+        Assert.Equal("UNCERTAIN", item.Certainty);
+
+        await using var db = session.NewContext();
+        await new CommittedNotificationService(db, new NotificationWriter(db)).DiagnosisAsync(100, Token);
+        Assert.All(
+            await db.Notifications.Where(n => n.UserId == env.FarmerUserId).ToListAsync(Token),
+            n => Assert.Contains("AI chưa chắc chắn", n.Message));
     }
 
     [RealDbFact]
-    public async Task When_the_ai_is_down_the_case_fails_and_is_run_again_by_a_reviewer()
+    public async Task A_healthy_leaf_gets_care_tips_but_no_product()
+    {
+        await using var session = await RealDb.Session.StartAsync();
+        var env = await PrepareAsync(session);
+        env.Ai.Answer = _ => Answer("HEALTHY", 0.97m, others: [("BROWN_SPOT", 0.01m)]);
+
+        var created = await env.Submit();
+
+        Assert.Equal("CONFIDENT", created.Result!.Certainty);
+        Assert.True(created.Result.Disease.IsHealthy);
+        Assert.Empty(created.Result.Products);
+    }
+
+    [RealDbFact]
+    public async Task When_the_ai_is_down_the_case_fails_and_the_farmer_retries_it()
     {
         await using var session = await RealDb.Session.StartAsync();
         var env = await PrepareAsync(session);
@@ -410,46 +463,34 @@ public sealed class DiagnosisDatabaseTests
 
         Assert.Equal("FAILED", created.Status);
         Assert.Null(created.Result);
-        var detail = await env.Reviewer(s => s.GetAsync(created.Id, Token));
+        Assert.True(created.CanRetry);
+        var detail = await env.Staff(s => s.GetAsync(created.Id, Token));
         var inference = Assert.Single(detail.Inferences);
         Assert.Equal("FAILED", inference.Status);
         Assert.Equal("AI_SERVICE_UNAVAILABLE", inference.Error);
-        Assert.False(inference.PassedPolicy);
+        Assert.Null(detail.FarmerResult);
 
-        // Still down: the re-run reports it (503) and records nothing, so the failed attempts do not pile up.
-        await Assert.ThrowsAsync<AiServiceUnavailableException>(() => env.Reviewer(s => s.RerunAiAsync(created.Id, Token)));
-        var unchanged = await env.Reviewer(s => s.GetAsync(created.Id, Token));
+        // Still down: the retry reports it (503) and records nothing, so the failed attempts do not pile up.
+        await Assert.ThrowsAsync<AiServiceUnavailableException>(() => env.Farmer(s => s.RetryAsync(created.Id, Token)));
+        var unchanged = await env.Staff(s => s.GetAsync(created.Id, Token));
         Assert.Equal("FAILED", unchanged.Status);
         Assert.Single(unchanged.Inferences);
 
-        // The service is back: run again; the failed attempt stays as history, the case continues.
+        // The service is back: the retry completes the case; the failed attempt stays as history.
         env.Ai.Answer = _ => Answer("SHEATH_BLIGHT", 0.9m, others: [("HEALTHY", 0.05m)]);
-        var again = await env.Reviewer(s => s.RerunAiAsync(created.Id, Token));
+        var again = await env.Farmer(s => s.RetryAsync(created.Id, Token));
 
         Assert.Equal("AI_COMPLETED", again.Status);
-        Assert.Equal(2, again.Inferences.Count);
-        Assert.Equal(["FAILED", "SUCCESS"], again.Inferences.Select(i => i.Status));
+        Assert.Equal("CONFIDENT", again.Result!.Certainty);
+        Assert.Equal("SHEATH_BLIGHT", again.Result.Disease.Code);
+        Assert.False(again.CanRetry);
+        Assert.Equal(["FAILED", "SUCCESS"], (await env.Staff(s => s.GetAsync(created.Id, Token))).Inferences.Select(i => i.Status));
 
-        // A case that is no longer submitted or failed cannot be run again.
-        await Assert.ThrowsAsync<BusinessRuleException>(() => env.Reviewer(s => s.RerunAiAsync(created.Id, Token)));
-    }
+        // A case that has a result cannot be retried.
+        await Assert.ThrowsAsync<BusinessRuleException>(() => env.Farmer(s => s.RetryAsync(created.Id, Token)));
 
-    [RealDbFact]
-    public async Task A_failed_case_can_be_diagnosed_by_hand_but_not_confirmed()
-    {
-        await using var session = await RealDb.Session.StartAsync();
-        var env = await PrepareAsync(session);
-        var created = await env.Submit(); // Answer is null: the AI service is unreachable
-        Assert.Equal("FAILED", created.Status);
-
-        await Assert.ThrowsAsync<DomainException>(() => env.Reviewer(s => s.ReviewAsync(
-            created.Id, new ReviewRequest("CONFIRMED", env.Diseases["LEAF_BLAST"]), Token)));
-
-        var corrected = await env.Reviewer(s => s.ReviewAsync(
-            created.Id, new ReviewRequest("CORRECTED", env.Diseases["BROWN_SPOT"], Comment: "Chẩn đoán tay."), Token));
-        Assert.Equal("VERIFIED", corrected.Status);
-        Assert.Equal("BROWN_SPOT", corrected.FinalDisease!.Code);
-        Assert.Null(corrected.CurrentReview!.PrimaryAiInferenceId);
+        await using var db = session.NewContext();
+        Assert.True(await db.AuditLogs.AnyAsync(a => a.EntityId == created.Id && a.Action == "DIAGNOSIS_AI_RETRIED", Token));
     }
 
     [RealDbFact]
@@ -462,8 +503,9 @@ public sealed class DiagnosisDatabaseTests
         var created = await env.Submit();
 
         Assert.Equal("FAILED", created.Status);
+        Assert.True(created.CanRetry);
         Assert.Equal(0, env.Ai.Calls);
-        var detail = await env.Reviewer(s => s.GetAsync(created.Id, Token));
+        var detail = await env.Staff(s => s.GetAsync(created.Id, Token));
         Assert.Empty(detail.Inferences);
     }
 
@@ -488,7 +530,8 @@ public sealed class DiagnosisDatabaseTests
                  })
         {
             Assert.Equal("FAILED", created.Status);
-            var detail = await env.Reviewer(s => s.GetAsync(created.Id, Token));
+            Assert.Null(created.Result);
+            var detail = await env.Staff(s => s.GetAsync(created.Id, Token));
             var inference = Assert.Single(detail.Inferences);
             Assert.Equal("FAILED", inference.Status);
             Assert.Equal(error, inference.Error);
@@ -502,67 +545,86 @@ public sealed class DiagnosisDatabaseTests
     }
 
     [RealDbFact]
-    public async Task Only_a_member_with_the_review_right_can_decide()
+    public async Task Store_staff_read_cases_newest_first_without_any_review_right()
     {
         await using var session = await RealDb.Session.StartAsync();
         var env = await PrepareAsync(session);
         env.Ai.Answer = _ => Answer("LEAF_BLAST", 0.9m, others: [("BROWN_SPOT", 0.05m)]);
-        var created = await env.Submit();
+        var first = await env.Submit("TEST- first");
+        var second = await env.Submit("TEST- second");
 
-        // A sales member without the flag, and a Farmer, are refused; reading the case is not decided here.
-        await Assert.ThrowsAsync<ForbiddenException>(() => env.Reviewer(
-            s => s.ReviewAsync(created.Id, new ReviewRequest("INCONCLUSIVE"), Token), env.OutsiderUserId));
-        await Assert.ThrowsAsync<ForbiddenException>(() => env.Reviewer(
-            s => s.StartReviewAsync(created.Id, Token), env.OutsiderUserId));
-        await Assert.ThrowsAsync<ForbiddenException>(() => env.Reviewer(
-            s => s.ReviewAsync(created.Id, new ReviewRequest("INCONCLUSIVE"), Token), env.FarmerUserId, "FARMER"));
-        Assert.Equal("AI_COMPLETED", (await env.Reviewer(s => s.GetAsync(created.Id, Token), env.OutsiderUserId)).Status);
+        var page = await env.Staff(s => s.ListAsync(new DiagnosisCaseListRequest(), Token));
+        var ours = page.Items.Where(i => i.Id == first.Id || i.Id == second.Id).Select(i => i.Id).ToList();
+        Assert.Equal([second.Id, first.Id], ours);
 
-        // Withdrawing the flag takes effect on the next call, with the same session.
+        var detail = await env.Staff(s => s.GetAsync(first.Id, Token), role: "STORE_OWNER");
+        Assert.Equal("AI_COMPLETED", detail.Status);
+        Assert.Equal("CONFIDENT", detail.FarmerResult!.Certainty);
+    }
+
+    [RealDbFact]
+    public async Task Cases_decided_before_human_review_was_removed_stay_readable()
+    {
+        await using var session = await RealDb.Session.StartAsync();
+        var env = await PrepareAsync(session);
+        env.Ai.Answer = _ => Answer("LEAF_BLAST", 0.9m, others: [("BROWN_SPOT", 0.05m)]);
+        var verified = await env.Submit();
+        var inconclusive = await env.Submit();
+        var underReview = await env.Submit();
+
+        // The 1.0 flow, through the Domain methods that are kept for these cases.
         await using (var db = session.NewContext())
         {
-            var member = await db.StoreMembers.SingleAsync(m => m.Id == env.ReviewerMemberId, Token);
-            member.RevokeAiReview();
+            async Task<DiagnosisCase> Load(Guid id) => await db.DiagnosisCases
+                .Include(c => c.Images).Include(c => c.Inferences).Include(c => c.Reviews).Include(c => c.Recommendations)
+                .SingleAsync(c => c.Id == id, Token);
+
+            var brownSpot = await db.Diseases.SingleAsync(d => d.Id == env.Diseases["BROWN_SPOT"], Token);
+            var treatment = new DiseaseTreatment(brownSpot.Id, TreatmentType.Cultural, $"Old guidance {env.Tag}", "Kept.");
+            db.Add(treatment);
+
+            var a = await Load(verified.Id);
+            a.Review(env.StaffMemberId, AgentReviewDecision.Corrected, DateTimeOffset.UtcNow, brownSpot,
+                a.Inferences.Single().Id, "Chẩn đoán của chuyên gia.");
+            await db.SaveChangesAsync(Token);
+            a.AddRecommendation(RecommendationType.Treatment, brownSpot, env.StaffUserId, DateTimeOffset.UtcNow, treatment, rankOrder: 1);
+
+            var b = await Load(inconclusive.Id);
+            b.Review(env.StaffMemberId, AgentReviewDecision.Inconclusive, DateTimeOffset.UtcNow, comment: "Ảnh bị mờ.");
+
+            (await Load(underReview.Id)).StartReview();
             await db.SaveChangesAsync(Token);
         }
 
-        await Assert.ThrowsAsync<ForbiddenException>(() => env.Reviewer(
-            s => s.ReviewAsync(created.Id, new ReviewRequest("INCONCLUSIVE"), Token)));
+        var a2 = await env.Farmer(s => s.GetAsync(verified.Id, Token));
+        Assert.Equal("VERIFIED", a2.Status);
+        Assert.Equal("VERIFIED", a2.Result!.Certainty);
+        Assert.Equal("BROWN_SPOT", a2.Result.Disease.Code);
+        Assert.Equal("Chẩn đoán của chuyên gia.", a2.Result.ReviewerComment);
+        Assert.Single(a2.Result.Treatments);
+
+        var b2 = await env.Farmer(s => s.GetAsync(inconclusive.Id, Token));
+        Assert.Equal("INCONCLUSIVE", b2.Status);
+        Assert.Null(b2.Result);
+        Assert.Equal("RETAKE_PHOTO", b2.Inconclusive!.Hint);
+        Assert.Equal("Ảnh bị mờ.", b2.Inconclusive.Comment);
+
+        var c2 = await env.Farmer(s => s.GetAsync(underReview.Id, Token));
+        Assert.Equal("UNDER_REVIEW", c2.Status);
+        Assert.Equal("CONFIDENT", c2.Result!.Certainty);
+
+        var list = (await env.Farmer(s => s.ListAsync(new MyDiagnosisCaseListRequest(), Token))).Items;
+        Assert.Equal("BROWN_SPOT", list.Single(i => i.Id == verified.Id).DiseaseCode);
+        Assert.Equal("VERIFIED", list.Single(i => i.Id == verified.Id).Certainty);
+        Assert.Null(list.Single(i => i.Id == inconclusive.Id).DiseaseCode);
+
+        var detail = await env.Staff(s => s.GetAsync(verified.Id, Token));
+        Assert.Equal("CORRECTED", detail.CurrentReview!.Decision);
+        Assert.Single(detail.Recommendations);
     }
 
     [RealDbFact]
-    public async Task An_inconclusive_review_asks_for_a_retake_and_a_new_review_supersedes_the_old_one()
-    {
-        await using var session = await RealDb.Session.StartAsync();
-        var env = await PrepareAsync(session);
-        env.Ai.Answer = _ => Answer("LEAF_BLAST", 0.9m, others: [("BROWN_SPOT", 0.05m)]);
-        var created = await env.Submit();
-
-        var inconclusive = await env.Reviewer(s => s.ReviewAsync(
-            created.Id, new ReviewRequest("INCONCLUSIVE", Comment: "Ảnh bị mờ."), Token));
-        Assert.Equal("INCONCLUSIVE", inconclusive.Status);
-        Assert.Null(inconclusive.FinalDisease);
-
-        var mine = await env.Farmer(s => s.GetAsync(created.Id, Token));
-        Assert.Equal("INCONCLUSIVE", mine.Status);
-        Assert.Null(mine.Result);
-        Assert.Equal("RETAKE_PHOTO", mine.Inconclusive!.Hint);
-        Assert.Equal("Ảnh bị mờ.", mine.Inconclusive.Comment);
-
-        // No recommendation without a verified diagnosis.
-        await Assert.ThrowsAnyAsync<Exception>(() => env.Reviewer(s => s.RecommendAsync(
-            created.Id, new RecommendationRequest("TREATMENT", DiseaseTreatmentId: Guid.NewGuid()), Token)));
-
-        var corrected = await env.Reviewer(s => s.ReviewAsync(
-            created.Id, new ReviewRequest("CORRECTED", env.Diseases["BROWN_SPOT"]), Token));
-        Assert.Equal("VERIFIED", corrected.Status);
-        Assert.Single(corrected.ReviewHistory);
-        Assert.Equal("INCONCLUSIVE", corrected.ReviewHistory[0].Decision);
-        Assert.False(corrected.ReviewHistory[0].IsCurrent);
-    }
-
-    [RealDbFact]
-    public async Task A_farmer_can_cancel_until_a_reviewer_decided_and_the_photo_is_deleted_when_saving_fails()
+    public async Task A_farmer_can_cancel_a_case_and_bad_photos_are_refused()
     {
         await using var session = await RealDb.Session.StartAsync();
         var env = await PrepareAsync(session);
@@ -571,8 +633,10 @@ public sealed class DiagnosisDatabaseTests
 
         var cancelled = await env.Farmer(s => s.CancelAsync(created.Id, new CancelDiagnosisRequest("Gửi nhầm ảnh"), Token));
         Assert.Equal("CANCELLED", cancelled.Status);
+        Assert.Null(cancelled.Result);
         await Assert.ThrowsAsync<DomainException>(() => env.Farmer(
             s => s.CancelAsync(created.Id, new CancelDiagnosisRequest(), Token)));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => env.Farmer(s => s.RetryAsync(created.Id, Token)));
 
         // Not an image, too large and empty files are refused before anything is stored.
         await Assert.ThrowsAsync<ValidationException>(() => env.Farmer(
@@ -594,11 +658,12 @@ public sealed class DiagnosisDatabaseTests
 
         env.Files.SigningFails = true;
         var mine = await env.Farmer(s => s.GetAsync(created.Id, Token));
-        var detail = await env.Reviewer(s => s.GetAsync(created.Id, Token));
+        var detail = await env.Staff(s => s.GetAsync(created.Id, Token));
 
         Assert.Null(mine.Image);
         Assert.Empty(detail.Images);
         Assert.Equal("AI_COMPLETED", mine.Status);
+        Assert.NotNull(mine.Result);
     }
 
     [RealDbFact]
@@ -649,7 +714,7 @@ public sealed class DiagnosisDatabaseTests
     {
         await using var session = await RealDb.Session.StartAsync();
         var env = await PrepareAsync(session);
-        env.As(env.ReviewerUserId, "STORE_OWNER");
+        env.As(env.StaffUserId, "STORE_OWNER");
         await using var db = session.NewContext();
         var service = new DiseaseService(db);
         var id = env.Diseases["LEAF_BLAST"];
@@ -664,6 +729,14 @@ public sealed class DiagnosisDatabaseTests
         Assert.True(treatment.IsActive);
         await Assert.ThrowsAsync<ValidationException>(() => service.CreateTreatmentAsync(
             id, new TreatmentRequest("MAGIC", "x", "y"), Token));
+
+        // An inactive ingredient would never match a product, so it is refused.
+        var inactive = new ActiveIngredient($"Old {env.Tag}");
+        inactive.Deactivate();
+        db.Add(inactive);
+        await db.SaveChangesAsync(Token);
+        await Assert.ThrowsAsync<ValidationException>(() => service.CreateTreatmentAsync(
+            id, new TreatmentRequest("CHEMICAL", "x", "y", inactive.Id), Token));
 
         var off = await service.SetTreatmentActiveAsync(treatment.Id, false, Token);
         Assert.False(off.IsActive);

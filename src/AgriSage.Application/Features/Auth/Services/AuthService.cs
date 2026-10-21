@@ -7,7 +7,6 @@ using AgriSage.Application.Features.Auth.Interfaces;
 using AgriSage.Domain.Features.Customers.Entities;
 using AgriSage.Domain.Features.Identity.Entities;
 using AgriSage.Domain.Features.Identity.Enums;
-using AgriSage.Domain.Features.Stores.Enums;
 using Microsoft.EntityFrameworkCore;
 
 namespace AgriSage.Application.Features.Auth.Services;
@@ -112,9 +111,6 @@ public sealed class AuthService(
             throw new ForbiddenException("This account is not active.");
         }
 
-        var canReviewAi = await context.StoreMembers.AsNoTracking().AnyAsync(
-            m => m.UserId == userId && m.CanReviewAi && m.Status == StoreMemberStatus.Active, cancellationToken);
-
         return new CurrentUserResponse(
             user.Id,
             user.FullName,
@@ -123,8 +119,7 @@ public sealed class AuthService(
             RoleCodeFormat.ToText(user.Role.Code),
             user.Status.ToString().ToUpperInvariant(),
             user.PhoneVerified,
-            user.EmailVerified,
-            canReviewAi);
+            user.EmailVerified);
     }
 
     public async Task ChangePasswordAsync(ChangePasswordRequest request, CancellationToken cancellationToken)

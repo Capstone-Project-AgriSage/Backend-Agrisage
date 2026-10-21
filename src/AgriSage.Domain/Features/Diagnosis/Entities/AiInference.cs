@@ -3,8 +3,8 @@ using AgriSage.Domain.Features.Diagnosis.Enums;
 
 namespace AgriSage.Domain.Features.Diagnosis.Entities;
 
-// Immutable AI inference result recorded through DiagnosisCase. It is evidence, never the verified diagnosis;
-// it keeps the exact Model and Policy version used for reproducibility.
+// Immutable AI inference result recorded through DiagnosisCase. The latest successful one is the result the Farmer reads
+// (no Human Review since 2026-10-21); it keeps the exact Model and Policy version used for reproducibility.
 public sealed class AiInference : SoftDeletableChildEntity
 {
     private AiInference()

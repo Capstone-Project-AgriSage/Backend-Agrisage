@@ -143,7 +143,7 @@ public static class DependencyInjection
         services.AddScoped<IMySalesReturnService, MySalesReturnService>();
         services.AddScoped<IRefundService, RefundService>();
 
-        services.AddScoped<AiReviewer>();
+        services.AddScoped<DiagnosisResultBuilder>();
         services.AddScoped<DiagnosisImageUrls>();
         services.AddScoped<DiagnosisAiRunner>();
         services.AddScoped<IMyDiagnosisCaseService, MyDiagnosisCaseService>();

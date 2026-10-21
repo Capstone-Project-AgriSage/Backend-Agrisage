@@ -1,4 +1,5 @@
 using AgriSage.Application.Features.Products.Dtos.Responses;
+using AgriSage.Domain.Features.Products.Entities;
 using AgriSage.Domain.Features.Products.Enums;
 
 namespace AgriSage.Application.Features.Products;
@@ -6,6 +7,10 @@ namespace AgriSage.Application.Features.Products;
 // Pure catalog rules (no database): category tree and the conditions for selling a product.
 public static class CatalogRules
 {
+    // What a Farmer can buy in the store: the public catalog and the diagnosis suggestions use the same conditions.
+    public static IQueryable<StoreProduct> Sellable(IQueryable<StoreProduct> storeProducts, Guid storeId) =>
+        storeProducts.Where(sp => sp.StoreId == storeId && sp.IsActive && sp.IsSellable && sp.Product.Status == ProductStatus.Active);
+
     // True when moving the category under `newParentId` would make it its own ancestor (A → B → A).
     public static bool WouldCreateCycle(Guid categoryId, Guid? newParentId, IReadOnlyDictionary<Guid, Guid?> parents)
     {

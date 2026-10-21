@@ -34,4 +34,7 @@ public interface IRowLockService
     Task ShareLockLotBalancesAsync(IReadOnlyCollection<Guid> inventoryLotIds, CancellationToken cancellationToken);
 
     Task LockSalesReturnAsync(Guid salesReturnId, CancellationToken cancellationToken);
+
+    // Serializes recording an AI result on one diagnosis case: two retries at once cannot both record one.
+    Task LockDiagnosisCaseAsync(Guid diagnosisCaseId, CancellationToken cancellationToken);
 }
