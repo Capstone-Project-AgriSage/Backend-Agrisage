@@ -125,11 +125,13 @@ public sealed class DiseaseService(IAgriSageDbContext context) : IDiseaseService
 
     private async Task EnsureIngredientAsync(Guid? ingredientId, CancellationToken cancellationToken)
     {
-        if (ingredientId is { } id && !await context.ActiveIngredients.AsNoTracking().AnyAsync(i => i.Id == id, cancellationToken))
+        // An inactive ingredient would never match a product (AI_DIAGNOSIS.md D13), so it is refused like an unknown one.
+        if (ingredientId is { } id
+            && !await context.ActiveIngredients.AsNoTracking().AnyAsync(i => i.Id == id && i.IsActive, cancellationToken))
         {
             throw new ValidationException(new Dictionary<string, string[]>
             {
-                ["activeIngredientId"] = ["The active ingredient does not exist."]
+                ["activeIngredientId"] = ["The active ingredient does not exist or is not active."]
             });
         }
     }

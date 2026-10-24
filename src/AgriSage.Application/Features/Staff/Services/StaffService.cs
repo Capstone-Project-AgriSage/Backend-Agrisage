@@ -40,7 +40,6 @@ public sealed class StaffService(
         string? EmployeeCode,
         DateOnly? JoinedAt,
         DateOnly? LeftAt,
-        bool CanReviewAi,
         DateTimeOffset CreatedAt);
 
     public async Task<StaffResponse> CreateAsync(CreateStaffRequest request, CancellationToken cancellationToken)
@@ -117,7 +116,7 @@ public sealed class StaffService(
             .Skip(request.Skip).Take(request.PageSize)
             .Select(m => new StaffRow(
                 m.UserId, m.User.FullName, m.User.PhoneNumber, m.User.Email, m.User.Role.Code, m.User.Status,
-                m.Status, m.EmployeeCode, m.JoinedAt, m.LeftAt, m.CanReviewAi, m.User.CreatedAt))
+                m.Status, m.EmployeeCode, m.JoinedAt, m.LeftAt, m.User.CreatedAt))
             .ToListAsync(cancellationToken);
 
         return new PagedResult<StaffResponse>(rows.Select(ToResponse).ToList(), request.Page, request.PageSize, total);
@@ -146,51 +145,6 @@ public sealed class StaffService(
         await SaveAsync(cancellationToken);
 
         return ToResponse(user, user.Role.Code, member);
-    }
-
-    // Only Sales staff and Store Owners review diagnoses. Admin may set it for any of them; a Store Owner for Sales staff
-    // and for themselves, never for another Store Owner. The flag is the single source of truth for who may decide a case.
-    public async Task<StaffResponse> SetAiReviewAsync(
-        Guid userId, AgriSage.Application.Features.Diagnosis.SetAiReviewRequest request, CancellationToken cancellationToken)
-    {
-        var actor = GetActor();
-        var member = await LoadStaffAsync(userId, cancellationToken);
-        var targetRole = member.User.Role.Code;
-
-        if (targetRole is not (RoleCode.SalesStaff or RoleCode.StoreOwner))
-        {
-            throw new BusinessRuleException("Only sales staff and store owners can review AI diagnoses.");
-        }
-
-        if (actor.Role != RoleCode.Admin && targetRole == RoleCode.StoreOwner && member.UserId != actor.Id)
-        {
-            throw new ForbiddenException("You are not allowed to manage this account.");
-        }
-
-        if (member.Status != StoreMemberStatus.Active)
-        {
-            throw new BusinessRuleException("The staff member is not active in the store.");
-        }
-
-        if (member.CanReviewAi != request.Enabled)
-        {
-            var before = member.CanReviewAi;
-            if (request.Enabled)
-            {
-                member.GrantAiReview();
-            }
-            else
-            {
-                member.RevokeAiReview();
-            }
-
-            audit.Record(
-                "STAFF_AI_REVIEW_CHANGED", EntityType, member.UserId, member.StoreId,
-                new { CanReviewAi = before }, new { member.CanReviewAi }, Clean(request.Reason));
-            await context.SaveChangesAsync(cancellationToken);
-        }
-
-        return ToResponse(member.User, targetRole, member);
     }
 
     public async Task LockAsync(Guid userId, CancellationToken cancellationToken)
@@ -366,10 +320,10 @@ public sealed class StaffService(
     private static StaffResponse ToResponse(User user, RoleCode role, StoreMember member) => new(
         user.Id, user.FullName, user.PhoneNumber, user.Email, RoleCodeFormat.ToText(role),
         user.Status.ToString().ToUpperInvariant(), member.Status.ToString().ToUpperInvariant(),
-        member.EmployeeCode, member.JoinedAt, member.LeftAt, member.CanReviewAi, user.CreatedAt);
+        member.EmployeeCode, member.JoinedAt, member.LeftAt, user.CreatedAt);
 
     private static StaffResponse ToResponse(StaffRow row) => new(
         row.UserId, row.FullName, row.PhoneNumber, row.Email, RoleCodeFormat.ToText(row.Role),
         row.Status.ToString().ToUpperInvariant(), row.MemberStatus.ToString().ToUpperInvariant(),
-        row.EmployeeCode, row.JoinedAt, row.LeftAt, row.CanReviewAi, row.CreatedAt);
+        row.EmployeeCode, row.JoinedAt, row.LeftAt, row.CreatedAt);
 }

@@ -1,7 +1,9 @@
 using System.Text.Json;
+using AgriSage.Application.Common;
 using AgriSage.Application.Common.Exceptions;
 using AgriSage.Application.Common.Interfaces;
 using AgriSage.Domain.Common;
+using AgriSage.Domain.Features.Diagnosis;
 using AgriSage.Domain.Features.Diagnosis.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -13,14 +15,18 @@ namespace AgriSage.Application.Features.Diagnosis;
 //
 // The caller has already committed the case (SUBMITTED or FAILED) with its photo. This step reads, calls the AI service
 // with NO transaction and no tracked entity open, then re-reads the case and records the result in one save:
-// StartProcessing -> RecordInference -> CompleteAi / FailAi. A crash in between leaves the case SUBMITTED, which a
-// reviewer can run again. When the case is first created an AI failure never throws: it is stored as a FAILED inference
-// (or none, without a model). A reviewer's re-run passes failWhenUnavailable: an unreachable service is then reported
-// (503) and nothing is recorded, so pressing the button while the service is down does not pile up FAILED rows.
+// StartProcessing -> RecordInference -> CompleteAi / FailAi. A crash in between leaves the case SUBMITTED, which its
+// Farmer can retry. When the case is first created an AI failure never throws: it is stored as a FAILED inference (or
+// none, without a model). The Farmer's retry passes failWhenUnavailable: an unreachable service is then reported (503) and
+// nothing is recorded, so retrying while the service is down does not pile up FAILED rows. A successful answer is the
+// result the Farmer reads (2.0): its certainty and the products suggested for it go to the audit in the same save (D13).
 public sealed class DiagnosisAiRunner(
     IAgriSageDbContext context,
     IAiDiagnosisClient client,
     IDateTimeProvider clock,
+    IRowLockService rowLocks,
+    DiagnosisResultBuilder results,
+    AuditTrail audit,
     IOptions<AiDiagnosisOptions> options,
     ILogger<DiagnosisAiRunner> logger)
 {
@@ -54,7 +60,7 @@ public sealed class DiagnosisAiRunner(
 
         if (model is null || policy is null)
         {
-            // Nothing to call and nothing to record against: the case fails and waits for a reviewer or a configured model.
+            // Nothing to call and nothing to record against: the case fails until a model is configured and it is retried.
             logger.LogWarning("Diagnosis case {CaseNumber}: no ACTIVE AI model with an effective ACTIVE policy.", caseNumber);
             var failed = await LoadCaseAsync(caseId, cancellationToken);
             failed.StartProcessing();
@@ -83,7 +89,10 @@ public sealed class DiagnosisAiRunner(
             (error, predictedDiseaseId) = await CheckAsync(result, model, cancellationToken);
         }
 
-        // Read the case again: it may have been cancelled while the AI was working.
+        // Read the case again under its row lock: it may have been cancelled, or completed by a second retry, while the AI
+        // was working; StartProcessing then refuses it.
+        await using var transaction = await context.BeginTransactionAsync(cancellationToken);
+        await rowLocks.LockDiagnosisCaseAsync(caseId, cancellationToken);
         var diagnosisCase = await LoadCaseAsync(caseId, cancellationToken);
         diagnosisCase.StartProcessing();
         var image = diagnosisCase.Images.Where(i => !i.IsDeleted).OrderByDescending(i => i.IsPrimary).First();
@@ -124,9 +133,11 @@ public sealed class DiagnosisAiRunner(
                 }, Json),
                 result.InferenceDurationMs);
             diagnosisCase.CompleteAi();
+            await RecordResultAsync(caseId, result.PredictedClassLabel, predictedDiseaseId, passed, cancellationToken);
         }
 
         await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
     }
 
     // The answer is evidence only if it comes from the ACTIVE model, is not a simulation outside Development and names
@@ -166,6 +177,23 @@ public sealed class DiagnosisAiRunner(
             .FirstOrDefaultAsync(cancellationToken);
 
         return disease is null ? ("UNKNOWN_CLASS_LABEL", null) : (null, disease);
+    }
+
+    // What the Farmer is shown, kept for the record: the suggestions are computed at read time and follow the catalog.
+    private async Task RecordResultAsync(
+        Guid caseId, string classLabel, Guid? diseaseId, bool passed, CancellationToken cancellationToken)
+    {
+        var certainty = passed ? DiagnosisCertainty.Confident : DiagnosisCertainty.Uncertain;
+        var healthy = diseaseId is { } id && await context.Diseases.AsNoTracking()
+            .Where(d => d.Id == id).Select(d => d.IsHealthyClass).FirstOrDefaultAsync(cancellationToken);
+        var suggested = diseaseId is { } disease && DiagnosisResultPolicy.OffersProducts(certainty, healthy)
+            ? (await results.SuggestAsync(disease, cancellationToken)).Select(p => p.StoreProductId).ToList()
+            : [];
+        var storeId = await ActiveStore.GetIdAsync(context, cancellationToken);
+
+        audit.Record(
+            "DIAGNOSIS_AI_RESULT", "DIAGNOSIS_CASE", caseId, storeId,
+            newValues: new { Certainty = EnumText.Format(certainty), DiseaseCode = classLabel, SuggestedStoreProductIds = suggested });
     }
 
     private async Task<Domain.Features.Diagnosis.Entities.DiagnosisCase> LoadCaseAsync(Guid caseId, CancellationToken cancellationToken) =>

@@ -137,7 +137,6 @@ public class StaffDatabaseTests
             Assert.Equal("ACTIVE", created.Status);
             Assert.Equal("ACTIVE", created.MemberStatus);
             Assert.Equal(phone, created.PhoneNumber);
-            Assert.False(created.CanReviewAi);
             Assert.Equal("E-1", created.EmployeeCode);
             var member = await env.Context.StoreMembers.Include(m => m.User)
                 .SingleAsync(m => m.UserId == created.Id, Token);

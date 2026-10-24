@@ -30,25 +30,6 @@ public sealed class DiagnosisCaseListRequestValidator : AbstractValidator<Diagno
     }
 }
 
-public sealed class ReviewRequestValidator : AbstractValidator<ReviewRequest>
-{
-    public ReviewRequestValidator()
-    {
-        RuleFor(r => r.Decision).NotEmpty().MaximumLength(30);
-        RuleFor(r => r.Comment).MaximumLength(2000);
-    }
-}
-
-public sealed class RecommendationRequestValidator : AbstractValidator<RecommendationRequest>
-{
-    public RecommendationRequestValidator()
-    {
-        RuleFor(r => r.Type).NotEmpty().MaximumLength(30);
-        RuleFor(r => r.RankOrder).InclusiveBetween(0, 1000);
-        RuleFor(r => r.Reason).MaximumLength(1000);
-    }
-}
-
 public sealed class AiModelListRequestValidator : AbstractValidator<AiModelListRequest>
 {
     public AiModelListRequestValidator()
@@ -118,9 +99,4 @@ public sealed class TreatmentRequestValidator : AbstractValidator<TreatmentReque
         RuleFor(r => r.Precautions).MaximumLength(2000);
         RuleFor(r => r.Priority).InclusiveBetween(0, 1000);
     }
-}
-
-public sealed class SetAiReviewRequestValidator : AbstractValidator<SetAiReviewRequest>
-{
-    public SetAiReviewRequestValidator() => RuleFor(r => r.Reason).MaximumLength(500);
 }

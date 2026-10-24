@@ -195,48 +195,53 @@ public sealed class NotificationCoverageDatabaseTests
     }
 
     [RealDbFact]
-    public async Task Diagnosis_alerts_use_owned_persisted_results_and_require_authorized_human_approval()
+    public async Task Diagnosis_alerts_report_each_ai_result_once_and_never_a_review()
     {
         await using var e = await OperationsTestEnvironment.CreateAsync();
-        var reviewer = await MemberAsync(e, RoleCode.SalesStaff);
+        var staff = await MemberAsync(e, RoleCode.SalesStaff, review: true);
         var disease = await e.Context.Diseases.SingleAsync(d => d.Code == "LEAF_BLAST", Token);
-        var model = new AiModel("test-" + Tag, "1", "PyTorch", "https://example.test/model", "[]", reviewer.User.Id);
+        var model = new AiModel("test-" + Tag, "1", "PyTorch", "https://example.test/model", "[]", staff.User.Id);
         model.Activate(e.Time.UtcNow.AddDays(-1));
-        var policy = new AiPolicyConfig(model.Id, "1", .7m, e.Time.UtcNow.AddDays(-1), reviewer.User.Id); policy.Activate();
-        var c = new DiagnosisCase(e.Farmer.Id, "DC-" + Tag, e.Time.UtcNow);
-        var image = c.AddImage("cases/test.jpg", "https://example.test/test.jpg", e.Time.UtcNow, isPrimary: true);
-        c.StartProcessing();
-        var inference = c.RecordInference(image.Id, model, policy, disease.Code, .9m, true, AiInferenceStatus.Success, e.Time.UtcNow, disease.Id);
-        c.CompleteAi();
-        e.Context.AddRange(model, policy, c);
+        var policy = new AiPolicyConfig(model.Id, "1", .7m, e.Time.UtcNow.AddDays(-1), staff.User.Id); policy.Activate();
+
+        DiagnosisCase Case(bool passed)
+        {
+            var c = new DiagnosisCase(e.Farmer.Id, "DC-" + Tag, e.Time.UtcNow);
+            var image = c.AddImage("cases/test.jpg", "https://example.test/test.jpg", e.Time.UtcNow, isPrimary: true);
+            c.StartProcessing();
+            c.RecordInference(image.Id, model, policy, disease.Code, passed ? .9m : .5m, passed, AiInferenceStatus.Success,
+                e.Time.UtcNow, disease.Id);
+            c.CompleteAi();
+            return c;
+        }
+
+        var confident = Case(passed: true);
+        var uncertain = Case(passed: false);
+        e.Context.AddRange(model, policy, confident, uncertain);
         await e.Context.SaveChangesAsync(Token);
+
         var collector = new CommittedNotificationService(e.Context, new NotificationWriter(e.Context));
-        await collector.DiagnosisAsync(1, Token);
-        Assert.Equal("AI_DIAGNOSIS_COMPLETED", (await e.Context.Notifications.SingleAsync(n => n.UserId == e.User.Id, Token)).NotificationType);
-        var review = c.Review(reviewer.Member.Id, AgentReviewDecision.Confirmed, e.Time.UtcNow, disease, inference.Id);
+        await collector.DiagnosisAsync(10, Token);
+        var first = await e.Context.Notifications.Where(n => n.UserId == e.User.Id).ToListAsync(Token);
+        Assert.Equal(2, first.Count);
+        Assert.All(first, n => Assert.Equal("AI_DIAGNOSIS_COMPLETED", n.NotificationType));
+        Assert.Contains(first, n => n.Message.Contains("xem bệnh và cách xử lý") && n.Message.Contains(confident.CaseNumber));
+        Assert.Contains(first, n => n.Message.Contains("AI chưa chắc chắn") && n.Message.Contains(uncertain.CaseNumber));
+
+        // A review written the 1.0 way (kept in the Domain for old cases) gives the Farmer no further alert.
+        confident.Review(staff.Member.Id, AgentReviewDecision.Confirmed, e.Time.UtcNow, disease, confident.Inferences.Single().Id);
+        await e.Context.SaveChangesAsync(Token);
         var treatment = new DiseaseTreatment(disease.Id, TreatmentType.Cultural, "Guidance", "Approved guidance");
         e.Context.DiseaseTreatments.Add(treatment);
-        c.AddRecommendation(RecommendationType.Treatment, disease, reviewer.User.Id, e.Time.UtcNow, diseaseTreatment: treatment);
-        var category = new Category("C" + Tag[..12], "Test");
-        var product = new Product(category.Id, "P" + Tag[..12], "Approved product");
-        var storeProduct = new StoreProduct(e.Store.Id, product.Id);
-        e.Context.AddRange(category, product, storeProduct);
-        c.AddRecommendation(RecommendationType.Product, disease, reviewer.User.Id, e.Time.UtcNow, storeProduct: storeProduct);
+        confident.AddRecommendation(RecommendationType.Treatment, disease, staff.User.Id, e.Time.UtcNow, diseaseTreatment: treatment);
         await e.Context.SaveChangesAsync(Token);
-        await collector.DiagnosisAsync(1, Token);
-        Assert.Equal(1, await e.Context.Notifications.CountAsync(n => n.UserId == e.User.Id, Token)); // no can_review_ai permission yet
-        reviewer.Member.GrantAiReview();
-        await e.Context.SaveChangesAsync(Token);
-        await collector.DiagnosisAsync(1, Token);
-        await collector.DiagnosisAsync(1, Token);
+        await collector.DiagnosisAsync(10, Token);
+        await collector.DiagnosisAsync(10, Token);
+
         var notices = await e.Context.Notifications.Where(n => n.UserId == e.User.Id).ToListAsync(Token);
-        Assert.Equal(3, notices.Count);
-        Assert.Contains(notices, n => n.NotificationType == "DIAGNOSIS_REVIEWED");
-        Assert.Contains(notices, n => n.NotificationType == "DIAGNOSIS_RECOMMENDATIONS"
-            && n.Title == "Đã có khuyến nghị được chuyên gia phê duyệt");
-        Assert.All(notices, n => Assert.Equal(c.Id, JsonDocument.Parse(n.Data!).RootElement.GetProperty("entityId").GetGuid()));
-        Assert.False(await e.Context.Notifications.AnyAsync(n => n.UserId == reviewer.User.Id, Token));
-        Assert.Equal(DiagnosisCaseStatus.Verified, c.Status);
-        Assert.True(review.IsCurrent);
+        Assert.Equal(2, notices.Count);
+        Assert.DoesNotContain(notices, n => n.NotificationType is "DIAGNOSIS_REVIEWED" or "DIAGNOSIS_RECOMMENDATIONS");
+        Assert.Contains(notices, n => JsonDocument.Parse(n.Data!).RootElement.GetProperty("entityId").GetGuid() == confident.Id);
+        Assert.False(await e.Context.Notifications.AnyAsync(n => n.UserId == staff.User.Id, Token));
     }
 }

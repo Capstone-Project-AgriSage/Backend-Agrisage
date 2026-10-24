@@ -226,4 +226,12 @@ public static class PermissionCatalog
         new(new Guid("7c802e5d-521a-9096-18ba-9c92e0624d2b"), "STAFF.SET_AI_REVIEW", "STAFF", "Set Ai Review", false, ["ADMIN", "STORE_OWNER"]),
     ]);
     public static IReadOnlyDictionary<string, Definition> ByCode { get; } = Entries.ToDictionary(p => p.Code, StringComparer.Ordinal);
+
+    // Codes of routes removed with Human Review (AI_DIAGNOSIS.md 2.0, 2026-10-21). They stay in Entries because the catalog
+    // is seeded with HasData (dropping a row would be a migration); the permission screens do not show them.
+    public static IReadOnlySet<string> Retired { get; } = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "DIAGNOSIS.START_REVIEW", "DIAGNOSIS.REVIEW", "DIAGNOSIS.RERUN_AI", "DIAGNOSIS.RECOMMEND", "DIAGNOSIS.UNRECOMMEND",
+        "STAFF.SET_AI_REVIEW",
+    };
 }

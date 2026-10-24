@@ -5,29 +5,19 @@ using AgriSage.Application.Common.Interfaces;
 using AgriSage.Application.Common.Models;
 using AgriSage.Domain.Features.Diagnosis.Entities;
 using AgriSage.Domain.Features.Diagnosis.Enums;
-using AgriSage.Domain.Features.Products.Entities;
 using Microsoft.EntityFrameworkCore;
 using ValidationException = AgriSage.Application.Common.Exceptions.ValidationException;
 
 namespace AgriSage.Application.Features.Diagnosis;
 
-// Reviewer side of diagnosis (/api/diagnosis-cases; AI_DIAGNOSIS.md section 8). Listing and reading need only the
-// permission code of the route; every decision (start review, review, rerun, recommend) also needs the member's
-// can_review_ai flag (AiReviewer, D7). One save per use case; the audit row goes with the change. The Farmer's alerts come
-// from the committed-notification worker (CommittedNotificationService.DiagnosisAsync), not from here: writing one too
-// would give the Farmer two for every decision.
+// Store side of diagnosis (/api/diagnosis-cases; AI_DIAGNOSIS.md 2.0, section 8): read only. Since Human Review was
+// removed, staff look at the farmers' cases (photo, AI evidence, what the Farmer saw) to follow up; nothing here changes a
+// case. Reviews and recommendations are shown only for cases decided before 2.0.
 public sealed class DiagnosisCaseService(
     IAgriSageDbContext context,
-    ICurrentUserService currentUser,
-    IDateTimeProvider clock,
-    AiReviewer aiReviewer,
-    DiagnosisAiRunner runner,
-    DiagnosisImageUrls imageUrls,
-    IPrivateFileStore privateFiles,
-    AuditTrail audit) : IDiagnosisCaseService
+    DiagnosisResultBuilder results,
+    DiagnosisImageUrls imageUrls) : IDiagnosisCaseService
 {
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
-
     public async Task<PagedResult<DiagnosisCaseListItem>> ListAsync(
         DiagnosisCaseListRequest request, CancellationToken cancellationToken)
     {
@@ -45,8 +35,12 @@ public sealed class DiagnosisCaseService(
 
         if (request.AiPassed is { } passed)
         {
-            query = query.Where(c => context.AiInferences.Any(i =>
-                i.DiagnosisCaseId == c.Id && i.Status == AiInferenceStatus.Success && i.PassedPolicy == passed));
+            // The latest successful inference decides, as it decides what the Farmer read.
+            query = query.Where(c => context.AiInferences
+                .Where(i => i.DiagnosisCaseId == c.Id && i.Status == AiInferenceStatus.Success)
+                .OrderByDescending(i => i.InferredAt).ThenByDescending(i => i.Id)
+                .Select(i => (bool?)i.PassedPolicy)
+                .FirstOrDefault() == passed);
         }
 
         if (request.From is { } from)
@@ -70,7 +64,7 @@ public sealed class DiagnosisCaseService(
         }
 
         var total = await query.LongCountAsync(cancellationToken);
-        var rows = await query.OrderBy(c => c.SubmittedAt).ThenBy(c => c.Id)
+        var rows = await query.OrderByDescending(c => c.SubmittedAt).ThenByDescending(c => c.Id)
             .Skip(request.Skip).Take(request.PageSize)
             .Select(c => new
             {
@@ -89,10 +83,10 @@ public sealed class DiagnosisCaseService(
         var ids = rows.Select(r => r.Id).ToList();
         var latest = (await context.AiInferences.AsNoTracking()
                 .Where(i => ids.Contains(i.DiagnosisCaseId) && i.Status == AiInferenceStatus.Success)
-                .Select(i => new { i.DiagnosisCaseId, i.PredictedClassLabel, i.Confidence, i.PassedPolicy, i.InferredAt })
+                .Select(i => new { i.Id, i.DiagnosisCaseId, i.PredictedClassLabel, i.Confidence, i.PassedPolicy, i.InferredAt })
                 .ToListAsync(cancellationToken))
             .GroupBy(i => i.DiagnosisCaseId)
-            .ToDictionary(g => g.Key, g => g.OrderByDescending(i => i.InferredAt).First());
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(i => i.InferredAt).ThenByDescending(i => i.Id).First());
 
         var items = rows.Select(r =>
         {
@@ -109,190 +103,6 @@ public sealed class DiagnosisCaseService(
 
     public Task<DiagnosisCaseResponse> GetAsync(Guid id, CancellationToken cancellationToken) =>
         BuildAsync(id, cancellationToken);
-
-    public async Task<DiagnosisCaseResponse> StartReviewAsync(Guid id, CancellationToken cancellationToken)
-    {
-        await aiReviewer.EnsureAsync(cancellationToken);
-        var diagnosisCase = await context.DiagnosisCases.FirstOrDefaultAsync(c => c.Id == id, cancellationToken)
-            ?? throw new NotFoundException("Diagnosis case", id);
-
-        diagnosisCase.StartReview();
-        await context.SaveChangesAsync(cancellationToken);
-
-        return await BuildAsync(id, cancellationToken);
-    }
-
-    public async Task<DiagnosisCaseResponse> ReviewAsync(Guid id, ReviewRequest request, CancellationToken cancellationToken)
-    {
-        var reviewer = await aiReviewer.EnsureAsync(cancellationToken);
-        var storeId = await ActiveStore.GetIdAsync(context, cancellationToken);
-
-        if (!EnumText.TryParse<AgentReviewDecision>(request.Decision, out var decision))
-        {
-            throw new ValidationException(new Dictionary<string, string[]>
-            {
-                ["decision"] = ["Decision must be CONFIRMED, CORRECTED or INCONCLUSIVE."]
-            });
-        }
-
-        var diagnosisCase = await LoadTrackedAsync(id, cancellationToken);
-
-        Disease? finalDisease = null;
-        if (request.FinalDiseaseId is { } diseaseId)
-        {
-            finalDisease = await context.Diseases.FirstOrDefaultAsync(d => d.Id == diseaseId, cancellationToken)
-                ?? throw new NotFoundException("Disease", diseaseId);
-        }
-
-        // The AI's answer the reviewer looked at supplies the snapshot; by default the latest successful one.
-        var primary = request.PrimaryAiInferenceId
-            ?? diagnosisCase.Inferences
-                .Where(i => !i.IsDeleted && i.Status == AiInferenceStatus.Success)
-                .OrderByDescending(i => i.InferredAt)
-                .Select(i => (Guid?)i.Id)
-                .FirstOrDefault();
-
-        var before = EnumText.Format(diagnosisCase.Status);
-        var now = clock.UtcNow;
-
-        // One transaction. A re-review needs two saves: the old review stops being current first (one current review
-        // per case in the database), then the new one is inserted and linked as its successor.
-        await using var transaction = await context.BeginTransactionAsync(cancellationToken);
-        if (diagnosisCase.CurrentReview is not null)
-        {
-            diagnosisCase.ReleaseCurrentReview(now);
-            await context.SaveChangesAsync(cancellationToken);
-        }
-
-        var review = diagnosisCase.Review(
-            reviewer.MemberId, decision, now, finalDisease, primary, Texts.Clean(request.Comment));
-
-        audit.Record(
-            "DIAGNOSIS_REVIEWED", "DIAGNOSIS_CASE", diagnosisCase.Id, storeId,
-            new { Status = before },
-            new { Status = EnumText.Format(diagnosisCase.Status), Decision = EnumText.Format(decision), review.FinalDiseaseId },
-            Texts.Clean(request.Comment));
-
-        await context.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-
-        return await BuildAsync(id, cancellationToken);
-    }
-
-    public async Task<DiagnosisCaseResponse> RerunAiAsync(Guid id, CancellationToken cancellationToken)
-    {
-        await aiReviewer.EnsureAsync(cancellationToken);
-        var image = await context.DiagnosisCases.AsNoTracking()
-            .Where(c => c.Id == id)
-            .Select(c => new
-            {
-                c.Status,
-                Photo = c.Images.Where(i => i.DeletedAt == null)
-                    .OrderByDescending(i => i.IsPrimary)
-                    .Select(i => new { i.StorageKey, i.MimeType })
-                    .FirstOrDefault()
-            })
-            .FirstOrDefaultAsync(cancellationToken)
-            ?? throw new NotFoundException("Diagnosis case", id);
-
-        if (image.Status is not (DiagnosisCaseStatus.Submitted or DiagnosisCaseStatus.Failed))
-        {
-            throw new BusinessRuleException("The AI can only be run again on a case that is submitted or failed.");
-        }
-
-        var photo = image.Photo ?? throw new BusinessRuleException("The case has no photo to analyse.");
-        var bytes = await privateFiles.ReadAsync(photo.StorageKey, StorageArea.DiagnosisImages, cancellationToken);
-        var contentType = photo.MimeType ?? ImageRulesContentType(photo.StorageKey);
-
-        await runner.RunAsync(id, bytes, contentType, "photo", cancellationToken, failWhenUnavailable: true);
-
-        return await BuildAsync(id, cancellationToken);
-    }
-
-    public async Task<RecommendationResponse> RecommendAsync(
-        Guid id, RecommendationRequest request, CancellationToken cancellationToken)
-    {
-        await aiReviewer.EnsureAsync(cancellationToken);
-        var userId = currentUser.UserId ?? throw new AuthenticationFailedException("Authentication is required.");
-        var storeId = await ActiveStore.GetIdAsync(context, cancellationToken);
-
-        if (!EnumText.TryParse<RecommendationType>(request.Type, out var type))
-        {
-            throw new ValidationException(new Dictionary<string, string[]> { ["type"] = ["Type must be TREATMENT or PRODUCT."] });
-        }
-
-        var diagnosisCase = await LoadTrackedAsync(id, cancellationToken);
-        var finalDiseaseId = diagnosisCase.FinalDiseaseId
-            ?? throw new BusinessRuleException("Recommendations need a verified diagnosis.");
-        var finalDisease = await context.Diseases.FirstAsync(d => d.Id == finalDiseaseId, cancellationToken);
-
-        DiseaseTreatment? treatment = null;
-        StoreProduct? product = null;
-
-        if (type == RecommendationType.Treatment)
-        {
-            if (request.DiseaseTreatmentId is not { } treatmentId || request.StoreProductId is not null)
-            {
-                throw Invalid("diseaseTreatmentId", "A TREATMENT recommendation needs exactly one diseaseTreatmentId.");
-            }
-
-            treatment = await context.DiseaseTreatments.FirstOrDefaultAsync(t => t.Id == treatmentId, cancellationToken)
-                ?? throw new NotFoundException("Disease treatment", treatmentId);
-        }
-        else
-        {
-            if (request.StoreProductId is not { } productId || request.DiseaseTreatmentId is not null)
-            {
-                throw Invalid("storeProductId", "A PRODUCT recommendation needs exactly one storeProductId.");
-            }
-
-            product = await context.StoreProducts.Include(p => p.Product)
-                    .FirstOrDefaultAsync(p => p.Id == productId && p.StoreId == storeId, cancellationToken)
-                ?? throw new NotFoundException("Store product", productId);
-        }
-
-        var current = diagnosisCase.CurrentReview;
-        if (current is not null && diagnosisCase.Recommendations.Any(r =>
-                !r.IsDeleted && r.IsActive && r.AgentReviewId == current.Id
-                && r.DiseaseTreatmentId == treatment?.Id && r.StoreProductId == product?.Id))
-        {
-            throw new ConflictException("This recommendation already exists for the current review.");
-        }
-
-        var item = diagnosisCase.AddRecommendation(
-            type, finalDisease, userId, clock.UtcNow, treatment, product, request.RankOrder, Texts.Clean(request.Reason));
-        audit.Record(
-            "DIAGNOSIS_RECOMMENDATION_ADDED", "DIAGNOSIS_CASE", diagnosisCase.Id, storeId,
-            newValues: new { Type = EnumText.Format(type), item.DiseaseTreatmentId, item.StoreProductId, item.RankOrder });
-        await context.SaveChangesAsync(cancellationToken);
-
-        return new RecommendationResponse(
-            item.Id, item.AgentReviewId, EnumText.Format(type), treatment?.Id, treatment?.Title, product?.Id,
-            product?.Product.Name, product?.StoreSku ?? product?.Product.Sku, item.RankOrder, item.Reason, item.IsActive,
-            item.ApprovedAt);
-    }
-
-    public async Task UnrecommendAsync(Guid id, Guid recommendationId, CancellationToken cancellationToken)
-    {
-        await aiReviewer.EnsureAsync(cancellationToken);
-        var storeId = await ActiveStore.GetIdAsync(context, cancellationToken);
-        var diagnosisCase = await LoadTrackedAsync(id, cancellationToken);
-
-        diagnosisCase.DeactivateRecommendation(recommendationId);
-        audit.Record(
-            "DIAGNOSIS_RECOMMENDATION_REMOVED", "DIAGNOSIS_CASE", diagnosisCase.Id, storeId,
-            newValues: new { RecommendationId = recommendationId });
-        await context.SaveChangesAsync(cancellationToken);
-    }
-
-    private async Task<DiagnosisCase> LoadTrackedAsync(Guid id, CancellationToken cancellationToken) =>
-        await context.DiagnosisCases
-            .Include(c => c.Images)
-            .Include(c => c.Inferences)
-            .Include(c => c.Reviews)
-            .Include(c => c.Recommendations)
-            .FirstOrDefaultAsync(c => c.Id == id, cancellationToken)
-        ?? throw new NotFoundException("Diagnosis case", id);
 
     private async Task<DiagnosisCaseResponse> BuildAsync(Guid id, CancellationToken cancellationToken)
     {
@@ -329,6 +139,7 @@ public sealed class DiagnosisCaseService(
         var images = await imageUrls.ForAsync(diagnosisCase.Images, cancellationToken);
         var farmer = diagnosisCase.FarmerProfile;
         var reviewResponses = reviews.Select(ToResponse).ToList();
+        var farmerResult = await results.ForCaseAsync(id, diagnosisCase.Status, diagnosisCase.FinalDisease, cancellationToken);
 
         return new DiagnosisCaseResponse(
             diagnosisCase.Id,
@@ -343,7 +154,8 @@ public sealed class DiagnosisCaseService(
             inferences.Select(i => ToResponse(i, diseaseIds)).ToList(),
             reviewResponses.FirstOrDefault(r => r.IsCurrent),
             reviewResponses.Where(r => !r.IsCurrent).ToList(),
-            recommendations.Select(ToResponse).ToList());
+            recommendations.Select(ToResponse).ToList(),
+            farmerResult);
     }
 
     private static AiInferenceResponse ToResponse(AiInference inference, IReadOnlyDictionary<string, Guid> diseaseIds)
@@ -443,12 +255,5 @@ public sealed class DiagnosisCaseService(
         item.IsActive,
         item.ApprovedAt);
 
-    private static DiseaseSummary Summary(Disease disease) =>
-        new(disease.Id, disease.Code, disease.Name, disease.IsHealthyClass, disease.Symptoms, disease.Prevention);
-
-    private static string ImageRulesContentType(string storageKey) =>
-        Files.ImageRules.ContentTypeOf(storageKey) ?? "image/jpeg";
-
-    private static ValidationException Invalid(string field, string message) =>
-        new(new Dictionary<string, string[]> { [field] = [message] });
+    private static DiseaseSummary Summary(Disease disease) => DiagnosisResultBuilder.Summary(disease);
 }

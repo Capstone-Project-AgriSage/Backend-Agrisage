@@ -5,8 +5,8 @@ using AgriSage.Domain.Features.Diagnosis.Enums;
 namespace AgriSage.Domain.Features.Diagnosis.Entities;
 
 // Interpretation/rejection policy of one AI Model version. "No overlapping ACTIVE periods per Model" is
-// enforced transactionally by Application. requires_human_review never bypasses Human Review:
-// recommendations always require a VERIFIED Diagnosis Case (database design §35.12).
+// enforced transactionally by Application. passed_policy decides whether the Farmer reads a CONFIDENT or an UNCERTAIN
+// result; requires_human_review is kept and has no effect since Human Review was removed (database design §35.12).
 public sealed class AiPolicyConfig : SoftDeletableEntity
 {
     private const int ProbabilityDecimals = 4;

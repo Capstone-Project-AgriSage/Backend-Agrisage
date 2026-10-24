@@ -7,7 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace AgriSage.IntegrationTests.Api;
 
-// Authorization and validation of the AI diagnosis APIs without a database (AI_DIAGNOSIS.md): a request that gets past
+// Authorization and validation of the AI diagnosis APIs without a database (AI_DIAGNOSIS.md 2.0): a request that gets past
 // the role and permission gates is stopped by validation (400) or content type (415) before any database access, which
 // proves the gates let it through (a 403 would come first).
 public sealed class DiagnosisHttpTests(StaffHttpTests.StaffApiFactory factory) : IClassFixture<StaffHttpTests.StaffApiFactory>
@@ -34,7 +34,7 @@ public sealed class DiagnosisHttpTests(StaffHttpTests.StaffApiFactory factory) :
         "GET /api/diagnosis-cases",
         "GET /api/ai-models",
         "GET /api/diseases",
-        $"PUT /api/staff/{Id}/ai-review"
+        $"POST /api/me/diagnosis-cases/{Id}/retry"
     ];
 
     [Theory]
@@ -61,20 +61,41 @@ public sealed class DiagnosisHttpTests(StaffHttpTests.StaffApiFactory factory) :
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/me/diagnosis-cases", Token)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync($"/api/me/diagnosis-cases/{Id}", Token)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsync($"/api/me/diagnosis-cases/{Id}/cancel", null, Token)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsync($"/api/me/diagnosis-cases/{Id}/retry", null, Token)).StatusCode);
     }
 
     [Theory]
     [InlineData("FARMER")]
     [InlineData("DELIVERY_STAFF")]
-    public async Task Farmers_and_drivers_cannot_use_the_reviewer_routes(string role)
+    public async Task Farmers_and_drivers_cannot_read_the_store_cases(string role)
     {
         using var client = ClientFor(role);
 
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/diagnosis-cases", Token)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync($"/api/diagnosis-cases/{Id}", Token)).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync($"/api/diagnosis-cases/{Id}/review", new { }, Token)).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsync($"/api/diagnosis-cases/{Id}/rerun-ai", null, Token)).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await client.DeleteAsync($"/api/diagnosis-cases/{Id}/recommendations/{Id}", Token)).StatusCode);
+    }
+
+    // Human Review and its routes were removed (2.0): nothing can decide a case or toggle a review right any more.
+    [Theory]
+    [InlineData("SALES_STAFF")]
+    [InlineData("STORE_OWNER")]
+    [InlineData("ADMIN")]
+    public async Task The_review_routes_are_gone(string role)
+    {
+        using var client = ClientFor(role);
+
+        foreach (var response in new[]
+                 {
+                     await client.PostAsync($"/api/diagnosis-cases/{Id}/start-review", null, Token),
+                     await client.PostAsJsonAsync($"/api/diagnosis-cases/{Id}/review", new { decision = "CONFIRMED" }, Token),
+                     await client.PostAsync($"/api/diagnosis-cases/{Id}/rerun-ai", null, Token),
+                     await client.PostAsJsonAsync($"/api/diagnosis-cases/{Id}/recommendations", new { type = "PRODUCT" }, Token),
+                     await client.DeleteAsync($"/api/diagnosis-cases/{Id}/recommendations/{Id}", Token),
+                     await client.PutAsJsonAsync($"/api/staff/{Id}/ai-review", new { enabled = true }, Token)
+                 })
+        {
+            Assert.Contains(response.StatusCode, new[] { HttpStatusCode.NotFound, HttpStatusCode.MethodNotAllowed });
+        }
     }
 
     [Theory]
@@ -103,18 +124,6 @@ public sealed class DiagnosisHttpTests(StaffHttpTests.StaffApiFactory factory) :
     }
 
     [Fact]
-    public async Task The_review_right_is_set_by_admin_and_owner_only()
-    {
-        using var sales = ClientFor("SALES_STAFF");
-        using var farmer = ClientFor("FARMER");
-
-        Assert.Equal(HttpStatusCode.Forbidden,
-            (await sales.PutAsJsonAsync($"/api/staff/{Id}/ai-review", new { enabled = true }, Token)).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden,
-            (await farmer.PutAsJsonAsync($"/api/staff/{Id}/ai-review", new { enabled = true }, Token)).StatusCode);
-    }
-
-    [Fact]
     public async Task A_farmer_reaches_validation_of_the_list_and_the_media_type_of_the_upload()
     {
         using var client = ClientFor("FARMER");
@@ -130,24 +139,13 @@ public sealed class DiagnosisHttpTests(StaffHttpTests.StaffApiFactory factory) :
     [InlineData("SALES_STAFF")]
     [InlineData("STORE_OWNER")]
     [InlineData("ADMIN")]
-    public async Task Reviewers_reach_validation_of_the_queue_and_of_a_review(string role)
+    public async Task Store_staff_reach_validation_of_the_case_list(string role)
     {
         using var client = ClientFor(role);
 
         Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync("/api/diagnosis-cases?page=0", Token)).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest,
             (await client.GetAsync("/api/diagnosis-cases?from=2026-11-10&to=2026-11-01", Token)).StatusCode);
-
-        var review = await client.PostAsJsonAsync($"/api/diagnosis-cases/{Id}/review", new { decision = "" }, Token);
-        Assert.Equal(HttpStatusCode.BadRequest, review.StatusCode);
-        Assert.True(Errors(await review.Content.ReadAsStringAsync(Token)).TryGetProperty("decision", out _));
-
-        var recommendation = await client.PostAsJsonAsync(
-            $"/api/diagnosis-cases/{Id}/recommendations", new { type = "", rankOrder = 5000 }, Token);
-        Assert.Equal(HttpStatusCode.BadRequest, recommendation.StatusCode);
-        var errors = Errors(await recommendation.Content.ReadAsStringAsync(Token));
-        Assert.True(errors.TryGetProperty("type", out _));
-        Assert.True(errors.TryGetProperty("rankOrder", out _));
     }
 
     [Fact]
@@ -220,16 +218,24 @@ public sealed class DiagnosisHttpTests(StaffHttpTests.StaffApiFactory factory) :
         foreach (var path in new[]
                  {
                      "/api/me/diagnosis-cases", "/api/me/diagnosis-cases/{id}", "/api/me/diagnosis-cases/{id}/cancel",
-                     "/api/diagnosis-cases", "/api/diagnosis-cases/{id}", "/api/diagnosis-cases/{id}/start-review",
-                     "/api/diagnosis-cases/{id}/review", "/api/diagnosis-cases/{id}/rerun-ai",
-                     "/api/diagnosis-cases/{id}/recommendations", "/api/diagnosis-cases/{id}/recommendations/{recommendationId}",
+                     "/api/me/diagnosis-cases/{id}/retry", "/api/diagnosis-cases", "/api/diagnosis-cases/{id}",
                      "/api/ai-models", "/api/ai-models/{id}", "/api/ai-models/{id}/activate", "/api/ai-models/{id}/retire",
                      "/api/ai-models/{id}/policies", "/api/ai-policies/{id}/activate", "/api/ai-policies/{id}/deactivate",
                      "/api/diseases", "/api/diseases/{id}", "/api/diseases/{id}/treatments",
-                     "/api/disease-treatments/{id}", "/api/disease-treatments/{id}/activate", "/api/staff/{id}/ai-review"
+                     "/api/disease-treatments/{id}", "/api/disease-treatments/{id}/activate"
                  })
         {
             Assert.True(paths.TryGetProperty(path, out _), path);
+        }
+
+        foreach (var path in new[]
+                 {
+                     "/api/diagnosis-cases/{id}/start-review", "/api/diagnosis-cases/{id}/review",
+                     "/api/diagnosis-cases/{id}/rerun-ai", "/api/diagnosis-cases/{id}/recommendations",
+                     "/api/diagnosis-cases/{id}/recommendations/{recommendationId}", "/api/staff/{id}/ai-review"
+                 })
+        {
+            Assert.False(paths.TryGetProperty(path, out _), path);
         }
     }
 

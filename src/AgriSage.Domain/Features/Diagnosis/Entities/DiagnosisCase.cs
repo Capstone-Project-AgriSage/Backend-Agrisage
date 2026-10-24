@@ -7,8 +7,9 @@ using AgriSage.Domain.Features.Products.Entities;
 namespace AgriSage.Domain.Features.Diagnosis.Entities;
 
 // Farmer diagnosis case; aggregate root for Images, AI Inferences, Human Reviews and Recommendations
-// (database design §35.12). AI inference is evidence only; a VERIFIED diagnosis comes from Human Review.
-// Calling the AI service, reviewer authorization (can_review_ai) and product search are Application concerns.
+// (database design §35.12). Since 2026-10-21 (AI_DIAGNOSIS.md 2.0) there is no Human Review: the latest successful
+// inference is what the Farmer reads (DiagnosisResultPolicy). Review / AddRecommendation stay for the cases decided before
+// and are no longer called by the application. Calling the AI service and product search are Application concerns.
 public sealed class DiagnosisCase : SoftDeletableEntity
 {
     private readonly List<DiagnosisImage> _images = [];

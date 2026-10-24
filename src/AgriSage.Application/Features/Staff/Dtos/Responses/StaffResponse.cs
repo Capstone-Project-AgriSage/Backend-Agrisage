@@ -13,5 +13,4 @@ public sealed record StaffResponse(
     string? EmployeeCode,
     DateOnly? JoinedAt,
     DateOnly? LeftAt,
-    bool CanReviewAi,
     DateTimeOffset CreatedAt);
