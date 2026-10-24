@@ -742,7 +742,7 @@ Ví dụ:
 ```text
 Farmer sees own Order only
 Delivery Staff handles assigned Delivery only
-AI Reviewer requires can_review_ai = true
+No AI Reviewer since 2026-10-21 (can_review_ai has no effect)
 ```
 
 ---

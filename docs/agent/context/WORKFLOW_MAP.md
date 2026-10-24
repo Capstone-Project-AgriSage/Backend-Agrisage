@@ -113,13 +113,13 @@ Delivery refusal before fulfillment is handled as Delivery Incident instead.
 Farmer Diagnosis Case
 → upload image(s)
 → AI inference using exact Model + Policy
-→ authorized Human Review
-→ CONFIRMED / CORRECTED / INCONCLUSIVE
-→ verified diagnosis
-→ treatment/product recommendation
+→ result shown to the Farmer at once (no Human Review since 2026-10-21)
+→ CONFIDENT: disease, treatments, products matched by active ingredient (at most 5)
+→ UNCERTAIN: top guess, non-chemical guidance, no product, retake / ask the store
+→ FAILED: the Farmer retries
 ```
 
-No commercial recommendation from an unverified AI inference.
+Products are suggested only for a CONFIDENT, non-Healthy result (`api-flows/AI_DIAGNOSIS.md` 2.0, D3, D13).
 
 ## Atomicity Principle
 

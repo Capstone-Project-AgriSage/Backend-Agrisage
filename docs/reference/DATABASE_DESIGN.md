@@ -4845,6 +4845,8 @@ Rule:
 ```text
 AI Inference is evidence.
 It is not the final verified diagnosis by itself.
+Since 2026-10-21 the latest SUCCESS inference is the result the Farmer reads
+(CONFIDENT / UNCERTAIN); there is no verification step.
 ```
 
 Model/policy records preserve reproducibility.
@@ -4855,6 +4857,8 @@ Model/policy records preserve reproducibility.
 
 
 Stores authorized Human Review at the **Diagnosis Case** level.
+
+> Not written since 2026-10-21 (no Human Review); kept for the cases reviewed before.
 
 A Case may contain multiple images and multiple AI Inferences, so the review is not required to bind to only one Inference.
 
@@ -4953,6 +4957,10 @@ Recommended indexes:
 
 Stores final treatment/product recommendations attached to the current verified Human Review.
 
+> Not written since 2026-10-21: suggestions for a CONFIDENT AI result are computed at read time from the flow below
+> (without the reviewer step) and their store product ids are recorded in a `DIAGNOSIS_AI_RESULT` audit entry. Kept
+> for the cases reviewed before.
+
 ```text
 recommendation_items
 --------------------
@@ -5007,7 +5015,7 @@ Verified Disease
 → Products containing those Active Ingredients
 → Store Products active/sellable
 → Prefer products with available stock
-→ Reviewer approves final recommendation
+→ Reviewer approves final recommendation (before 2026-10-21 only)
 ```
 
 Rules:
@@ -5516,16 +5524,17 @@ Financial resolution
 Farmer Image
 → AI Inference
 → Model + Policy snapshot
-→ Authorized Human Review
+→ Result shown to the Farmer (no Human Review since 2026-10-21)
 
-CONFIRMED / CORRECTED
-→ Verified Disease
-→ Treatment
+CONFIDENT (passed_policy)
+→ Predicted Disease
+→ Treatments
 → Suitable Active Ingredient
-→ Store Product Recommendation
+→ Store Product suggestions (computed, at most 5)
 
-INCONCLUSIVE
-→ no treatment/product recommendation
+UNCERTAIN (policy not passed)
+→ Predicted Disease, non-chemical guidance only
+→ no product
 ```
 
 ---
@@ -6006,7 +6015,7 @@ Only FARMER users own Farmer Profiles.
 
 Only Delivery Staff may be assigned delivery work.
 
-Only authorized Store Owner/Sales Staff may Human Review AI.
+No Human Review of AI since 2026-10-21 (`can_review_ai` has no effect).
 
 FEFO selection.
 
@@ -6361,13 +6370,18 @@ only (there is no failed_at column).
 
 ## 35.12 Diagnosis Case, Human Review and recommendations (tables 57–63)
 
+> **Since 2026-10-21 (`api-flows/AI_DIAGNOSIS.md` 2.0) there is no Human Review.** The Farmer reads the latest
+> SUCCESS inference as CONFIDENT (`passed_policy`) or UNCERTAIN; suggestions are computed at read time (§63 flow).
+> `agent_reviews` and `recommendation_items` are no longer written and keep the cases decided before that date;
+> `store_members.can_review_ai` and `ai_policy_configs.requires_human_review` have no effect. No schema change.
+
 ```text
 SUBMITTED → PROCESSING   (at least one active image)
 PROCESSING → AI_COMPLETED (at least one SUCCESS inference) | FAILED
-FAILED → PROCESSING       (AI may be run again)
-AI_COMPLETED → UNDER_REVIEW (optional)
+FAILED → PROCESSING       (AI may be run again: the Farmer's retry since 2026-10-21)
+AI_COMPLETED → UNDER_REVIEW (optional; not used since 2026-10-21)
 
-Human Review is allowed from AI_COMPLETED, UNDER_REVIEW and FAILED
+Before 2026-10-21 only — Human Review was allowed from AI_COMPLETED, UNDER_REVIEW and FAILED
 (manual diagnosis), and again from VERIFIED / INCONCLUSIVE:
 CONFIRMED / CORRECTED → VERIFIED with final_disease_id
 INCONCLUSIVE          → INCONCLUSIVE, final_disease_id NULL
@@ -6388,10 +6402,11 @@ Each inference references an ACTIVE AI Model and an ACTIVE Policy of
 that model effective at inferred_at. passed_policy = true requires
 status SUCCESS and confidence >= minimum_confidence.
 
-ai_policy_configs.requires_human_review is kept as designed but never
-bypasses review: recommendations always require a VERIFIED case.
+ai_policy_configs.requires_human_review is kept as designed and has no
+effect (no review since 2026-10-21). passed_policy now decides whether the
+Farmer sees a CONFIDENT or an UNCERTAIN result.
 
-Recommendations:
+Recommendations (stored, cases reviewed before 2026-10-21):
 - only for a VERIFIED case, attached to its current review;
 - exactly one target: TREATMENT → active disease_treatment of the final
   disease; PRODUCT → active and sellable store_product;

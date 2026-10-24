@@ -23,7 +23,7 @@ Use for PR/diff/code review.
    - debt ledger;
    - fulfillment;
    - returns;
-   - AI Human Review.
+   - AI result certainty and product suggestions (no Human Review since 2026-10-21).
 5. Persistence:
    - FK/delete behavior;
    - concurrency;

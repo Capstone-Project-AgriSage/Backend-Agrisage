@@ -258,6 +258,10 @@ setup documentation
   posted ADJUSTMENT movements, Farmer tracking, `Reports/DeliveryReportService`. `IRowLockService.LockDeliveryAsync` added.
   No schema change, no migration. Verified with the real-DB suite (`AGRISAGE_DB_TESTS=1`).
 - Done (branch `feature/cors-allowed-origins`) — CORS for the web client: `Api/Extensions/CorsExtensions` (`Cors:AllowedOrigins`, validated at start-up), `UseCors` first in `Program.cs`, local dev origins in `appsettings.Development.json`. Set the production origin(s) with environment variables `Cors__AllowedOrigins__0` … when the web app is deployed. No schema change.
+- Decided 2026-10-21 (lead) — AI diagnosis without Human Review: `api-flows/AI_DIAGNOSIS.md` 2.0, business rules 36,
+  37, 41, 59, 60, `DECISIONS.md`, `DATABASE_DESIGN.md` §35.12 / §61–63 notes. The Farmer sees the AI result at once
+  (CONFIDENT / UNCERTAIN), products only for CONFIDENT by active-ingredient match, Farmer retry for FAILED, store routes
+  read only. No schema change, no migration. Code follows in a separate PR.
 
 ## Not Yet Implied by Foundation Completion
 

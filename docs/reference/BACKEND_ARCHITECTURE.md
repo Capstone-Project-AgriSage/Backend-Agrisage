@@ -1074,8 +1074,8 @@ Farmer may access only own Order
 
 Delivery Staff may update only assigned Delivery
 
-Sales Staff/Store Owner require can_review_ai
-for AI Human Review
+No AI Human Review since 2026-10-21
+(can_review_ai kept, no effect)
 ```
 
 Business ownership checks remain inside Application services.
@@ -1581,9 +1581,8 @@ DiagnosisService
     Python FastAPI / PyTorch
 ```
 
-Human Review remains an AgriSage business workflow and is stored in PostgreSQL.
-
-AI inference does not directly become the final verified diagnosis without authorized review.
+Human Review was removed on 2026-10-21 (`api-flows/AI_DIAGNOSIS.md` 2.0): the latest successful inference is the
+result the Farmer reads, CONFIDENT or UNCERTAIN under the policy; the review tables keep the cases decided before.
 
 ---
 
