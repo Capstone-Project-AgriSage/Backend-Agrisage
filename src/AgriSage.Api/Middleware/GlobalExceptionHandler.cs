@@ -25,6 +25,11 @@ public sealed class GlobalExceptionHandler(
         {
             logger.LogError(exception, "Unhandled exception. TraceId {TraceId}", httpContext.TraceIdentifier);
         }
+        else if (databaseErrors.IsUnavailable(exception))
+        {
+            httpContext.Response.Headers.RetryAfter = "5";
+            logger.LogWarning("Database capacity or connectivity unavailable. TraceId {TraceId}", httpContext.TraceIdentifier);
+        }
 
         problem.Extensions["traceId"] = httpContext.TraceIdentifier;
         httpContext.Response.StatusCode = problem.Status ?? StatusCodes.Status500InternalServerError;
@@ -58,6 +63,8 @@ public sealed class GlobalExceptionHandler(
         BusinessRuleException rule => WithErrors(
             Problem(StatusCodes.Status422UnprocessableEntity, "Business rule violated.", rule.Message), rule.Errors),
         DomainException domain => Problem(StatusCodes.Status422UnprocessableEntity, "Business rule violated.", domain.Message),
+        _ when databaseErrors.IsUnavailable(exception) => Problem(StatusCodes.Status503ServiceUnavailable,
+            "Database temporarily unavailable.", "The database is busy or unavailable. Please try again shortly."),
         _ => Problem(StatusCodes.Status500InternalServerError, "Server error.", "An unexpected error occurred.")
     };
 

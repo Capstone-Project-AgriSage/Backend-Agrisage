@@ -6758,3 +6758,24 @@ permissions are capped by current Owner-role defaults. Each permission configura
 PostgreSQL transaction advisory lock before re-checking authority, then writes permissions + parent version + audit
 with one SaveChanges/commit. An old role/member version fails with 409. Authorization reads current rows on each
 request; permissions are not cached in JWT. Existing store/ownership/financial invariants remain mandatory.
+
+# XXXVII. EVENT-DRIVEN REALTIME (2026-10-27, user-requested extension)
+
+The model gains `realtime_outbox` (75 tables total). This is durable transport metadata, not a business ledger.
+It uses UUID id, timestamptz created_at/updated_at/available_at/processed_at, standard soft deletion,
+`topic varchar(30)`, `scope varchar(20)`, `subject_id uuid`, `transaction_id bigint`, `attempts integer >= 0`,
+`last_error_code varchar(100) NULL`. No business amounts, user content, token or AI probability is stored.
+Unique `(transaction_id, topic, scope, subject_id)` coalesces each transaction's changes by audience;
+partial index `(available_at, id) WHERE processed_at IS NULL AND deleted_at IS NULL` supports bounded recovery.
+Only `deleted_by` references users (NoAction). Subject ids are routing metadata, deliberately without a polymorphic FK.
+
+Reviewed migration `EventDrivenRealtime` adds AFTER INSERT/UPDATE triggers to notifications, permission/security,
+inventory and diagnosis tables. They insert outbox rows in the original transaction. `pg_notify` wakes a dedicated
+BackgroundService only after commit; rollback produces neither durable work nor an observable notification.
+Existing `notification_outbox` and notification deduplication keys are preserved. Historical posted movements and
+completed diagnosis cases are queued once during migration, replacing periodic domain-table scans.
+
+Workers claim due rows with FOR UPDATE SKIP LOCKED, retry exponentially (cap 1 hour), and atomically mark completion
+with PostgreSQL fan-out NOTIFY. Every API instance LISTENs and sends SignalR invalidations to its own sockets.
+NOTIFY is a wake-up/fan-out hint, never the durable source of truth. Listener recovery and client reconnect trigger
+REST snapshot resynchronization. No automatic schema deployment or seeding; deploy the reviewed migration first.

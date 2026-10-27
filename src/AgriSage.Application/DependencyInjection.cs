@@ -153,6 +153,7 @@ public static class DependencyInjection
         services.AddScoped<IDiseaseService, DiseaseService>();
 
         // Further feature application services are registered here by later tasks.
+        services.AddScoped<RealtimeAudience>();
 
         return services;
     }

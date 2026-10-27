@@ -110,5 +110,6 @@ public class GlobalExceptionHandlerTests
     private sealed class FakeClassifier(bool uniqueViolation) : IDatabaseErrorClassifier
     {
         public bool IsUniqueViolation(DbUpdateException exception) => uniqueViolation;
+        public bool IsUnavailable(Exception exception) => false;
     }
 }

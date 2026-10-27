@@ -6,4 +6,5 @@ namespace AgriSage.Application.Common.Interfaces;
 public interface IDatabaseErrorClassifier
 {
     bool IsUniqueViolation(DbUpdateException exception);
+    bool IsUnavailable(Exception exception);
 }

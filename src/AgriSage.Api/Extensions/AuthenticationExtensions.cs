@@ -38,7 +38,18 @@ public static class AuthenticationExtensions
                     ClockSkew = TimeSpan.FromSeconds(30)
                 };
 
-                bearer.Events = new JwtBearerEvents { OnTokenValidated = RejectInactiveAccountAsync };
+                bearer.Events = new JwtBearerEvents
+                {
+                    OnTokenValidated = RejectInactiveAccountAsync,
+                    // Browsers cannot set Authorization headers for WebSocket/SSE handshakes.
+                    // Query-string credentials are accepted only on this hub, never on REST endpoints.
+                    OnMessageReceived = context =>
+                    {
+                        if (context.Request.Path.StartsWithSegments("/api/realtime")
+                            && context.Request.Query.TryGetValue("access_token", out var token)) context.Token = token;
+                        return Task.CompletedTask;
+                    }
+                };
             });
 
         return services;

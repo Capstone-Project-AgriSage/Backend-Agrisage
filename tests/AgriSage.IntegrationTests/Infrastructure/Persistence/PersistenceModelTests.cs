@@ -31,7 +31,7 @@ public class PersistenceModelTests
         "diagnosis_images", "ai_inferences", "agent_reviews", "recommendation_items",
         "articles", "contact_requests", "notifications", "audit_logs",
         "auth_sessions", "refresh_tokens", "auth_challenges", "notification_outbox",
-        "permissions", "role_permissions", "store_member_permissions"
+        "permissions", "role_permissions", "store_member_permissions", "realtime_outbox"
     ];
 
     private static readonly (IModel DesignModel, IModel RuntimeModel) Models = BuildModels();
@@ -55,11 +55,11 @@ public class PersistenceModelTests
         Table(table).GetCheckConstraints().Single(check => check.Name == $"ck_{table}_{name}");
 
     [Fact]
-    public void Model_maps_exactly_the_74_documented_tables()
+    public void Model_maps_exactly_the_75_documented_tables()
     {
         var tables = Model.GetEntityTypes().Select(entityType => entityType.GetTableName()).ToList();
 
-        Assert.Equal(74, DocumentedTables.Length);
+        Assert.Equal(75, DocumentedTables.Length);
         Assert.Equal(DocumentedTables.Order(), tables.Order());
         Assert.DoesNotContain(Model.GetEntityTypes(), entityType => entityType.IsOwned());
     }

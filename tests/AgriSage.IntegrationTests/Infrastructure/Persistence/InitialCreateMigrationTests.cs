@@ -31,7 +31,8 @@ public class InitialCreateMigrationTests
                 "20261007062351_AuthSessionsNotificationsOperations",
                 "20261009151702_DynamicPermissions",
                 "20261010064131_AiDiagnosisPermissions",
-                "20261020030801_PermissionOverrideInheritance"
+                "20261020030801_PermissionOverrideInheritance",
+                "20261027143255_EventDrivenRealtime"
             ],
             context.Database.GetMigrations());
     }

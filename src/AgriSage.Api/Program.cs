@@ -38,6 +38,13 @@ builder.Services.AddControllers(options =>
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddApiAuthentication();
 builder.Services.AddAuthorization();
+builder.Services.AddSignalR(options =>
+{
+    options.MaximumReceiveMessageSize = 4096;
+    options.EnableDetailedErrors = false;
+});
+builder.Services.AddSingleton<Microsoft.AspNetCore.SignalR.IUserIdProvider, AgriSage.Api.Realtime.SubjectUserIdProvider>();
+builder.Services.AddScoped<AgriSage.Application.Features.Notifications.IRealtimePublisher, AgriSage.Api.Realtime.SignalRPublisher>();
 builder.Services.AddScoped<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, AgriSage.Api.Authorization.DelegatedPermissionHandler>();
 builder.Services.AddApiRateLimiting();
 builder.Services.AddApiCors(builder.Configuration);
@@ -76,5 +83,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
 app.MapControllers();
+app.MapHub<AgriSage.Api.Realtime.EventsHub>("/api/realtime", options => options.CloseOnAuthenticationExpiration = true);
 
 app.Run();

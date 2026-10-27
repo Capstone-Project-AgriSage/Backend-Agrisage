@@ -48,4 +48,39 @@ public class DatabaseOptionsTests
         Assert.Null(built.Password);
         Assert.Equal(SslMode.Require, built.SslMode);
     }
+
+    [Fact]
+    public void Defaults_bound_sessions_and_release_idle_capacity_for_other_clients()
+    {
+        var built = new NpgsqlConnectionStringBuilder(new DatabaseOptions { Host = "localhost" }.BuildConnectionString());
+        Assert.True(built.Pooling);
+        Assert.Equal(4, built.MaxPoolSize);
+        Assert.Equal(0, built.MinPoolSize);
+        Assert.Equal(30, built.ConnectionIdleLifetime);
+        Assert.Equal(5, built.ConnectionPruningInterval);
+        Assert.Equal(15, built.Timeout);
+        Assert.Equal("AgriSage.Api", built.ApplicationName);
+    }
+
+    [Fact]
+    public void Deployments_can_set_their_own_pool_budget()
+    {
+        var built = new NpgsqlConnectionStringBuilder(new DatabaseOptions
+        {
+            Host = "localhost", MaximumPoolSize = 2, MinimumPoolSize = 0,
+            ConnectionIdleLifetimeSeconds = 20, ConnectionPruningIntervalSeconds = 4, ConnectionTimeoutSeconds = 7
+        }.BuildConnectionString());
+        Assert.Equal(2, built.MaxPoolSize);
+        Assert.Equal(20, built.ConnectionIdleLifetime);
+        Assert.Equal(4, built.ConnectionPruningInterval);
+        Assert.Equal(7, built.Timeout);
+    }
+
+    [Fact]
+    public void An_invalid_budget_is_rejected_before_opening_any_connection()
+    {
+        Assert.Throws<InvalidOperationException>(() => new DatabaseOptions { Host = "localhost", MaximumPoolSize = 0 }.BuildConnectionString());
+        Assert.Throws<InvalidOperationException>(() => new DatabaseOptions { Host = "localhost", MaximumPoolSize = 2, MinimumPoolSize = 3 }.BuildConnectionString());
+        Assert.Throws<InvalidOperationException>(() => new DatabaseOptions { Host = "localhost", ConnectionIdleLifetimeSeconds = 1, ConnectionPruningIntervalSeconds = 5 }.BuildConnectionString());
+    }
 }

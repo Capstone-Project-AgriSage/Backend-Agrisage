@@ -12,12 +12,12 @@ namespace AgriSage.Application.Features.Notifications;
 // This use case only writes notifications. A failed save is retried with the same per-record keys.
 public sealed class CommittedNotificationService(IAgriSageDbContext context, NotificationWriter writer)
 {
-    public async Task StockAsync(int batchSize, CancellationToken token)
+    public async Task StockAsync(int batchSize, CancellationToken token, Guid? movementId = null)
     {
         var store = await ActiveStore.GetIdAsync(context, token);
         var owners = await NotificationRecipients.StaffAsync(context, store, token, RoleCode.StoreOwner);
         if (owners.Count == 0) return;
-        var rows = await context.StockMovements.AsNoTracking().Where(m => m.StoreId == store && m.PostedAt != null
+        var rows = await context.StockMovements.AsNoTracking().Where(m => (movementId == null || m.Id == movementId) && m.StoreId == store && m.PostedAt != null
             && (m.Status == StockMovementStatus.Posted || m.Status == StockMovementStatus.Reversed)
             && context.Notifications.IgnoreQueryFilters().Count(n => owners.Contains(n.UserId)
                 && n.DeduplicationKey == "stock-posted:" + m.Id.ToString()) < owners.Count)
@@ -39,9 +39,9 @@ public sealed class CommittedNotificationService(IAgriSageDbContext context, Not
 
     // One alert per case once its AI result exists (AI_DIAGNOSIS.md 2.0, section 8). There is no Human Review any more, so
     // no review or recommendation alert; the text differs when the AI was not sure (D2).
-    public async Task DiagnosisAsync(int batchSize, CancellationToken token)
+    public async Task DiagnosisAsync(int batchSize, CancellationToken token, Guid? caseId = null)
     {
-        var cases = context.DiagnosisCases.AsNoTracking().Where(c => c.FarmerProfile.User.Status == UserStatus.Active
+        var cases = context.DiagnosisCases.AsNoTracking().Where(c => (caseId == null || c.Id == caseId) && c.FarmerProfile.User.Status == UserStatus.Active
             && c.FarmerProfile.User.Role.IsActive);
         var ai = await cases.Where(c => (c.Status == DiagnosisCaseStatus.AiCompleted || c.Status == DiagnosisCaseStatus.UnderReview
                 || c.Status == DiagnosisCaseStatus.Verified || c.Status == DiagnosisCaseStatus.Inconclusive)

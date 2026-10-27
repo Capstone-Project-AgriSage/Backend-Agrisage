@@ -253,3 +253,64 @@ Deployment on 2026-10-07: after explicit user authorization, applied only the pe
 database. All four CREATE TABLE operations, additive columns/constraints/indexes and the EF history
 insert succeeded. A subsequent `dotnet ef migrations list` confirmed all six migrations are applied.
 No seeding or background-job configuration change was performed during this deployment.
+
+## Event-driven realtime extension (2026-10-27, current user request)
+
+Existing REST routes/DTOs are unchanged. Authenticated SignalR hub `/api/realtime` emits `Changed` with
+`{eventId, topic}`. Topics: `notifications`, `permissions`, `inventory`, `diagnosis`, `resync`.
+Messages are invalidations, not business snapshots. Clients re-read the appropriate existing API, debounce bursts,
+deduplicate event ids and synchronize all active views on initial connect/reconnect/focus/online. No periodic
+permission or notification HTTP polling. Initial connection failure also retries with bounded exponential backoff.
+Browser JWT `access_token` is accepted only under the hub path; REST still requires Authorization headers.
+The hub closes at authentication expiration. User identity comes from `sub`; there are no arbitrary join/store methods.
+Inventory/diagnosis audiences use live role grants, member overrides, store membership, Owner ceiling and ownership.
+Permission invalidations include disabled users so their next REST read detects revoked sessions.
+
+Backend: existing notification dispatcher/policies/unique keys remain. PostgreSQL triggers enqueue transport events
+inside business transactions and notify after commit. Targeted stock/diagnosis notification collectors replace 15s
+full scans. A separate outbox BackgroundService drains bounded batches with row locks, exponential retry and a
+60s indexed queue recovery check (`Realtime:RecoverySeconds`, configurable 5–300); time-based expiry/reminder/payment
+maintenance remains in OperationsWorker. `BackgroundJobs:Enabled` controls both worker families. PollSeconds and
+NotificationSeconds remain accepted legacy settings but no longer schedule notification scans.
+
+Deployment: review/apply EventDrivenRealtime before the updated API; no auto-migration. LISTEN requires a direct or
+session-pooled PostgreSQL connection, not a transaction pooler. Allow WebSocket upgrades for `/api/realtime` and never
+log query-string bearer tokens at the reverse proxy. Each API instance uses its own dedicated LISTEN connection;
+PostgreSQL broadcasts invalidations to all instances, no Redis/backplane needed. If LISTEN is unavailable, worker
+recovery still processes durable notifications, but realtime delivery waits for listener recovery; reconnect/focus
+REST snapshots repair missed hints. Committed event rows are retained for investigation; schedule reviewed archival
+outside hot request paths when volume requires it. Do not silently drop failed/unprocessed rows.
+
+Client implementation and verification: Management-Webs and Farmer-Web use the official @microsoft/signalr client;
+Farmer-Mobile uses signalr_netcore and the existing serialized Dio token refresh. Their notification/permission polling
+intervals are removed; mobile notification/case polling is also removed. Mobile resumes and socket reconnects invalidate
+REST snapshots, and logout disposes the connection/retry timers. Event ids are deduplicated and bursts coalesced.
+Management inventory overview/ledger/card/reports and diagnosis queue/detail refresh in place while retaining filters.
+Farmer-Web's AI Doctor/history are still demo/mock data in the existing source; this transport change does not replace
+that separate data integration. Actual diagnosis invalidations refresh the Management screens and Farmer-Mobile.
+Delivery-Mobile and AI-Service have no matching 15s/30s permission/notification polling to migrate.
+
+Verification uses a disposable local PostgreSQL database for migration/trigger rollback, coalescing, competing workers,
+retry, multi-instance fan-out, store/role/override/Owner-ceiling checks and Farmer ownership. HTTP/WebSocket tests verify
+JWT authentication, hub-only query tokens and per-user isolation. Browser mocks exercise actual SignalR callbacks,
+reconnect resynchronization, access revocation, inventory/AI changes and zero idle 15s/30s HTTP polling. Web builds,
+Flutter analyzer/widget tests and Android debug build are verified separately; shared Supabase is not migrated by tests.
+
+### Supabase session-connection budget (2026-10-27)
+
+The reported EMAXCONNSESSION error is Supavisor's session pool reaching its configured 15-client limit.
+Database options now bound each API process's normal Npgsql pool to 4 sessions by default, minimum 0,
+idle lifetime 30 seconds, pruning interval 5 seconds, connection/pool wait timeout 15 seconds.
+Configuration keys: Database:MaximumPoolSize, MinimumPoolSize, ConnectionIdleLifetimeSeconds,
+ConnectionPruningIntervalSeconds, ConnectionTimeoutSeconds. These are non-secret and can be overridden per deployment.
+The LISTEN service uses one additional unpooled session; the sequential operations scheduler can temporarily hold
+one additional advisory-lock session. Thus the default upper budget is about 6 sessions per API process, not 4 total.
+Add every API process/connection-string pool plus DBeaver, migrations and other tools when sizing against the
+project's session pool limit. A separate process cannot enforce a global project-wide limit.
+
+Restart old API processes after changing this configuration; their existing Npgsql pools are not resized at runtime.
+Do not switch the entire API to the transaction pooler just to hide this error: LISTEN and session advisory locks
+need a direct/session connection. Do not terminate other clients' sessions or change Supabase quotas automatically.
+Known DB capacity/connectivity failures now return 503 with Retry-After: 5 and sanitized problem details, including
+when JWT validation cannot query the database. They never become an authentication rejection; unrelated database
+errors retain existing handling. No write is automatically replayed. Listener reconnect uses capped backoff (5–60s).

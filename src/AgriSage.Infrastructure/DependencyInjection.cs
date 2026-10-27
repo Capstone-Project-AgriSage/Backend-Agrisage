@@ -57,6 +57,12 @@ public static class DependencyInjection
         services.AddHttpClient<IAuthMessageSender, AuthMessageSender>(client => client.Timeout = TimeSpan.FromSeconds(30));
         services.AddOptions<BackgroundJobOptions>().Bind(configuration.GetSection("BackgroundJobs"))
             .ValidateDataAnnotations().ValidateOnStart();
+        services.AddOptions<DatabaseOptions>().Bind(configuration.GetSection(DatabaseOptions.SectionName));
+        services.AddOptions<RealtimeOptions>().Bind(configuration.GetSection("Realtime"))
+            .ValidateDataAnnotations().ValidateOnStart();
+        services.AddSingleton<RealtimeWakeSignal>();
+        services.AddHostedService<PostgresEventListener>();
+        services.AddHostedService<RealtimeOutboxWorker>();
         services.AddHostedService<OperationsWorker>();
         services.AddSingleton<IDatabaseErrorClassifier, NpgsqlErrorClassifier>();
 

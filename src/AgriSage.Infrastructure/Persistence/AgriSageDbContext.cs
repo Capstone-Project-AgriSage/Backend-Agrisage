@@ -179,6 +179,7 @@ public sealed class AgriSageDbContext : DbContext, IAgriSageDbContext
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<AuthChallenge> AuthChallenges => Set<AuthChallenge>();
     public DbSet<NotificationOutbox> NotificationOutbox => Set<NotificationOutbox>();
+    public DbSet<RealtimeOutboxMessage> RealtimeOutbox => Set<RealtimeOutboxMessage>();
 
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 

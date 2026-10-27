@@ -6278,6 +6278,87 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AgriSage.Domain.Features.Notifications.Entities.RealtimeOutboxMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempts");
+
+                    b.Property<DateTimeOffset>("AvailableAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("available_at");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("DeletedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<string>("LastErrorCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("last_error_code");
+
+                    b.Property<DateTimeOffset?>("ProcessedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("processed_at");
+
+                    b.Property<string>("Scope")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("scope");
+
+                    b.Property<Guid>("SubjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("subject_id");
+
+                    b.Property<string>("Topic")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("topic");
+
+                    b.Property<long>("TransactionId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("transaction_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_realtime_outbox");
+
+                    b.HasIndex("AvailableAt", "Id")
+                        .HasDatabaseName("ix_realtime_outbox_available_at_id")
+                        .HasFilter("processed_at IS NULL AND deleted_at IS NULL");
+
+                    b.HasIndex("TransactionId", "Topic", "Scope", "SubjectId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_realtime_outbox_transaction_id_topic_scope_subject_id");
+
+                    b.ToTable("realtime_outbox", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_realtime_outbox_attempts", "attempts >= 0");
+
+                            t.HasCheckConstraint("ck_realtime_outbox_scope", "scope IN ('user', 'role', 'member', 'store', 'all', 'case', 'movement')");
+
+                            t.HasCheckConstraint("ck_realtime_outbox_topic", "topic IN ('notifications', 'permissions', 'inventory', 'diagnosis', 'stock-posted')");
+                        });
+                });
+
             modelBuilder.Entity("AgriSage.Domain.Features.Orders.Entities.Cart", b =>
                 {
                     b.Property<Guid>("Id")
@@ -10016,6 +10097,15 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         .HasForeignKey("DeletedBy")
                         .OnDelete(DeleteBehavior.NoAction)
                         .HasConstraintName("fk_notification_outbox_deleted_by");
+                });
+
+            modelBuilder.Entity("AgriSage.Domain.Features.Notifications.Entities.RealtimeOutboxMessage", b =>
+                {
+                    b.HasOne("AgriSage.Domain.Features.Identity.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("DeletedBy")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_realtime_outbox_deleted_by");
                 });
 
             modelBuilder.Entity("AgriSage.Domain.Features.Orders.Entities.Cart", b =>

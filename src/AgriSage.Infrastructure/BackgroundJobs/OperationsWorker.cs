@@ -22,7 +22,7 @@ public sealed class OperationsWorker(IServiceScopeFactory scopes, IOptions<Backg
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(o.PollSeconds), time);
         while (!stoppingToken.IsCancellationRequested)
         {
-            foreach (var task in Enum.GetValues<BackgroundTask>())
+            foreach (var task in Enum.GetValues<BackgroundTask>().Where(t => t != BackgroundTask.Notifications))
             {
                 if (!Enabled(task, o) || next.GetValueOrDefault(task) > time.GetUtcNow()) continue;
                 try
@@ -48,40 +48,6 @@ public sealed class OperationsWorker(IServiceScopeFactory scopes, IOptions<Backg
         var services = scope.ServiceProvider;
         switch (task)
         {
-            case BackgroundTask.Notifications:
-                var ids = await services.GetRequiredService<NotificationDispatcher>().DueAsync(o.BatchSize, token);
-                foreach (var id in ids)
-                {
-                    try
-                    {
-                        await using var dispatch = scopes.CreateAsyncScope();
-                        await dispatch.ServiceProvider.GetRequiredService<NotificationDispatcher>().DispatchAsync(id, token);
-                    }
-                    catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
-                    catch (Exception)
-                    {
-                        await using var retry = scopes.CreateAsyncScope();
-                        await retry.ServiceProvider.GetRequiredService<NotificationDispatcher>().RetryAsync(id, token);
-                        logger.LogWarning("Notification event {EventId} failed; retry scheduled.", id);
-                    }
-                }
-                // Independent notification-only collectors use fresh contexts after any failed save.
-                foreach (var collector in new[] { "stock", "diagnosis" })
-                {
-                    try
-                    {
-                        await using var collected = scopes.CreateAsyncScope();
-                        var publisher = collected.ServiceProvider.GetRequiredService<CommittedNotificationService>();
-                        if (collector == "stock") await publisher.StockAsync(o.BatchSize, token);
-                        else await publisher.DiagnosisAsync(o.BatchSize, token);
-                    }
-                    catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
-                    catch (Exception e)
-                    {
-                        logger.LogWarning("Notification collector {Collector} failed ({ErrorType}); it will retry.", collector, e.GetType().Name);
-                    }
-                }
-                break;
             case BackgroundTask.ExpireLots:
                 await services.GetRequiredService<IInventoryService>().ExpireDueLotsAsync(token); break;
             case BackgroundTask.DebtReminders:
