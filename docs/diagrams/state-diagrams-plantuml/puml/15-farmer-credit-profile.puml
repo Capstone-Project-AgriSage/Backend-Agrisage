@@ -1,0 +1,36 @@
+@startuml 15-farmer-credit-profile
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title Farmer Credit Profile
+
+[*] --> ACTIVE : Staff / Create credit profile
+ACTIVE --> SUSPENDED : Authorized Manager / Suspend credit access
+SUSPENDED --> ACTIVE : Authorized Manager / Restore credit access
+ACTIVE --> BLOCKED : Authorized Manager / Block credit access
+SUSPENDED --> BLOCKED : Authorized Manager / Block credit access
+BLOCKED --> ACTIVE : Authorized Manager / Unblock credit access
+BLOCKED --> SUSPENDED : Authorized Manager / Change to suspended
+@enduml

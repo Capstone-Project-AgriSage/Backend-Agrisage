@@ -1,0 +1,33 @@
+@startuml 24-price-list
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title Price List
+
+[*] --> DRAFT : Staff / Create price list
+DRAFT --> ACTIVE : Staff / Activate price list
+ACTIVE --> INACTIVE : Staff / Deactivate price list
+INACTIVE --> ACTIVE : Staff / Reactivate price list
+@enduml

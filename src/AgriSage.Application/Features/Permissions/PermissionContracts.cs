@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using FluentValidation;
 
 namespace AgriSage.Application.Features.Permissions;
@@ -5,9 +6,12 @@ namespace AgriSage.Application.Features.Permissions;
 public sealed record CurrentPermissionsResponse(string Role, Guid? StoreId, long RoleVersion, long? MemberVersion, IReadOnlyList<string> Permissions);
 public sealed record PermissionResponse(Guid Id, string Code, string Module, string Name, bool Delegable, IReadOnlyList<string> DefaultRoles, IReadOnlyList<string> AllowedRoles);
 public sealed record RolePermissionsResponse(Guid Id, string Code, string Name, string? Description, long Version, bool Editable, IReadOnlyList<string> PermissionCodes);
-public sealed record PermissionOverride(string Code, bool Granted);
+public sealed record PermissionOverride(string Code, [property: JsonRequired] bool? Granted);
 public sealed record MemberPermissionsResponse(Guid UserId, string FullName, string Role, Guid StoreId, long Version, long RoleVersion,
-    IReadOnlyList<string> DefaultPermissions, IReadOnlyList<string> EffectivePermissions, IReadOnlyList<PermissionOverride> Overrides, IReadOnlyList<string> GrantablePermissions);
+    IReadOnlyList<string> DefaultPermissions, IReadOnlyList<string> EffectivePermissions, IReadOnlyList<PermissionOverride> Overrides, IReadOnlyList<string> GrantablePermissions)
+{
+    public IReadOnlyList<string> PermissionCeiling { get; init; } = [];
+}
 public sealed record SetRolePermissionsRequest(IReadOnlyList<string> PermissionCodes, long Version, string Reason);
 public sealed record SetMemberPermissionsRequest(IReadOnlyList<PermissionOverride> Overrides, long Version, long RoleVersion, string Reason);
 

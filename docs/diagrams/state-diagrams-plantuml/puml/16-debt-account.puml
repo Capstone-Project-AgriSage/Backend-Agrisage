@@ -1,0 +1,35 @@
+@startuml 16-debt-account
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title Debt Account
+
+[*] --> ACTIVE : System / Create debt account
+ACTIVE --> BLOCKED : Authorized Staff / Block account
+BLOCKED --> ACTIVE : Authorized Staff / Unblock account
+ACTIVE --> CLOSED : Authorized Staff / Close account\n[business conditions satisfied]
+BLOCKED --> CLOSED : Authorized Staff / Close account\n[business conditions satisfied]
+CLOSED --> ACTIVE : Authorized Staff / Reopen account\n[permitted by application policy]
+@enduml

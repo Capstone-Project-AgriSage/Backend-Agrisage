@@ -1,0 +1,57 @@
+@startuml 17-debt-entry
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title Debt Entry
+
+state "Debt Entry Under Processing" as OPEN_DEBT {
+    state OPEN
+    state PARTIALLY_PAID
+    state ADJUSTED
+    state DISPUTED
+    OPEN --> PARTIALLY_PAID : System / Apply partial payment
+    PARTIALLY_PAID --> PARTIALLY_PAID : System / Apply additional payment\n[balance remains]
+    OPEN --> DISPUTED : Staff / DISPUTE
+    PARTIALLY_PAID --> DISPUTED : Staff / DISPUTE
+    ADJUSTED --> DISPUTED : Staff / DISPUTE
+    DISPUTED --> DISPUTED : System / Apply payment\n[dispute remains unresolved]
+    OPEN --> ADJUSTED : Manager / ADJUST\n[positive balance remains]
+    PARTIALLY_PAID --> ADJUSTED : Manager / ADJUST\n[positive balance remains]
+    DISPUTED --> ADJUSTED : Manager / ADJUST\n[positive balance remains]
+    ADJUSTED --> ADJUSTED : Manager / ADJUST\n[positive balance remains]
+    ADJUSTED --> PARTIALLY_PAID : System / Apply payment\n[positive balance remains]
+    DISPUTED --> OPEN : Staff / KEEP\n[outstanding = original amount]
+    DISPUTED --> PARTIALLY_PAID : Staff / KEEP\n[0 < outstanding < original amount]
+}
+[*] --> OPEN : Fulfillment or adjustment use case / Record receivable
+OPEN --> PAID : System / Apply payment\n[outstanding becomes zero]
+PARTIALLY_PAID --> PAID : System / Apply payment\n[outstanding becomes zero]
+ADJUSTED --> PAID : System / Apply payment\n[outstanding becomes zero]
+OPEN_DEBT --> PAID : Manager / ADJUST\n[outstanding becomes zero]
+DISPUTED --> PAID : Staff / KEEP\n[outstanding = 0]
+OPEN_DEBT --> CANCELLED : Manager / CANCEL\n[post reduction of full outstanding balance]
+PAID --> [*]
+CANCELLED --> [*]
+@enduml

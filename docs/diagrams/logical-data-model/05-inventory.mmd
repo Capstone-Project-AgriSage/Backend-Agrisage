@@ -1,0 +1,134 @@
+erDiagram
+    deliveries {
+        Identifier id PK
+    }
+    goods_receipts {
+        Identifier id PK
+    }
+    inventory_lot_balances {
+        Identifier id PK
+        Identifier inventory_lot_id FK,UQ
+        Integer64 quantity_on_hand
+        Integer64 quantity_reserved
+        Decimal_20_6_ total_cost_value
+        Integer64 version
+    }
+    inventory_lots {
+        Identifier id PK
+        Date expiry_date "nullable"
+        String_100_ lot_number "nullable"
+        Date manufacturing_date "nullable"
+        String_30_ status
+        Identifier store_product_id FK
+    }
+    inventory_reservation_items {
+        Identifier id PK
+        Integer64 base_quantity_consumed
+        Integer64 base_quantity_released
+        Integer64 base_quantity_reserved
+        Identifier inventory_lot_id FK
+        Identifier inventory_reservation_id FK
+        Identifier order_item_id FK
+    }
+    inventory_reservations {
+        Identifier id PK
+        Identifier order_id FK
+        String_500_ release_reason "nullable"
+        DateTime released_at "nullable"
+        Identifier released_by FK "nullable"
+        DateTime reserved_at
+        Identifier reserved_by FK
+        String_30_ status
+        Identifier store_id FK
+    }
+    order_items {
+        Identifier id PK
+    }
+    orders {
+        Identifier id PK
+    }
+    sales_returns {
+        Identifier id PK
+    }
+    stock_movement_items {
+        Identifier id PK
+        Identifier inventory_lot_id FK
+        String_500_ note "nullable"
+        Integer64 quantity_delta_base
+        Integer64 quantity_on_hand_after "nullable"
+        Identifier stock_movement_id FK
+        Decimal_20_6_ total_cost_snapshot
+        Decimal_20_6_ total_cost_value_after "nullable"
+        Decimal_20_6_ unit_cost_snapshot
+    }
+    stock_movements {
+        Identifier id PK
+        Identifier created_by FK
+        Identifier delivery_id FK "nullable"
+        Identifier goods_receipt_id FK "nullable"
+        String_50_ movement_number
+        String_30_ movement_type
+        DateTime occurred_at
+        Identifier order_id FK "nullable"
+        DateTime posted_at "nullable"
+        Identifier posted_by FK "nullable"
+        String_1000_ reason "nullable"
+        String_50_ reason_code "nullable"
+        Identifier reversal_of_movement_id FK "nullable"
+        Identifier sales_return_id FK "nullable"
+        String_20_ status
+        Identifier stocktake_id FK "nullable"
+        Identifier store_id FK
+    }
+    stocktake_items {
+        Identifier id PK
+        DateTime counted_at "nullable"
+        Identifier counted_by FK "nullable"
+        Integer64 counted_quantity "nullable"
+        Decimal_20_6_ difference_cost_value "nullable"
+        Integer64 difference_quantity "nullable"
+        Identifier inventory_lot_id FK
+        String_500_ note "nullable"
+        String_50_ reason_code "nullable"
+        DateTime snapshot_at
+        Identifier stocktake_id FK
+        Integer64 system_quantity_snapshot
+        Decimal_20_6_ unit_cost_snapshot "nullable"
+    }
+    stocktakes {
+        Identifier id PK
+        DateTime completed_at "nullable"
+        Identifier completed_by FK "nullable"
+        Identifier created_by FK
+        String_1000_ note "nullable"
+        DateTime started_at "nullable"
+        Identifier started_by FK "nullable"
+        String_30_ status
+        String_50_ stocktake_number
+        Identifier store_id FK
+    }
+    store_products {
+        Identifier id PK
+    }
+    stores {
+        Identifier id PK
+    }
+    inventory_lots ||--o| inventory_lot_balances : "inventory_lot_id"
+    store_products ||--o{ inventory_lots : "store_product_id"
+    inventory_lots ||--o{ inventory_reservation_items : "inventory_lot_id"
+    inventory_reservations ||--o{ inventory_reservation_items : "inventory_reservation_id"
+    order_items ||--o{ inventory_reservation_items : "order_item_id"
+    orders ||--o{ inventory_reservations : "order_id"
+    stores ||--o{ inventory_reservations : "store_id"
+    inventory_lots ||--o{ stock_movement_items : "inventory_lot_id"
+    stock_movements ||--o{ stock_movement_items : "stock_movement_id"
+    deliveries |o--o{ stock_movements : "delivery_id"
+    goods_receipts |o--o{ stock_movements : "goods_receipt_id"
+    orders |o--o{ stock_movements : "order_id"
+    stock_movements |o--o{ stock_movements : "reversal_of_movement_id"
+    sales_returns |o--o{ stock_movements : "sales_return_id"
+    stocktakes |o--o{ stock_movements : "stocktake_id"
+    stores ||--o{ stock_movements : "store_id"
+    inventory_lots ||--o{ stocktake_items : "inventory_lot_id"
+    stocktakes ||--o{ stocktake_items : "stocktake_id"
+    stores ||--o{ stocktakes : "store_id"

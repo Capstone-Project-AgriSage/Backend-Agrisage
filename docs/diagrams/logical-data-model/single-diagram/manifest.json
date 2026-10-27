@@ -1,0 +1,10 @@
+{
+  "entityCount": 74,
+  "relationshipCount": 105,
+  "layoutGroups": 11,
+  "visibleGroupContainers": 0,
+  "tableFill": "#ffffff",
+  "tableBorder": "#2d78b7",
+  "internalRelationships": 65,
+  "source": "../simplified/relationship-selection.json"
+}

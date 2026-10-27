@@ -1,0 +1,36 @@
+%%{init: {"theme":"dark"}}%%
+flowchart LR
+  accTitle: WF-06 - Store Pickup and Financial Posting
+  subgraph CUSTOMER["Customer"]
+    direction TB
+    S((Start))
+    C1("Arrive to collect confirmed pickup order")
+    C2("Receive goods")
+    E((End))
+  end
+  subgraph SALES["Sales Staff"]
+    direction TB
+    R1("Check order; select actual lots and handover quantities")
+    R2("Confirm physical handover")
+    R3("Correct lot selection or quantities")
+    R4("Arrange next pickup or cancel remaining through WF-12")
+  end
+  subgraph BACKEND["Backend System"]
+    direction TB
+    B1("Validate order, whole packages, remaining quantity and eligible lots")
+    D1{"Valid handover?"}
+    B2("One transaction: move reservations if lots changed; post SALE with COGS")
+    B3("Decrease on hand; consume stock reservation and oldest prepayment")
+    D2{"Unpaid fulfilled value greater than zero?"}
+    B4("For CREDIT: consume credit reservation; create Debt Entry and CREDIT_SALE transaction")
+    B5("Update order from fulfilled/cancelled quantities; release unused reservations if terminal; commit")
+    D3{"Open quantity remains?"}
+  end
+  S --> C1 --> R1 --> R2 --> B1 --> D1
+  D1 -->|No; no posting| R3 --> E
+  D1 -->|Yes| B2 --> B3 --> D2
+  D2 -->|Yes; CREDIT only| B4 --> B5
+  D2 -->|No| B5
+  B5 --> C2 --> D3
+  D3 -->|Yes; PARTIALLY_FULFILLED| R4 --> E
+  D3 -->|No; terminal order| E

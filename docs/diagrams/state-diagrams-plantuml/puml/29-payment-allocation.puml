@@ -1,0 +1,33 @@
+@startuml 29-payment-allocation
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title Payment Allocation
+
+[*] --> ACTIVE : System / Allocate funds\n[payment is PAID]
+ACTIVE --> ACTIVE : Owning use case / Consume or release prepayment\n[operation is valid]
+ACTIVE --> REVERSED : Owning use case / Reverse allocation\n[reversal conditions satisfied]
+REVERSED --> [*]
+@enduml

@@ -1,0 +1,28 @@
+%%{init: {"theme":"dark"}}%%
+swimlane-beta TB
+  accTitle: WF-16 - Inventory Alerts and Expiry Handling
+  subgraph SALES["Sales Staff"]
+    S((Start))
+    R1("Open stock summary and expiry/low-stock alerts")
+    R2("Inspect alerts and affected lots")
+    R3("Plan replenishment through WF-09")
+    R4("Inspect near-expiry stock; follow eligible-lot sales rules")
+    R5("Move affected reservations to eligible lots through fulfillment/allocation workflow")
+    E((End))
+  end
+  subgraph BACKEND["Backend System"]
+    B1("Read on-hand, reserved and sellable available quantities in base units")
+    B2("Compute EXPIRING, EXPIRED and LOW_STOCK using Vietnam dates")
+    D1{"Alert selected for handling?"}
+    B3("Mark ACTIVE lots past expiry as EXPIRED; keep physical quantity unchanged")
+    B4("Refresh summary and alerts from posted movements and lot status")
+  end
+  subgraph OWNER["Store Owner / Admin"]
+    O1("Run expire-due for expired lots")
+    O2("If physical stock must be removed, post EXPIRED adjustment through WF-11")
+  end
+  S --> R1 --> B1 --> B2 --> R2 --> D1
+  D1 -->|LOW_STOCK| R3 --> E
+  D1 -->|EXPIRING| R4 --> E
+  D1 -->|EXPIRED| O1 --> B3 --> R5 --> O2 --> B4 --> E
+  D1 -->|No action needed| E

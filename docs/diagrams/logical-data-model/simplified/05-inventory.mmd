@@ -1,0 +1,76 @@
+erDiagram
+    direction TB
+    inventory_lot_balances {
+        Identifier id PK
+        Identifier inventory_lot_id FK,UK
+        Integer quantity_on_hand
+        Integer quantity_reserved
+        Decimal total_cost_value
+    }
+    inventory_lots {
+        Identifier id PK
+        Identifier store_product_id FK
+        String lot_number "optional"
+        Date expiry_date "optional"
+        String status
+    }
+    inventory_reservation_items {
+        Identifier id PK
+        Identifier inventory_lot_id FK
+        Identifier inventory_reservation_id FK
+        Identifier order_item_id FK
+        Integer base_quantity_reserved
+        Integer base_quantity_consumed
+        Integer base_quantity_released
+    }
+    inventory_reservations {
+        Identifier id PK
+        Identifier order_id FK
+        String status
+        DateTime reserved_at
+    }
+    order_items {
+        Identifier id PK
+    }
+    orders {
+        Identifier id PK
+    }
+    stock_movement_items {
+        Identifier id PK
+        Identifier inventory_lot_id FK
+        Identifier stock_movement_id FK
+        Integer quantity_delta_base
+        Decimal unit_cost_snapshot
+    }
+    stock_movements {
+        Identifier id PK
+        String movement_number
+        String movement_type
+        String status
+    }
+    stocktake_items {
+        Identifier id PK
+        Identifier inventory_lot_id FK
+        Identifier stocktake_id FK
+        Integer system_quantity_snapshot
+        Integer counted_quantity "optional"
+        Integer difference_quantity "optional"
+    }
+    stocktakes {
+        Identifier id PK
+        String stocktake_number
+        String status
+    }
+    store_products {
+        Identifier id PK
+    }
+    inventory_lots ||--o{ inventory_reservation_items : "inventory_lot_id"
+    inventory_lots ||--o{ stock_movement_items : "inventory_lot_id"
+    inventory_lots ||--o{ stocktake_items : "inventory_lot_id"
+    inventory_lots ||--o| inventory_lot_balances : "inventory_lot_id"
+    inventory_reservations ||--o{ inventory_reservation_items : "inventory_reservation_id"
+    order_items ||--o{ inventory_reservation_items : "order_item_id"
+    orders ||--o{ inventory_reservations : "order_id"
+    stock_movements ||--o{ stock_movement_items : "stock_movement_id"
+    stocktakes ||--o{ stocktake_items : "stocktake_id"
+    store_products ||--o{ inventory_lots : "store_product_id"

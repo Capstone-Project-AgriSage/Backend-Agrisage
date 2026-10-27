@@ -1,0 +1,120 @@
+erDiagram
+    auth_challenges {
+        Identifier id PK
+        String_20_ channel
+        DateTime consumed_at "nullable"
+        String_255_ destination
+        DateTime expires_at
+        Integer failed_attempts
+        String_30_ purpose
+        Integer64 security_version
+        String_64_ token_hash
+        Identifier user_id FK
+    }
+    auth_sessions {
+        Identifier id PK
+        DateTime expires_at
+        DateTime last_used_at
+        String_100_ revocation_reason "nullable"
+        DateTime revoked_at "nullable"
+        Integer64 security_version
+        Identifier user_id FK
+    }
+    permissions {
+        Identifier id PK
+        String_120_ code UQ
+        Boolean is_active
+        Boolean is_delegable
+        String_50_ module
+        String_150_ name
+    }
+    refresh_tokens {
+        Identifier id PK
+        DateTime consumed_at "nullable"
+        DateTime expires_at
+        Identifier session_id FK
+        String_64_ token_hash UQ
+    }
+    role_permissions {
+        Identifier id PK
+        Boolean is_granted
+        Identifier permission_id FK
+        Identifier role_id FK
+    }
+    roles {
+        Identifier id PK
+        String_30_ code
+        String_500_ description "nullable"
+        Boolean is_active
+        String_100_ name
+        Integer64 version
+    }
+    store_member_permissions {
+        Identifier id PK
+        Boolean is_granted
+        Identifier permission_id FK
+        Identifier store_member_id FK
+    }
+    store_members {
+        Identifier id PK
+        Boolean can_review_ai
+        String_50_ employee_code "nullable"
+        Date joined_at "nullable"
+        Date left_at "nullable"
+        String_20_ status
+        Identifier store_id FK
+        Identifier user_id FK
+        Integer64 version
+    }
+    stores {
+        Identifier id PK
+        String_500_ address_line
+        String_30_ code UQ
+        String_150_ district "nullable"
+        String_255_ email "nullable"
+        String_200_ name
+        String_20_ phone_number "nullable"
+        String_150_ province
+        String_20_ status
+        String_50_ tax_code "nullable"
+        String_150_ ward "nullable"
+    }
+    user_addresses {
+        Identifier id PK
+        String_500_ address_line
+        String_20_ address_type
+        String_150_ district "nullable"
+        Boolean is_default
+        Decimal_10_7_ latitude "nullable"
+        Decimal_10_7_ longitude "nullable"
+        String_150_ province
+        String_150_ recipient_name
+        String_20_ recipient_phone
+        Identifier user_id FK
+        String_150_ ward "nullable"
+    }
+    users {
+        Identifier id PK
+        String_1000_ avatar_url "nullable"
+        String_255_ email "nullable"
+        Boolean email_verified
+        String_150_ full_name
+        DateTime last_login_at "nullable"
+        String_500_ password_hash
+        String_20_ phone_number "nullable"
+        Boolean phone_verified
+        Identifier role_id FK
+        Integer64 security_version
+        String_30_ status
+    }
+    users ||--o{ auth_challenges : "user_id"
+    users ||--o{ auth_sessions : "user_id"
+    auth_sessions ||--o{ refresh_tokens : "session_id"
+    permissions ||--o{ role_permissions : "permission_id"
+    roles ||--o{ role_permissions : "role_id"
+    permissions ||--o{ store_member_permissions : "permission_id"
+    store_members ||--o{ store_member_permissions : "store_member_id"
+    stores ||--o{ store_members : "store_id"
+    users ||--o{ store_members : "user_id"
+    users ||--o{ user_addresses : "user_id"
+    roles ||--o{ users : "role_id"

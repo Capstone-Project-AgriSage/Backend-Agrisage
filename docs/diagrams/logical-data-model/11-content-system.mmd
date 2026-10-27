@@ -1,0 +1,70 @@
+erDiagram
+    articles {
+        Identifier id PK
+        Identifier author_id FK
+        String content
+        DateTime published_at "nullable"
+        String_255_ slug
+        String_20_ status
+        String_1000_ summary "nullable"
+        String_1000_ thumbnail_url "nullable"
+        String_255_ title
+    }
+    audit_logs {
+        Identifier id PK
+        String_100_ action
+        Identifier actor_user_id FK "nullable"
+        String_100_ correlation_id "nullable"
+        Identifier entity_id "nullable"
+        String_100_ entity_type
+        String_64_ ip_address "nullable"
+        JSON new_values "nullable"
+        DateTime occurred_at
+        JSON old_values "nullable"
+        String_1000_ reason "nullable"
+        Identifier store_id FK "nullable"
+        String_1000_ user_agent "nullable"
+    }
+    contact_requests {
+        Identifier id PK
+        Identifier assigned_to FK "nullable"
+        String_255_ contact_email "nullable"
+        String_150_ contact_name
+        String_20_ contact_phone "nullable"
+        String message
+        String_50_ request_number UQ
+        String_2000_ resolution_note "nullable"
+        DateTime resolved_at "nullable"
+        String_20_ status
+        String_255_ subject
+        Identifier user_id FK "nullable"
+    }
+    notification_outbox {
+        Identifier id PK
+        Integer attempts
+        Identifier audit_log_id FK,UQ
+        DateTime available_at
+        String_100_ last_error_code "nullable"
+        DateTime processed_at "nullable"
+    }
+    notifications {
+        Identifier id PK
+        JSON data "nullable"
+        String_200_ deduplication_key "nullable"
+        String_2000_ message
+        String_50_ notification_type
+        DateTime read_at "nullable"
+        String_20_ status
+        String_255_ title
+        Identifier user_id FK
+    }
+    stores {
+        Identifier id PK
+    }
+    users {
+        Identifier id PK
+    }
+    stores |o--o{ audit_logs : "store_id"
+    users |o--o{ contact_requests : "user_id"
+    audit_logs ||--o| notification_outbox : "audit_log_id"
+    users ||--o{ notifications : "user_id"

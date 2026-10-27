@@ -1,0 +1,125 @@
+erDiagram
+    deliveries {
+        Identifier id PK
+        String_500_ address_line_snapshot
+        Identifier assigned_to_member_id FK "nullable"
+        String_1000_ cancel_reason "nullable"
+        DateTime cancelled_at "nullable"
+        Identifier cancelled_by FK "nullable"
+        DateTime completed_at "nullable"
+        Identifier created_by FK
+        String_50_ delivery_number
+        DateTime dispatched_at "nullable"
+        String_150_ district_snapshot "nullable"
+        Decimal_10_7_ latitude_snapshot "nullable"
+        Decimal_10_7_ longitude_snapshot "nullable"
+        String_1000_ note "nullable"
+        Identifier order_id FK
+        String_150_ province_snapshot
+        String_150_ recipient_name_snapshot
+        String_20_ recipient_phone_snapshot
+        DateTime scheduled_at "nullable"
+        String_30_ status
+        Identifier store_id FK
+        String_150_ ward_snapshot "nullable"
+    }
+    delivery_attempt_items {
+        Identifier id PK
+        Integer64 attempted_base_quantity
+        Integer64 delivered_base_quantity
+        Identifier delivery_attempt_id FK
+        Identifier delivery_item_lot_allocation_id FK
+        Integer64 failed_base_quantity
+        String_500_ note "nullable"
+    }
+    delivery_attempts {
+        Identifier id PK
+        Integer attempt_number
+        Identifier attempted_by_member_id FK
+        DateTime completed_at "nullable"
+        Identifier delivery_id FK
+        String_50_ failure_reason_code "nullable"
+        String_1000_ note "nullable"
+        String_1000_ proof_image_url "nullable"
+        String_150_ receiver_name "nullable"
+        Identifier sale_stock_movement_id FK "nullable"
+        DateTime started_at
+        String_30_ status
+    }
+    delivery_incidents {
+        Identifier id PK
+        Integer64 affected_base_quantity "nullable"
+        Identifier delivery_attempt_id FK "nullable"
+        Identifier delivery_id FK
+        Identifier delivery_item_lot_allocation_id FK "nullable"
+        String_1000_ description
+        String_1000_ evidence_image_url "nullable"
+        String_40_ incident_type
+        Identifier related_stock_movement_id FK "nullable"
+        DateTime reported_at
+        Identifier reported_by FK
+        String_1000_ resolution_note "nullable"
+        String_40_ resolution_type "nullable"
+        DateTime resolved_at "nullable"
+        Identifier resolved_by FK "nullable"
+        String_20_ status
+    }
+    delivery_item_lot_allocations {
+        Identifier id PK
+        Integer64 allocated_base_quantity
+        Integer64 delivered_base_quantity
+        Identifier delivery_item_id FK
+        Identifier inventory_lot_id FK
+        Identifier inventory_reservation_item_id FK "nullable"
+        Integer64 released_base_quantity
+        String_30_ status
+    }
+    delivery_items {
+        Identifier id PK
+        Integer64 cancelled_base_quantity
+        Integer64 conversion_to_base_snapshot
+        Integer64 delivered_base_quantity
+        Identifier delivery_id FK
+        Identifier order_item_id FK
+        Integer64 planned_base_quantity
+        Integer64 planned_quantity
+        String_30_ status
+    }
+    inventory_lots {
+        Identifier id PK
+    }
+    inventory_reservation_items {
+        Identifier id PK
+    }
+    order_items {
+        Identifier id PK
+    }
+    orders {
+        Identifier id PK
+    }
+    stock_movements {
+        Identifier id PK
+    }
+    store_members {
+        Identifier id PK
+    }
+    stores {
+        Identifier id PK
+    }
+    store_members |o--o{ deliveries : "assigned_to_member_id"
+    orders ||--o{ deliveries : "order_id"
+    stores ||--o{ deliveries : "store_id"
+    delivery_attempts ||--o{ delivery_attempt_items : "delivery_attempt_id"
+    delivery_item_lot_allocations ||--o{ delivery_attempt_items : "delivery_item_lot_allocation_id"
+    store_members ||--o{ delivery_attempts : "attempted_by_member_id"
+    deliveries ||--o{ delivery_attempts : "delivery_id"
+    stock_movements |o--o{ delivery_attempts : "sale_stock_movement_id"
+    delivery_attempts |o--o{ delivery_incidents : "delivery_attempt_id"
+    deliveries ||--o{ delivery_incidents : "delivery_id"
+    delivery_item_lot_allocations |o--o{ delivery_incidents : "delivery_item_lot_allocation_id"
+    stock_movements |o--o{ delivery_incidents : "related_stock_movement_id"
+    delivery_items ||--o{ delivery_item_lot_allocations : "delivery_item_id"
+    inventory_lots ||--o{ delivery_item_lot_allocations : "inventory_lot_id"
+    inventory_reservation_items |o--o{ delivery_item_lot_allocations : "inventory_reservation_item_id"
+    deliveries ||--o{ delivery_items : "delivery_id"
+    order_items ||--o{ delivery_items : "order_item_id"

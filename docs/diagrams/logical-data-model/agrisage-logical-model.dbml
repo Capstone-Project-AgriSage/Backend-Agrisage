@@ -1,0 +1,1899 @@
+// AgriSage Logical Data Model — 2026-10-20
+// 74 entities / 1079 attributes / 278 FK relationships.
+// Import into a DBML-compatible editor. Filtered and expression uniqueness is documented in Notes.
+// UUID keys represent logical identifiers. Physical indexes and PostgreSQL DDL are not reproduced.
+
+Table active_ingredients {
+  id uuid [pk, not null]
+  code varchar(50) [null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  description varchar [null]
+  is_active boolean [not null]
+  name varchar(200) [not null]
+  updated_at timestamp [not null]
+  Note: '''
+Entity: ActiveIngredient. Feature: Products.
+  '''
+}
+
+Table agent_reviews {
+  id uuid [pk, not null]
+  ai_disease_id_snapshot uuid [null]
+  comment varchar(2000) [null]
+  created_at timestamp [not null]
+  decision varchar(30) [not null, note: 'Enum domain: Confirmed, Corrected, Inconclusive (CLR names; persisted values in dictionary CHECKs)']
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  diagnosis_case_id uuid [not null]
+  final_disease_id uuid [null]
+  is_current boolean [not null]
+  primary_ai_inference_id uuid [null]
+  reviewed_at timestamp [not null]
+  reviewer_member_id uuid [not null]
+  superseded_at timestamp [null]
+  superseded_by_review_id uuid [null]
+  updated_at timestamp [not null]
+  Note: '''
+Entity: AgentReview. Feature: Diagnosis.
+Conditional unique: (diagnosis_case_id) WHERE is_current = TRUE AND deleted_at IS NULL
+  '''
+}
+
+Table ai_inferences {
+  id uuid [pk, not null]
+  ai_model_id uuid [not null]
+  ai_policy_config_id uuid [not null]
+  confidence decimal(7,6) [not null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  diagnosis_case_id uuid [not null]
+  diagnosis_image_id uuid [not null]
+  inference_duration_ms integer [null]
+  inferred_at timestamp [not null]
+  passed_policy boolean [not null]
+  predicted_class_label varchar(100) [not null]
+  predicted_disease_id uuid [null]
+  raw_output json [null]
+  status varchar(20) [not null, note: 'Enum domain: Success, Failed (CLR names; persisted values in dictionary CHECKs)']
+  top_predictions json [null]
+  updated_at timestamp [not null]
+  Note: '''
+Entity: AiInference. Feature: Diagnosis.
+  '''
+}
+
+Table ai_models {
+  id uuid [pk, not null]
+  architecture varchar(100) [null]
+  class_labels json [not null]
+  created_at timestamp [not null]
+  created_by uuid [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  deployed_at timestamp [null]
+  framework varchar(50) [not null]
+  input_height integer [null]
+  input_width integer [null]
+  metrics json [null]
+  model_storage_url varchar(1000) [not null]
+  name varchar(150) [not null]
+  retired_at timestamp [null]
+  status varchar(30) [not null, note: 'Enum domain: Draft, Active, Retired (CLR names; persisted values in dictionary CHECKs)']
+  updated_at timestamp [not null]
+  version varchar(50) [not null]
+  indexes {
+    (name, version) [unique]
+  }
+  Note: '''
+Entity: AiModel. Feature: Diagnosis.
+  '''
+}
+
+Table ai_policy_configs {
+  id uuid [pk, not null]
+  ai_model_id uuid [not null]
+  created_at timestamp [not null]
+  created_by uuid [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  effective_from timestamp [not null]
+  effective_to timestamp [null]
+  minimum_confidence decimal(5,4) [not null]
+  minimum_margin decimal(5,4) [null]
+  parameters json [null]
+  requires_human_review boolean [not null]
+  status varchar(20) [not null, note: 'Enum domain: Draft, Active, Inactive (CLR names; persisted values in dictionary CHECKs)']
+  top_k integer [not null]
+  updated_at timestamp [not null]
+  version varchar(50) [not null]
+  indexes {
+    (ai_model_id, version) [unique]
+  }
+  Note: '''
+Entity: AiPolicyConfig. Feature: Diagnosis.
+  '''
+}
+
+Table articles {
+  id uuid [pk, not null]
+  author_id uuid [not null]
+  content varchar [not null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  published_at timestamp [null]
+  slug varchar(255) [not null]
+  status varchar(20) [not null, note: 'Enum domain: Draft, Published, Archived (CLR names; persisted values in dictionary CHECKs)']
+  summary varchar(1000) [null]
+  thumbnail_url varchar(1000) [null]
+  title varchar(255) [not null]
+  updated_at timestamp [not null]
+  Note: '''
+Entity: Article. Feature: Content.
+Conditional unique: (slug) WHERE deleted_at IS NULL
+  '''
+}
+
+Table audit_logs {
+  id uuid [pk, not null]
+  action varchar(100) [not null]
+  actor_user_id uuid [null]
+  correlation_id varchar(100) [null]
+  entity_id uuid [null]
+  entity_type varchar(100) [not null]
+  ip_address varchar(64) [null]
+  new_values json [null]
+  occurred_at timestamp [not null]
+  old_values json [null]
+  reason varchar(1000) [null]
+  store_id uuid [null]
+  user_agent varchar(1000) [null]
+  Note: '''
+Entity: AuditLog. Feature: Audit.
+  '''
+}
+
+Table auth_challenges {
+  id uuid [pk, not null]
+  channel varchar(20) [not null, note: 'Enum domain: Email, Sms (CLR names; persisted values in dictionary CHECKs)']
+  consumed_at timestamp [null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  destination varchar(255) [not null]
+  expires_at timestamp [not null]
+  failed_attempts integer [not null]
+  purpose varchar(30) [not null, note: 'Enum domain: PasswordReset, EmailVerification, PhoneVerification (CLR names; persisted values in dictionary CHECKs)']
+  security_version bigint [not null]
+  token_hash varchar(64) [not null]
+  updated_at timestamp [not null]
+  user_id uuid [not null]
+  Note: '''
+Entity: AuthChallenge. Feature: Identity.
+  '''
+}
+
+Table auth_sessions {
+  id uuid [pk, not null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  expires_at timestamp [not null]
+  last_used_at timestamp [not null]
+  revocation_reason varchar(100) [null]
+  revoked_at timestamp [null]
+  security_version bigint [not null]
+  updated_at timestamp [not null]
+  user_id uuid [not null]
+  Note: '''
+Entity: AuthSession. Feature: Identity.
+  '''
+}
+
+Table brands {
+  id uuid [pk, not null]
+  code varchar(50) [null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  description varchar(500) [null]
+  is_active boolean [not null]
+  logo_url varchar(1000) [null]
+  name varchar(150) [not null]
+  updated_at timestamp [not null]
+  Note: '''
+Entity: Brand. Feature: Products.
+Conditional unique: (name) WHERE deleted_at IS NULL
+  '''
+}
+
+Table cart_items {
+  id uuid [pk, not null]
+  cart_id uuid [not null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  product_packaging_id uuid [not null]
+  quantity bigint [not null]
+  store_product_id uuid [not null]
+  updated_at timestamp [not null]
+  Note: '''
+Entity: CartItem. Feature: Orders.
+Conditional unique: (cart_id, store_product_id, product_packaging_id) WHERE deleted_at IS NULL
+  '''
+}
+
+Table carts {
+  id uuid [pk, not null]
+  converted_at timestamp [null]
+  converted_order_id uuid [null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  farmer_profile_id uuid [not null]
+  status varchar(20) [not null, note: 'Enum domain: Active, Converted, Abandoned (CLR names; persisted values in dictionary CHECKs)']
+  store_id uuid [not null]
+  updated_at timestamp [not null]
+  Note: '''
+Entity: Cart. Feature: Orders.
+Conditional unique: (store_id, farmer_profile_id) WHERE status = 'ACTIVE' AND deleted_at IS NULL
+  '''
+}
+
+Table categories {
+  id uuid [pk, not null]
+  code varchar(50) [not null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  description varchar(500) [null]
+  display_order integer [not null]
+  is_active boolean [not null]
+  name varchar(150) [not null]
+  parent_id uuid [null]
+  updated_at timestamp [not null]
+  Note: '''
+Entity: Category. Feature: Products.
+  '''
+}
+
+Table contact_requests {
+  id uuid [pk, not null]
+  assigned_to uuid [null]
+  contact_email varchar(255) [null]
+  contact_name varchar(150) [not null]
+  contact_phone varchar(20) [null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  message varchar [not null]
+  request_number varchar(50) [not null, unique]
+  resolution_note varchar(2000) [null]
+  resolved_at timestamp [null]
+  status varchar(20) [not null, note: 'Enum domain: Open, InProgress, Resolved, Closed (CLR names; persisted values in dictionary CHECKs)']
+  subject varchar(255) [not null]
+  updated_at timestamp [not null]
+  user_id uuid [null]
+  Note: '''
+Entity: ContactRequest. Feature: Content.
+  '''
+}
+
+Table credit_limit_histories {
+  id uuid [pk, not null]
+  changed_at timestamp [not null]
+  changed_by uuid [not null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  farmer_credit_profile_id uuid [not null]
+  new_credit_limit decimal(18,2) [not null]
+  new_credit_tier_id uuid [null]
+  old_credit_limit decimal(18,2) [not null]
+  old_credit_tier_id uuid [null]
+  reason varchar(1000) [not null]
+  updated_at timestamp [not null]
+  Note: '''
+Entity: CreditLimitHistory. Feature: Credit.
+  '''
+}
+
+Table credit_reservations {
+  id uuid [pk, not null]
+  amount_consumed decimal(18,2) [not null]
+  amount_released decimal(18,2) [not null]
+  amount_reserved decimal(18,2) [not null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  farmer_credit_profile_id uuid [not null]
+  order_id uuid [not null]
+  release_reason varchar(500) [null]
+  released_at timestamp [null]
+  released_by uuid [null]
+  reserved_at timestamp [not null]
+  reserved_by uuid [not null]
+  status varchar(30) [not null, note: 'Enum domain: Active, PartiallyConsumed, Consumed, Released, Cancelled (CLR names; persisted values in dictionary CHECKs)']
+  store_id uuid [not null]
+  updated_at timestamp [not null]
+  Note: '''
+Entity: CreditReservation. Feature: Credit.
+Conditional unique: (order_id) WHERE status IN ('ACTIVE', 'PARTIALLY_CONSUMED') AND deleted_at IS NULL
+  '''
+}
+
+Table credit_tiers {
+  id uuid [pk, not null]
+  code varchar(30) [not null]
+  created_at timestamp [not null]
+  default_credit_limit decimal(18,2) [not null]
+  default_payment_term_days integer [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  description varchar(500) [null]
+  is_active boolean [not null]
+  name varchar(100) [not null]
+  store_id uuid [not null]
+  updated_at timestamp [not null]
+  indexes {
+    (store_id, code) [unique]
+  }
+  Note: '''
+Entity: CreditTier. Feature: Credit.
+  '''
+}
+
+Table customer_group_assignments {
+  id uuid [pk, not null]
+  assigned_by uuid [not null]
+  created_at timestamp [not null]
+  customer_group_id uuid [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  effective_from timestamp [not null]
+  effective_to timestamp [null]
+  farmer_profile_id uuid [not null]
+  reason varchar(500) [null]
+  updated_at timestamp [not null]
+  Note: '''
+Entity: CustomerGroupAssignment. Feature: Customers.
+Conditional unique: (farmer_profile_id) WHERE effective_to IS NULL AND deleted_at IS NULL
+  '''
+}
+
+Table customer_group_price_lists {
+  id uuid [pk, not null]
+  assigned_by uuid [not null]
+  created_at timestamp [not null]
+  customer_group_id uuid [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  effective_from timestamp [not null]
+  effective_to timestamp [null]
+  price_list_id uuid [not null]
+  updated_at timestamp [not null]
+  Note: '''
+Entity: CustomerGroupPriceList. Feature: Pricing.
+  '''
+}
+
+Table customer_groups {
+  id uuid [pk, not null]
+  code varchar(30) [not null]
+  created_at timestamp [not null]
+  default_credit_tier_id uuid [null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  description varchar(500) [null]
+  is_active boolean [not null]
+  is_default boolean [not null]
+  name varchar(100) [not null]
+  priority integer [not null]
+  store_id uuid [not null]
+  updated_at timestamp [not null]
+  indexes {
+    (store_id, code) [unique]
+  }
+  Note: '''
+Entity: CustomerGroup. Feature: Customers.
+Conditional unique: (store_id) WHERE is_default AND is_active AND deleted_at IS NULL
+  '''
+}
+
+Table debt_accounts {
+  id uuid [pk, not null]
+  created_at timestamp [not null]
+  current_balance decimal(18,2) [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  farmer_profile_id uuid [not null]
+  last_transaction_at timestamp [null]
+  status varchar(20) [not null, note: 'Enum domain: Active, Blocked, Closed (CLR names; persisted values in dictionary CHECKs)']
+  store_id uuid [not null]
+  updated_at timestamp [not null]
+  version bigint [not null, note: 'Optimistic concurrency version']
+  indexes {
+    (store_id, farmer_profile_id) [unique]
+  }
+  Note: '''
+Entity: DebtAccount. Feature: Debt.
+  '''
+}
+
+Table debt_entries {
+  id uuid [pk, not null]
+  created_at timestamp [not null]
+  created_by uuid [not null]
+  debt_account_id uuid [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  delivery_attempt_id uuid [null]
+  delivery_id uuid [null]
+  due_date date [not null]
+  entry_number varchar(50) [not null, unique]
+  fulfillment_value decimal(18,2) [not null]
+  order_id uuid [null]
+  original_amount decimal(18,2) [not null]
+  outstanding_amount decimal(18,2) [not null]
+  prepayment_applied_amount decimal(18,2) [not null]
+  source_stock_movement_id uuid [null]
+  source_type varchar(30) [not null, note: 'Enum domain: Delivery, Pickup, ManualAdjustment (CLR names; persisted values in dictionary CHECKs)']
+  status varchar(30) [not null, note: 'Enum domain: Open, PartiallyPaid, Paid, Disputed, Adjusted, Cancelled (CLR names; persisted values in dictionary CHECKs)']
+  updated_at timestamp [not null]
+  Note: '''
+Entity: DebtEntry. Feature: Debt.
+Conditional unique: (source_stock_movement_id) WHERE source_stock_movement_id IS NOT NULL
+  '''
+}
+
+Table debt_entry_actions {
+  id uuid [pk, not null]
+  action_type varchar(30) [not null, note: 'Enum domain: Dispute, Keep, Adjust, Cancel, ChangeDueDate (CLR names; persisted values in dictionary CHECKs)']
+  adjustment_amount decimal(18,2) [null]
+  created_at timestamp [not null]
+  created_by uuid [not null]
+  debt_entry_id uuid [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  new_due_date date [null]
+  old_due_date date [null]
+  previous_outstanding_amount decimal(18,2) [null]
+  reason varchar(1000) [not null]
+  resulting_outstanding_amount decimal(18,2) [null]
+  updated_at timestamp [not null]
+  Note: '''
+Entity: DebtEntryAction. Feature: Debt.
+  '''
+}
+
+Table debt_transactions {
+  id uuid [pk, not null]
+  amount_delta decimal(18,2) [not null]
+  balance_after decimal(18,2) [not null]
+  created_at timestamp [not null]
+  created_by uuid [null]
+  debt_account_id uuid [not null]
+  debt_entry_action_id uuid [null]
+  debt_entry_id uuid [null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  note varchar(1000) [null]
+  occurred_at timestamp [not null]
+  payment_allocation_id uuid [null]
+  reversal_of_transaction_id uuid [null]
+  sales_return_id uuid [null]
+  status varchar(20) [not null, note: 'Enum domain: Posted, Reversed (CLR names; persisted values in dictionary CHECKs)']
+  transaction_type varchar(30) [not null, note: 'Enum domain: CreditSale, Payment, AdjustmentIn, AdjustmentOut, Return, Reversal (CLR names; persisted values in dictionary CHECKs)']
+  updated_at timestamp [not null]
+  Note: '''
+Entity: DebtTransaction. Feature: Debt.
+Conditional unique: (payment_allocation_id) WHERE payment_allocation_id IS NOT NULL
+  '''
+}
+
+Table deliveries {
+  id uuid [pk, not null]
+  address_line_snapshot varchar(500) [not null]
+  assigned_to_member_id uuid [null]
+  cancel_reason varchar(1000) [null]
+  cancelled_at timestamp [null]
+  cancelled_by uuid [null]
+  completed_at timestamp [null]
+  created_at timestamp [not null]
+  created_by uuid [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  delivery_number varchar(50) [not null]
+  dispatched_at timestamp [null]
+  district_snapshot varchar(150) [null]
+  latitude_snapshot decimal(10,7) [null]
+  longitude_snapshot decimal(10,7) [null]
+  note varchar(1000) [null]
+  order_id uuid [not null]
+  province_snapshot varchar(150) [not null]
+  recipient_name_snapshot varchar(150) [not null]
+  recipient_phone_snapshot varchar(20) [not null]
+  scheduled_at timestamp [null]
+  status varchar(30) [not null, note: 'Enum domain: Draft, Assigned, OutForDelivery, PartiallyDelivered, RetryPending, Delivered, Cancelled (CLR names; persisted values in dictionary CHECKs)']
+  store_id uuid [not null]
+  updated_at timestamp [not null]
+  ward_snapshot varchar(150) [null]
+  indexes {
+    (store_id, delivery_number) [unique]
+  }
+  Note: '''
+Entity: Delivery. Feature: Deliveries.
+  '''
+}
+
+Table delivery_attempt_items {
+  id uuid [pk, not null]
+  attempted_base_quantity bigint [not null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  delivered_base_quantity bigint [not null]
+  delivery_attempt_id uuid [not null]
+  delivery_item_lot_allocation_id uuid [not null]
+  failed_base_quantity bigint [not null]
+  note varchar(500) [null]
+  updated_at timestamp [not null]
+  Note: '''
+Entity: DeliveryAttemptItem. Feature: Deliveries.
+Conditional unique: (delivery_attempt_id, delivery_item_lot_allocation_id) WHERE deleted_at IS NULL
+  '''
+}
+
+Table delivery_attempts {
+  id uuid [pk, not null]
+  attempt_number integer [not null]
+  attempted_by_member_id uuid [not null]
+  completed_at timestamp [null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  delivery_id uuid [not null]
+  failure_reason_code varchar(50) [null]
+  note varchar(1000) [null]
+  proof_image_url varchar(1000) [null]
+  receiver_name varchar(150) [null]
+  sale_stock_movement_id uuid [null]
+  started_at timestamp [not null]
+  status varchar(30) [not null, note: 'Enum domain: InProgress, Success, PartialSuccess, Failed, Cancelled (CLR names; persisted values in dictionary CHECKs)']
+  updated_at timestamp [not null]
+  indexes {
+    (delivery_id, attempt_number) [unique]
+  }
+  Note: '''
+Entity: DeliveryAttempt. Feature: Deliveries.
+  '''
+}
+
+Table delivery_incidents {
+  id uuid [pk, not null]
+  affected_base_quantity bigint [null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  delivery_attempt_id uuid [null]
+  delivery_id uuid [not null]
+  delivery_item_lot_allocation_id uuid [null]
+  description varchar(1000) [not null]
+  evidence_image_url varchar(1000) [null]
+  incident_type varchar(40) [not null, note: 'Enum domain: CustomerAbsent, Unreachable, CustomerRefused, Damaged, Weather, VehicleIssue, AddressIssue, Other (CLR names; persisted values in dictionary CHECKs)']
+  related_stock_movement_id uuid [null]
+  reported_at timestamp [not null]
+  reported_by uuid [not null]
+  resolution_note varchar(1000) [null]
+  resolution_type varchar(40) [null, note: 'Enum domain: RetryDelivery, ReplaceGoods, ReturnToStore, WriteOff, CancelRemainder, NoAction, Other (CLR names; persisted values in dictionary CHECKs)']
+  resolved_at timestamp [null]
+  resolved_by uuid [null]
+  status varchar(20) [not null, note: 'Enum domain: Open, Resolved (CLR names; persisted values in dictionary CHECKs)']
+  updated_at timestamp [not null]
+  Note: '''
+Entity: DeliveryIncident. Feature: Deliveries.
+  '''
+}
+
+Table delivery_item_lot_allocations {
+  id uuid [pk, not null]
+  allocated_base_quantity bigint [not null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  delivered_base_quantity bigint [not null]
+  delivery_item_id uuid [not null]
+  inventory_lot_id uuid [not null]
+  inventory_reservation_item_id uuid [null]
+  released_base_quantity bigint [not null]
+  status varchar(30) [not null, note: 'Enum domain: Allocated, PartiallyDelivered, Delivered, Released, Cancelled (CLR names; persisted values in dictionary CHECKs)']
+  updated_at timestamp [not null]
+  Note: '''
+Entity: DeliveryItemLotAllocation. Feature: Deliveries.
+  '''
+}
+
+Table delivery_items {
+  id uuid [pk, not null]
+  cancelled_base_quantity bigint [not null]
+  conversion_to_base_snapshot bigint [not null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  delivered_base_quantity bigint [not null]
+  delivery_id uuid [not null]
+  order_item_id uuid [not null]
+  planned_base_quantity bigint [not null]
+  planned_quantity bigint [not null]
+  status varchar(30) [not null, note: 'Enum domain: Pending, PartiallyDelivered, Delivered, Cancelled, PartiallyCancelled (CLR names; persisted values in dictionary CHECKs)']
+  updated_at timestamp [not null]
+  Note: '''
+Entity: DeliveryItem. Feature: Deliveries.
+  '''
+}
+
+Table diagnosis_cases {
+  id uuid [pk, not null]
+  case_number varchar(50) [not null, unique]
+  completed_at timestamp [null]
+  created_at timestamp [not null]
+  crop_type varchar(50) [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  farmer_note varchar(1000) [null]
+  farmer_profile_id uuid [not null]
+  final_disease_id uuid [null]
+  review_summary varchar(1000) [null]
+  status varchar(30) [not null, note: 'Enum domain: Submitted, Processing, AiCompleted, UnderReview, Verified, Inconclusive, Failed, Cancelled (CLR names; persisted values in dictionary CHECKs)']
+  submitted_at timestamp [not null]
+  updated_at timestamp [not null]
+  Note: '''
+Entity: DiagnosisCase. Feature: Diagnosis.
+  '''
+}
+
+Table diagnosis_images {
+  id uuid [pk, not null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  diagnosis_case_id uuid [not null]
+  file_name varchar(255) [null]
+  file_size_bytes bigint [null]
+  height integer [null]
+  image_url varchar(1500) [not null]
+  is_primary boolean [not null]
+  mime_type varchar(100) [null]
+  storage_key varchar(1000) [not null]
+  updated_at timestamp [not null]
+  uploaded_at timestamp [not null]
+  width integer [null]
+  Note: '''
+Entity: DiagnosisImage. Feature: Diagnosis.
+Conditional unique: (diagnosis_case_id) WHERE is_primary = TRUE AND deleted_at IS NULL
+  '''
+}
+
+Table disease_treatments {
+  id uuid [pk, not null]
+  active_ingredient_id uuid [null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  disease_id uuid [not null]
+  instructions varchar [not null]
+  is_active boolean [not null]
+  precautions varchar [null]
+  priority integer [not null]
+  title varchar(255) [not null]
+  treatment_type varchar(30) [not null, note: 'Enum domain: Cultural, Chemical, Preventive, Other (CLR names; persisted values in dictionary CHECKs)']
+  updated_at timestamp [not null]
+  Note: '''
+Entity: DiseaseTreatment. Feature: Diagnosis.
+  '''
+}
+
+Table diseases {
+  id uuid [pk, not null]
+  causes varchar [null]
+  code varchar(50) [not null, unique]
+  created_at timestamp [not null]
+  crop_type varchar(50) [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  description varchar [null]
+  is_active boolean [not null]
+  is_healthy_class boolean [not null]
+  name varchar(200) [not null]
+  prevention varchar [null]
+  scientific_name varchar(255) [null]
+  symptoms varchar [null]
+  updated_at timestamp [not null]
+  Note: '''
+Entity: Disease. Feature: Diagnosis.
+  '''
+}
+
+Table farmer_credit_profiles {
+  id uuid [pk, not null]
+  approved_at timestamp [not null]
+  approved_by uuid [not null]
+  created_at timestamp [not null]
+  credit_limit decimal(18,2) [not null]
+  credit_tier_id uuid [null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  farmer_profile_id uuid [not null]
+  note varchar(1000) [null]
+  status varchar(20) [not null, note: 'Enum domain: Active, Suspended, Blocked (CLR names; persisted values in dictionary CHECKs)']
+  store_id uuid [not null]
+  updated_at timestamp [not null]
+  version bigint [not null, note: 'Optimistic concurrency version']
+  indexes {
+    (store_id, farmer_profile_id) [unique]
+  }
+  Note: '''
+Entity: FarmerCreditProfile. Feature: Credit.
+  '''
+}
+
+Table farmer_profiles {
+  id uuid [pk, not null]
+  created_at timestamp [not null]
+  date_of_birth date [null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  gender varchar(20) [null]
+  notes varchar(1000) [null]
+  updated_at timestamp [not null]
+  user_id uuid [not null, unique]
+  Note: '''
+Entity: FarmerProfile. Feature: Customers.
+  '''
+}
+
+Table goods_receipt_items {
+  id uuid [pk, not null]
+  base_quantity bigint [not null]
+  base_unit_cost decimal(20,6) [not null]
+  conversion_to_base_snapshot bigint [not null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  expiry_date date [null]
+  goods_receipt_id uuid [not null]
+  inventory_lot_id uuid [null]
+  line_total_amount decimal(18,2) [not null]
+  manufacturing_date date [null]
+  note varchar(500) [null]
+  product_packaging_id uuid [not null]
+  purchase_unit_cost decimal(18,2) [not null]
+  received_quantity bigint [not null]
+  store_product_id uuid [not null]
+  supplier_lot_number varchar(100) [null]
+  updated_at timestamp [not null]
+  Note: '''
+Entity: GoodsReceiptItem. Feature: GoodsReceipts.
+  '''
+}
+
+Table goods_receipts {
+  id uuid [pk, not null]
+  cancel_reason varchar(1000) [null]
+  cancelled_at timestamp [null]
+  cancelled_by uuid [null]
+  confirmed_at timestamp [null]
+  confirmed_by uuid [null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  note varchar(1000) [null]
+  receipt_number varchar(50) [not null]
+  received_at timestamp [not null]
+  received_by uuid [not null]
+  source_file_name varchar(255) [null]
+  source_file_url varchar(1000) [null]
+  source_type varchar(20) [not null, note: 'Enum domain: Manual, ExcelTemplate (CLR names; persisted values in dictionary CHECKs)']
+  status varchar(20) [not null, note: 'Enum domain: Draft, Confirmed, Cancelled (CLR names; persisted values in dictionary CHECKs)']
+  store_id uuid [not null]
+  subtotal_amount decimal(18,2) [not null]
+  supplier_id uuid [not null]
+  supplier_invoice_date date [null]
+  supplier_invoice_number varchar(100) [null]
+  total_amount decimal(18,2) [not null]
+  updated_at timestamp [not null]
+  indexes {
+    (store_id, receipt_number) [unique]
+  }
+  Note: '''
+Entity: GoodsReceipt. Feature: GoodsReceipts.
+  '''
+}
+
+Table inventory_lot_balances {
+  id uuid [pk, not null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  inventory_lot_id uuid [not null, unique]
+  quantity_on_hand bigint [not null]
+  quantity_reserved bigint [not null]
+  total_cost_value decimal(20,6) [not null]
+  updated_at timestamp [not null]
+  version bigint [not null, note: 'Optimistic concurrency version']
+  Note: '''
+Entity: InventoryLotBalance. Feature: Inventory.
+  '''
+}
+
+Table inventory_lots {
+  id uuid [pk, not null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  expiry_date date [null]
+  lot_number varchar(100) [null]
+  manufacturing_date date [null]
+  status varchar(30) [not null, note: 'Enum domain: Active, Quarantined, Expired, Blocked, Depleted (CLR names; persisted values in dictionary CHECKs)']
+  store_product_id uuid [not null]
+  updated_at timestamp [not null]
+  Note: '''
+Entity: InventoryLot. Feature: Inventory.
+Conditional unique: (store_product_id) WHERE lot_number IS NULL AND deleted_at IS NULL
+Expression unique: (store_product_id, LOWER(lot_number), expiry_date) WHERE deleted_at IS NULL AND lot_number IS NOT NULL; NULL expiry_date được xem là cùng giá trị
+  '''
+}
+
+Table inventory_reservation_items {
+  id uuid [pk, not null]
+  base_quantity_consumed bigint [not null]
+  base_quantity_released bigint [not null]
+  base_quantity_reserved bigint [not null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  inventory_lot_id uuid [not null]
+  inventory_reservation_id uuid [not null]
+  order_item_id uuid [not null]
+  updated_at timestamp [not null]
+  Note: '''
+Entity: InventoryReservationItem. Feature: Inventory.
+Conditional unique: (inventory_reservation_id, order_item_id, inventory_lot_id) WHERE deleted_at IS NULL
+  '''
+}
+
+Table inventory_reservations {
+  id uuid [pk, not null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  order_id uuid [not null]
+  release_reason varchar(500) [null]
+  released_at timestamp [null]
+  released_by uuid [null]
+  reserved_at timestamp [not null]
+  reserved_by uuid [not null]
+  status varchar(30) [not null, note: 'Enum domain: Active, PartiallyConsumed, Consumed, Released, Cancelled (CLR names; persisted values in dictionary CHECKs)']
+  store_id uuid [not null]
+  updated_at timestamp [not null]
+  Note: '''
+Entity: InventoryReservation. Feature: Inventory.
+Conditional unique: (order_id) WHERE status IN ('ACTIVE', 'PARTIALLY_CONSUMED') AND deleted_at IS NULL
+  '''
+}
+
+Table notification_outbox {
+  id uuid [pk, not null]
+  attempts integer [not null]
+  audit_log_id uuid [not null, unique]
+  available_at timestamp [not null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  last_error_code varchar(100) [null]
+  processed_at timestamp [null]
+  updated_at timestamp [not null]
+  Note: '''
+Entity: NotificationOutbox. Feature: Notifications.
+  '''
+}
+
+Table notifications {
+  id uuid [pk, not null]
+  created_at timestamp [not null]
+  data json [null]
+  deduplication_key varchar(200) [null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  message varchar(2000) [not null]
+  notification_type varchar(50) [not null]
+  read_at timestamp [null]
+  status varchar(20) [not null, note: 'Enum domain: Unread, Read, Archived (CLR names; persisted values in dictionary CHECKs)']
+  title varchar(255) [not null]
+  updated_at timestamp [not null]
+  user_id uuid [not null]
+  Note: '''
+Entity: Notification. Feature: Notifications.
+Conditional unique: (user_id, deduplication_key) WHERE deduplication_key IS NOT NULL
+  '''
+}
+
+Table order_items {
+  id uuid [pk, not null]
+  base_quantity bigint [not null]
+  cancelled_base_quantity bigint [not null]
+  conversion_to_base_snapshot bigint [not null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  fulfilled_base_quantity bigint [not null]
+  line_total_amount decimal(18,2) [not null]
+  order_id uuid [not null]
+  overridden_by uuid [null]
+  override_reason varchar(500) [null]
+  packaging_name_snapshot varchar(150) [not null]
+  price_overridden boolean [not null]
+  product_name_snapshot varchar(255) [not null]
+  product_packaging_id uuid [not null]
+  product_sku_snapshot varchar(50) [not null]
+  quantity bigint [not null]
+  status varchar(30) [not null, note: 'Enum domain: Pending, PartiallyFulfilled, Fulfilled, Cancelled, PartiallyCancelled (CLR names; persisted values in dictionary CHECKs)']
+  store_product_id uuid [not null]
+  suggested_unit_price decimal(18,2) [not null]
+  unit_price decimal(18,2) [not null]
+  updated_at timestamp [not null]
+  Note: '''
+Entity: OrderItem. Feature: Orders.
+  '''
+}
+
+Table orders {
+  id uuid [pk, not null]
+  cancel_reason varchar(1000) [null]
+  cancelled_at timestamp [null]
+  cancelled_by uuid [null]
+  completed_at timestamp [null]
+  confirmed_at timestamp [null]
+  confirmed_by uuid [null]
+  created_at timestamp [not null]
+  created_by uuid [not null]
+  credit_term_days_snapshot integer [null]
+  customer_group_id_snapshot uuid [null]
+  customer_name_snapshot varchar(150) [not null]
+  customer_phone_snapshot varchar(20) [null]
+  customer_type varchar(20) [not null, note: 'Enum domain: Registered, WalkIn (CLR names; persisted values in dictionary CHECKs)']
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  delivery_address_line varchar(500) [null]
+  delivery_district varchar(150) [null]
+  delivery_latitude decimal(10,7) [null]
+  delivery_longitude decimal(10,7) [null]
+  delivery_province varchar(150) [null]
+  delivery_ward varchar(150) [null]
+  farmer_profile_id uuid [null]
+  fulfillment_type varchar(20) [not null, note: 'Enum domain: Pickup, Delivery (CLR names; persisted values in dictionary CHECKs)']
+  note varchar(1000) [null]
+  order_number varchar(50) [not null]
+  pickup_completed_at timestamp [null]
+  pickup_completed_by uuid [null]
+  price_list_id_snapshot uuid [null]
+  recipient_name_snapshot varchar(150) [null]
+  recipient_phone_snapshot varchar(20) [null]
+  settlement_type varchar(20) [not null, note: 'Enum domain: FullPayment, Credit (CLR names; persisted values in dictionary CHECKs)']
+  source varchar(30) [not null, note: 'Enum domain: FarmerWeb, FarmerMobile, Counter (CLR names; persisted values in dictionary CHECKs)']
+  source_address_id uuid [null]
+  status varchar(40) [not null, note: 'Enum domain: PendingConfirmation, Confirmed, Preparing, ReadyForFulfillment, PartiallyFulfilled, Completed, Cancelled, PartiallyCancelled (CLR names; persisted values in dictionary CHECKs)']
+  store_id uuid [not null]
+  subtotal_amount decimal(18,2) [not null]
+  total_amount decimal(18,2) [not null]
+  updated_at timestamp [not null]
+  version bigint [not null, note: 'Optimistic concurrency version']
+  indexes {
+    (store_id, order_number) [unique]
+  }
+  Note: '''
+Entity: Order. Feature: Orders.
+  '''
+}
+
+Table payment_allocations {
+  id uuid [pk, not null]
+  allocated_amount decimal(18,2) [not null]
+  allocated_at timestamp [not null]
+  allocated_by uuid [null]
+  allocation_type varchar(20) [not null, note: 'Enum domain: Order, Debt (CLR names; persisted values in dictionary CHECKs)']
+  created_at timestamp [not null]
+  debt_entry_id uuid [null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  order_id uuid [null]
+  payment_id uuid [not null]
+  prepayment_consumed_amount decimal(18,2) [not null]
+  reversal_reason varchar(500) [null]
+  reversed_at timestamp [null]
+  reversed_by uuid [null]
+  status varchar(20) [not null, note: 'Enum domain: Active, Reversed (CLR names; persisted values in dictionary CHECKs)']
+  updated_at timestamp [not null]
+  Note: '''
+Entity: PaymentAllocation. Feature: Payments.
+  '''
+}
+
+Table payments {
+  id uuid [pk, not null]
+  amount decimal(18,2) [not null]
+  cancelled_at timestamp [null]
+  checkout_url varchar(1500) [null]
+  confirmation_source varchar(30) [null, note: 'Enum domain: Staff, PayOsWebhook (CLR names; persisted values in dictionary CHECKs)']
+  confirmed_at timestamp [null]
+  confirmed_by uuid [null]
+  created_at timestamp [not null]
+  created_by uuid [null]
+  currency varchar(3) [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  failed_at timestamp [null]
+  initiated_at timestamp [not null]
+  last_reconciliation_attempt_at timestamp [null]
+  note varchar(1000) [null]
+  order_id uuid [null]
+  payer_farmer_profile_id uuid [null]
+  payment_context varchar(30) [not null, note: 'Enum domain: OrderPayment, DebtRepayment (CLR names; persisted values in dictionary CHECKs)']
+  payment_method varchar(20) [not null, note: 'Enum domain: Cash, PayOs, BankTransfer (CLR names; persisted values in dictionary CHECKs)']
+  payment_number varchar(50) [not null]
+  provider varchar(30) [null]
+  provider_metadata json [null]
+  provider_order_code bigint [null]
+  provider_payment_link_id varchar(150) [null]
+  provider_transaction_id varchar(150) [null]
+  status varchar(30) [not null, note: 'Enum domain: Pending, Paid, Failed, Cancelled, PartiallyRefunded, Refunded (CLR names; persisted values in dictionary CHECKs)']
+  store_id uuid [not null]
+  updated_at timestamp [not null]
+  indexes {
+    (store_id, payment_number) [unique]
+  }
+  Note: '''
+Entity: Payment. Feature: Payments.
+Conditional unique: (provider_order_code) WHERE provider_order_code IS NOT NULL
+  '''
+}
+
+Table permissions {
+  id uuid [pk, not null]
+  code varchar(120) [not null, unique]
+  is_active boolean [not null]
+  is_delegable boolean [not null]
+  module varchar(50) [not null]
+  name varchar(150) [not null]
+  Note: '''
+Entity: Permission. Feature: Identity.
+  '''
+}
+
+Table price_list_items {
+  id uuid [pk, not null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  price_list_id uuid [not null]
+  product_packaging_id uuid [not null]
+  selling_price decimal(18,2) [not null]
+  store_product_id uuid [not null]
+  updated_at timestamp [not null]
+  indexes {
+    (price_list_id, store_product_id, product_packaging_id) [unique]
+  }
+  Note: '''
+Entity: PriceListItem. Feature: Pricing.
+  '''
+}
+
+Table price_lists {
+  id uuid [pk, not null]
+  code varchar(50) [not null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  description varchar(500) [null]
+  effective_from timestamp [not null]
+  effective_to timestamp [null]
+  is_walk_in_default boolean [not null]
+  name varchar(150) [not null]
+  status varchar(20) [not null, note: 'Enum domain: Draft, Active, Inactive (CLR names; persisted values in dictionary CHECKs)']
+  store_id uuid [not null]
+  updated_at timestamp [not null]
+  Note: '''
+Entity: PriceList. Feature: Pricing.
+Conditional unique: (store_id) WHERE is_walk_in_default AND status = 'ACTIVE' AND deleted_at IS NULL
+  '''
+}
+
+Table product_active_ingredients {
+  id uuid [pk, not null]
+  active_ingredient_id uuid [not null]
+  concentration varchar(100) [null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  note varchar(500) [null]
+  product_id uuid [not null]
+  updated_at timestamp [not null]
+  indexes {
+    (product_id, active_ingredient_id) [unique]
+  }
+  Note: '''
+Entity: ProductActiveIngredient. Feature: Products.
+  '''
+}
+
+Table product_packagings {
+  id uuid [pk, not null]
+  barcode varchar(100) [null]
+  conversion_to_base bigint [not null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  is_base_unit boolean [not null]
+  is_purchase_unit boolean [not null]
+  is_sale_unit boolean [not null]
+  packaging_name varchar(150) [null]
+  product_id uuid [not null]
+  status varchar(20) [not null]
+  unit_id uuid [not null]
+  updated_at timestamp [not null]
+  Note: '''
+Entity: ProductPackaging. Feature: Products.
+Conditional unique: (barcode) WHERE barcode IS NOT NULL AND deleted_at IS NULL
+Conditional unique: (product_id, unit_id) WHERE deleted_at IS NULL
+Conditional unique: (product_id) WHERE is_base_unit AND deleted_at IS NULL
+  '''
+}
+
+Table product_reviews {
+  id uuid [pk, not null]
+  comment varchar [null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  farmer_profile_id uuid [not null]
+  order_item_id uuid [not null]
+  rating integer [not null]
+  status varchar(20) [not null]
+  store_product_id uuid [not null]
+  updated_at timestamp [not null]
+  indexes {
+    (farmer_profile_id, order_item_id) [unique]
+  }
+  Note: '''
+Entity: ProductReview. Feature: Products.
+  '''
+}
+
+Table products {
+  id uuid [pk, not null]
+  brand_id uuid [null]
+  category_id uuid [not null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  description varchar [null]
+  image_url varchar(1000) [null]
+  name varchar(255) [not null]
+  requires_expiry_date boolean [not null]
+  requires_lot_tracking boolean [not null]
+  sku varchar(50) [not null, unique]
+  status varchar(20) [not null, note: 'Enum domain: Active, Inactive, Discontinued (CLR names; persisted values in dictionary CHECKs)']
+  updated_at timestamp [not null]
+  usage_instructions varchar [null]
+  Note: '''
+Entity: Product. Feature: Products.
+  '''
+}
+
+Table recommendation_items {
+  id uuid [pk, not null]
+  agent_review_id uuid [not null]
+  approved_at timestamp [not null]
+  approved_by uuid [not null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  diagnosis_case_id uuid [not null]
+  disease_treatment_id uuid [null]
+  is_active boolean [not null]
+  rank_order integer [not null]
+  reason varchar(1000) [null]
+  recommendation_type varchar(20) [not null, note: 'Enum domain: Treatment, Product (CLR names; persisted values in dictionary CHECKs)']
+  store_product_id uuid [null]
+  updated_at timestamp [not null]
+  Note: '''
+Entity: RecommendationItem. Feature: Diagnosis.
+  '''
+}
+
+Table refresh_tokens {
+  id uuid [pk, not null]
+  consumed_at timestamp [null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  expires_at timestamp [not null]
+  session_id uuid [not null]
+  token_hash varchar(64) [not null, unique]
+  updated_at timestamp [not null]
+  Note: '''
+Entity: RefreshToken. Feature: Identity.
+  '''
+}
+
+Table refunds {
+  id uuid [pk, not null]
+  amount decimal(18,2) [not null]
+  cancel_reason varchar(1000) [null]
+  cancelled_at timestamp [null]
+  cancelled_by uuid [null]
+  completed_at timestamp [null]
+  completed_by uuid [null]
+  created_at timestamp [not null]
+  currency varchar(3) [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  external_reference varchar(200) [null]
+  note varchar(1000) [null]
+  order_id uuid [null]
+  original_payment_id uuid [null]
+  proof_file_url varchar(1000) [null]
+  refund_method varchar(30) [not null, note: 'Enum domain: Cash, BankTransfer, OtherExternal (CLR names; persisted values in dictionary CHECKs)']
+  refund_number varchar(50) [not null]
+  requested_at timestamp [not null]
+  requested_by uuid [not null]
+  sales_return_id uuid [null]
+  status varchar(30) [not null, note: 'Enum domain: Pending, Completed, Failed, Cancelled (CLR names; persisted values in dictionary CHECKs)']
+  store_id uuid [not null]
+  updated_at timestamp [not null]
+  indexes {
+    (store_id, refund_number) [unique]
+  }
+  Note: '''
+Entity: Refund. Feature: Returns.
+  '''
+}
+
+Table role_permissions {
+  id uuid [pk, not null]
+  created_at timestamp [not null]
+  is_granted boolean [not null]
+  permission_id uuid [not null]
+  role_id uuid [not null]
+  updated_at timestamp [not null]
+  indexes {
+    (role_id, permission_id) [unique]
+  }
+  Note: '''
+Entity: RolePermission. Feature: Identity.
+  '''
+}
+
+Table roles {
+  id uuid [pk, not null]
+  code varchar(30) [not null, note: 'Enum domain: Farmer, StoreOwner, SalesStaff, DeliveryStaff, Admin (CLR names; persisted values in dictionary CHECKs)']
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  description varchar(500) [null]
+  is_active boolean [not null]
+  name varchar(100) [not null]
+  updated_at timestamp [not null]
+  version bigint [not null, note: 'Optimistic concurrency version']
+  Note: '''
+Entity: Role. Feature: Identity.
+Conditional unique: (code) WHERE deleted_at IS NULL
+  '''
+}
+
+Table sales_return_items {
+  id uuid [pk, not null]
+  condition_status varchar(30) [not null, note: 'Enum domain: PendingInspection, Resellable, Damaged, Expired, Unusable (CLR names; persisted values in dictionary CHECKs)']
+  conversion_to_base_snapshot bigint [not null]
+  created_at timestamp [not null]
+  debt_adjustment_transaction_id uuid [null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  delivery_item_id uuid [null]
+  delivery_item_lot_allocation_id uuid [null]
+  inspection_note varchar(1000) [null]
+  inventory_disposition varchar(30) [not null, note: 'Enum domain: None, Restock, WriteOff (CLR names; persisted values in dictionary CHECKs)']
+  inventory_lot_id uuid [not null]
+  order_item_id uuid [not null]
+  original_cogs_unit_cost decimal(20,6) [null]
+  original_stock_movement_item_id uuid [null]
+  reason_code varchar(50) [not null]
+  return_inventory_cost_value decimal(20,6) [null]
+  return_stock_movement_id uuid [null]
+  return_value decimal(18,2) [not null]
+  returned_base_quantity bigint [not null]
+  sales_return_id uuid [not null]
+  selling_unit_price_snapshot decimal(18,2) [not null]
+  updated_at timestamp [not null]
+  Note: '''
+Entity: SalesReturnItem. Feature: Returns.
+  '''
+}
+
+Table sales_returns {
+  id uuid [pk, not null]
+  approved_at timestamp [null]
+  approved_by uuid [null]
+  cancel_reason varchar(1000) [null]
+  cancelled_at timestamp [null]
+  cancelled_by uuid [null]
+  completed_at timestamp [null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  farmer_profile_id uuid [null]
+  inspected_at timestamp [null]
+  inspected_by uuid [null]
+  note varchar(1000) [null]
+  order_id uuid [not null]
+  reason_summary varchar(1000) [null]
+  received_at timestamp [null]
+  received_by uuid [null]
+  requested_at timestamp [not null]
+  requested_by uuid [not null]
+  return_number varchar(50) [not null]
+  status varchar(30) [not null, note: 'Enum domain: Requested, Approved, Rejected, Received, Inspected, PartiallyResolved, Completed, Cancelled (CLR names; persisted values in dictionary CHECKs)']
+  store_id uuid [not null]
+  total_debt_adjustment decimal(18,2) [not null]
+  total_refund_amount decimal(18,2) [not null]
+  total_return_amount decimal(18,2) [not null]
+  updated_at timestamp [not null]
+  indexes {
+    (store_id, return_number) [unique]
+  }
+  Note: '''
+Entity: SalesReturn. Feature: Returns.
+  '''
+}
+
+Table stock_movement_items {
+  id uuid [pk, not null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  inventory_lot_id uuid [not null]
+  note varchar(500) [null]
+  quantity_delta_base bigint [not null]
+  quantity_on_hand_after bigint [null]
+  stock_movement_id uuid [not null]
+  total_cost_snapshot decimal(20,6) [not null]
+  total_cost_value_after decimal(20,6) [null]
+  unit_cost_snapshot decimal(20,6) [not null]
+  updated_at timestamp [not null]
+  Note: '''
+Entity: StockMovementItem. Feature: Inventory.
+  '''
+}
+
+Table stock_movements {
+  id uuid [pk, not null]
+  created_at timestamp [not null]
+  created_by uuid [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  delivery_id uuid [null]
+  goods_receipt_id uuid [null]
+  movement_number varchar(50) [not null]
+  movement_type varchar(30) [not null, note: 'Enum domain: StockIn, Sale, ReturnIn, AdjustmentIn, AdjustmentOut, Reversal (CLR names; persisted values in dictionary CHECKs)']
+  occurred_at timestamp [not null]
+  order_id uuid [null]
+  posted_at timestamp [null]
+  posted_by uuid [null]
+  reason varchar(1000) [null]
+  reason_code varchar(50) [null]
+  reversal_of_movement_id uuid [null]
+  sales_return_id uuid [null]
+  status varchar(20) [not null, note: 'Enum domain: Draft, Posted, Reversed, Cancelled (CLR names; persisted values in dictionary CHECKs)']
+  stocktake_id uuid [null]
+  store_id uuid [not null]
+  updated_at timestamp [not null]
+  Note: '''
+Entity: StockMovement. Feature: Inventory.
+  '''
+}
+
+Table stocktake_items {
+  id uuid [pk, not null]
+  counted_at timestamp [null]
+  counted_by uuid [null]
+  counted_quantity bigint [null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  difference_cost_value decimal(20,6) [null]
+  difference_quantity bigint [null]
+  inventory_lot_id uuid [not null]
+  note varchar(500) [null]
+  reason_code varchar(50) [null]
+  snapshot_at timestamp [not null]
+  stocktake_id uuid [not null]
+  system_quantity_snapshot bigint [not null]
+  unit_cost_snapshot decimal(20,6) [null]
+  updated_at timestamp [not null]
+  indexes {
+    (stocktake_id, inventory_lot_id) [unique]
+  }
+  Note: '''
+Entity: StocktakeItem. Feature: Inventory.
+  '''
+}
+
+Table stocktakes {
+  id uuid [pk, not null]
+  completed_at timestamp [null]
+  completed_by uuid [null]
+  created_at timestamp [not null]
+  created_by uuid [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  note varchar(1000) [null]
+  started_at timestamp [null]
+  started_by uuid [null]
+  status varchar(30) [not null, note: 'Enum domain: Draft, InProgress, Completed, Cancelled (CLR names; persisted values in dictionary CHECKs)']
+  stocktake_number varchar(50) [not null]
+  store_id uuid [not null]
+  updated_at timestamp [not null]
+  indexes {
+    (store_id, stocktake_number) [unique]
+  }
+  Note: '''
+Entity: Stocktake. Feature: Inventory.
+  '''
+}
+
+Table store_member_permissions {
+  id uuid [pk, not null]
+  created_at timestamp [not null]
+  is_granted boolean [not null]
+  permission_id uuid [not null]
+  store_member_id uuid [not null]
+  updated_at timestamp [not null]
+  indexes {
+    (store_member_id, permission_id) [unique]
+  }
+  Note: '''
+Entity: StoreMemberPermission. Feature: Stores.
+  '''
+}
+
+Table store_members {
+  id uuid [pk, not null]
+  can_review_ai boolean [not null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  employee_code varchar(50) [null]
+  joined_at date [null]
+  left_at date [null]
+  status varchar(20) [not null, note: 'Enum domain: Active, Inactive, Left (CLR names; persisted values in dictionary CHECKs)']
+  store_id uuid [not null]
+  updated_at timestamp [not null]
+  user_id uuid [not null]
+  version bigint [not null, note: 'Optimistic concurrency version']
+  indexes {
+    (store_id, user_id) [unique]
+  }
+  Note: '''
+Entity: StoreMember. Feature: Stores.
+  '''
+}
+
+Table store_products {
+  id uuid [pk, not null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  is_active boolean [not null]
+  is_sellable boolean [not null]
+  min_stock_level_base bigint [null]
+  product_id uuid [not null]
+  store_id uuid [not null]
+  store_sku varchar(50) [null]
+  updated_at timestamp [not null]
+  indexes {
+    (store_id, product_id) [unique]
+  }
+  Note: '''
+Entity: StoreProduct. Feature: Products.
+  '''
+}
+
+Table stores {
+  id uuid [pk, not null]
+  address_line varchar(500) [not null]
+  code varchar(30) [not null, unique]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  district varchar(150) [null]
+  email varchar(255) [null]
+  name varchar(200) [not null]
+  phone_number varchar(20) [null]
+  province varchar(150) [not null]
+  status varchar(20) [not null, note: 'Enum domain: Active, Inactive (CLR names; persisted values in dictionary CHECKs)']
+  tax_code varchar(50) [null]
+  updated_at timestamp [not null]
+  ward varchar(150) [null]
+  Note: '''
+Entity: Store. Feature: Stores.
+  '''
+}
+
+Table suppliers {
+  id uuid [pk, not null]
+  address_line varchar(500) [null]
+  code varchar(50) [null]
+  contact_person varchar(150) [null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  district varchar(150) [null]
+  email varchar(255) [null]
+  is_active boolean [not null]
+  name varchar(255) [not null]
+  note varchar(1000) [null]
+  phone_number varchar(20) [null]
+  province varchar(150) [null]
+  store_id uuid [not null]
+  tax_code varchar(50) [null]
+  updated_at timestamp [not null]
+  ward varchar(150) [null]
+  Note: '''
+Entity: Supplier. Feature: Suppliers.
+Conditional unique: (store_id, code) WHERE code IS NOT NULL AND deleted_at IS NULL
+  '''
+}
+
+Table units {
+  id uuid [pk, not null]
+  code varchar(30) [not null, unique]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  is_active boolean [not null]
+  name varchar(100) [not null]
+  symbol varchar(20) [null]
+  updated_at timestamp [not null]
+  Note: '''
+Entity: Unit. Feature: Products.
+  '''
+}
+
+Table user_addresses {
+  id uuid [pk, not null]
+  address_line varchar(500) [not null]
+  address_type varchar(20) [not null, note: 'Enum domain: Home, Farm, Other (CLR names; persisted values in dictionary CHECKs)']
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  district varchar(150) [null]
+  is_default boolean [not null]
+  latitude decimal(10,7) [null]
+  longitude decimal(10,7) [null]
+  province varchar(150) [not null]
+  recipient_name varchar(150) [not null]
+  recipient_phone varchar(20) [not null]
+  updated_at timestamp [not null]
+  user_id uuid [not null]
+  ward varchar(150) [null]
+  Note: '''
+Entity: UserAddress. Feature: Identity.
+Conditional unique: (user_id) WHERE is_default AND deleted_at IS NULL
+  '''
+}
+
+Table users {
+  id uuid [pk, not null]
+  avatar_url varchar(1000) [null]
+  created_at timestamp [not null]
+  deleted_at timestamp [null]
+  deleted_by uuid [null]
+  email varchar(255) [null]
+  email_verified boolean [not null]
+  full_name varchar(150) [not null]
+  last_login_at timestamp [null]
+  password_hash varchar(500) [not null]
+  phone_number varchar(20) [null]
+  phone_verified boolean [not null]
+  role_id uuid [not null]
+  security_version bigint [not null, note: 'Optimistic concurrency version']
+  status varchar(30) [not null, note: 'Enum domain: Active, Inactive, Suspended, Locked (CLR names; persisted values in dictionary CHECKs)']
+  updated_at timestamp [not null]
+  Note: '''
+Entity: User. Feature: Identity.
+Conditional unique: (phone_number) WHERE deleted_at IS NULL AND phone_number IS NOT NULL
+Expression unique: (LOWER(email)) WHERE deleted_at IS NULL AND email IS NOT NULL
+  '''
+}
+
+Ref active_ingredients_fk_1: active_ingredients.deleted_by > users.id
+Ref agent_reviews_fk_1: agent_reviews.ai_disease_id_snapshot > diseases.id
+Ref agent_reviews_fk_2: agent_reviews.deleted_by > users.id
+Ref agent_reviews_fk_3: agent_reviews.diagnosis_case_id > diagnosis_cases.id
+Ref agent_reviews_fk_4: agent_reviews.final_disease_id > diseases.id
+Ref agent_reviews_fk_5: agent_reviews.primary_ai_inference_id > ai_inferences.id
+Ref agent_reviews_fk_6: agent_reviews.reviewer_member_id > store_members.id
+Ref agent_reviews_fk_7: agent_reviews.superseded_by_review_id > agent_reviews.id
+Ref ai_inferences_fk_1: ai_inferences.ai_model_id > ai_models.id
+Ref ai_inferences_fk_2: ai_inferences.ai_policy_config_id > ai_policy_configs.id
+Ref ai_inferences_fk_3: ai_inferences.deleted_by > users.id
+Ref ai_inferences_fk_4: ai_inferences.diagnosis_case_id > diagnosis_cases.id
+Ref ai_inferences_fk_5: ai_inferences.diagnosis_image_id > diagnosis_images.id
+Ref ai_inferences_fk_6: ai_inferences.predicted_disease_id > diseases.id
+Ref ai_models_fk_1: ai_models.created_by > users.id
+Ref ai_models_fk_2: ai_models.deleted_by > users.id
+Ref ai_policy_configs_fk_1: ai_policy_configs.ai_model_id > ai_models.id
+Ref ai_policy_configs_fk_2: ai_policy_configs.created_by > users.id
+Ref ai_policy_configs_fk_3: ai_policy_configs.deleted_by > users.id
+Ref articles_fk_1: articles.author_id > users.id
+Ref articles_fk_2: articles.deleted_by > users.id
+Ref audit_logs_fk_1: audit_logs.actor_user_id > users.id
+Ref audit_logs_fk_2: audit_logs.store_id > stores.id
+Ref auth_challenges_fk_1: auth_challenges.deleted_by > users.id
+Ref auth_challenges_fk_2: auth_challenges.user_id > users.id
+Ref auth_sessions_fk_1: auth_sessions.deleted_by > users.id
+Ref auth_sessions_fk_2: auth_sessions.user_id > users.id
+Ref brands_fk_1: brands.deleted_by > users.id
+Ref cart_items_fk_1: cart_items.cart_id > carts.id
+Ref cart_items_fk_2: cart_items.deleted_by > users.id
+Ref cart_items_fk_3: cart_items.product_packaging_id > product_packagings.id
+Ref cart_items_fk_4: cart_items.store_product_id > store_products.id
+Ref carts_fk_1: carts.converted_order_id > orders.id
+Ref carts_fk_2: carts.deleted_by > users.id
+Ref carts_fk_3: carts.farmer_profile_id > farmer_profiles.id
+Ref carts_fk_4: carts.store_id > stores.id
+Ref categories_fk_1: categories.deleted_by > users.id
+Ref categories_fk_2: categories.parent_id > categories.id
+Ref contact_requests_fk_1: contact_requests.assigned_to > users.id
+Ref contact_requests_fk_2: contact_requests.deleted_by > users.id
+Ref contact_requests_fk_3: contact_requests.user_id > users.id
+Ref credit_limit_histories_fk_1: credit_limit_histories.changed_by > users.id
+Ref credit_limit_histories_fk_2: credit_limit_histories.deleted_by > users.id
+Ref credit_limit_histories_fk_3: credit_limit_histories.farmer_credit_profile_id > farmer_credit_profiles.id
+Ref credit_limit_histories_fk_4: credit_limit_histories.new_credit_tier_id > credit_tiers.id
+Ref credit_limit_histories_fk_5: credit_limit_histories.old_credit_tier_id > credit_tiers.id
+Ref credit_reservations_fk_1: credit_reservations.deleted_by > users.id
+Ref credit_reservations_fk_2: credit_reservations.farmer_credit_profile_id > farmer_credit_profiles.id
+Ref credit_reservations_fk_3: credit_reservations.order_id > orders.id
+Ref credit_reservations_fk_4: credit_reservations.released_by > users.id
+Ref credit_reservations_fk_5: credit_reservations.reserved_by > users.id
+Ref credit_reservations_fk_6: credit_reservations.store_id > stores.id
+Ref credit_tiers_fk_1: credit_tiers.deleted_by > users.id
+Ref credit_tiers_fk_2: credit_tiers.store_id > stores.id
+Ref customer_group_assignments_fk_1: customer_group_assignments.assigned_by > users.id
+Ref customer_group_assignments_fk_2: customer_group_assignments.customer_group_id > customer_groups.id
+Ref customer_group_assignments_fk_3: customer_group_assignments.deleted_by > users.id
+Ref customer_group_assignments_fk_4: customer_group_assignments.farmer_profile_id > farmer_profiles.id
+Ref customer_group_price_lists_fk_1: customer_group_price_lists.assigned_by > users.id
+Ref customer_group_price_lists_fk_2: customer_group_price_lists.customer_group_id > customer_groups.id
+Ref customer_group_price_lists_fk_3: customer_group_price_lists.deleted_by > users.id
+Ref customer_group_price_lists_fk_4: customer_group_price_lists.price_list_id > price_lists.id
+Ref customer_groups_fk_1: customer_groups.default_credit_tier_id > credit_tiers.id
+Ref customer_groups_fk_2: customer_groups.deleted_by > users.id
+Ref customer_groups_fk_3: customer_groups.store_id > stores.id
+Ref debt_accounts_fk_1: debt_accounts.deleted_by > users.id
+Ref debt_accounts_fk_2: debt_accounts.farmer_profile_id > farmer_profiles.id
+Ref debt_accounts_fk_3: debt_accounts.store_id > stores.id
+Ref debt_entries_fk_1: debt_entries.created_by > users.id
+Ref debt_entries_fk_2: debt_entries.debt_account_id > debt_accounts.id
+Ref debt_entries_fk_3: debt_entries.deleted_by > users.id
+Ref debt_entries_fk_4: debt_entries.delivery_attempt_id > delivery_attempts.id
+Ref debt_entries_fk_5: debt_entries.delivery_id > deliveries.id
+Ref debt_entries_fk_6: debt_entries.order_id > orders.id
+Ref debt_entries_fk_7: debt_entries.source_stock_movement_id > stock_movements.id
+Ref debt_entry_actions_fk_1: debt_entry_actions.created_by > users.id
+Ref debt_entry_actions_fk_2: debt_entry_actions.debt_entry_id > debt_entries.id
+Ref debt_entry_actions_fk_3: debt_entry_actions.deleted_by > users.id
+Ref debt_transactions_fk_1: debt_transactions.created_by > users.id
+Ref debt_transactions_fk_2: debt_transactions.debt_account_id > debt_accounts.id
+Ref debt_transactions_fk_3: debt_transactions.debt_entry_action_id > debt_entry_actions.id
+Ref debt_transactions_fk_4: debt_transactions.debt_entry_id > debt_entries.id
+Ref debt_transactions_fk_5: debt_transactions.deleted_by > users.id
+Ref debt_transactions_fk_6: debt_transactions.payment_allocation_id > payment_allocations.id
+Ref debt_transactions_fk_7: debt_transactions.reversal_of_transaction_id > debt_transactions.id
+Ref debt_transactions_fk_8: debt_transactions.sales_return_id > sales_returns.id
+Ref deliveries_fk_1: deliveries.assigned_to_member_id > store_members.id
+Ref deliveries_fk_2: deliveries.cancelled_by > users.id
+Ref deliveries_fk_3: deliveries.created_by > users.id
+Ref deliveries_fk_4: deliveries.deleted_by > users.id
+Ref deliveries_fk_5: deliveries.order_id > orders.id
+Ref deliveries_fk_6: deliveries.store_id > stores.id
+Ref delivery_attempt_items_fk_1: delivery_attempt_items.deleted_by > users.id
+Ref delivery_attempt_items_fk_2: delivery_attempt_items.delivery_attempt_id > delivery_attempts.id
+Ref delivery_attempt_items_fk_3: delivery_attempt_items.delivery_item_lot_allocation_id > delivery_item_lot_allocations.id
+Ref delivery_attempts_fk_1: delivery_attempts.attempted_by_member_id > store_members.id
+Ref delivery_attempts_fk_2: delivery_attempts.deleted_by > users.id
+Ref delivery_attempts_fk_3: delivery_attempts.delivery_id > deliveries.id
+Ref delivery_attempts_fk_4: delivery_attempts.sale_stock_movement_id > stock_movements.id
+Ref delivery_incidents_fk_1: delivery_incidents.deleted_by > users.id
+Ref delivery_incidents_fk_2: delivery_incidents.delivery_attempt_id > delivery_attempts.id
+Ref delivery_incidents_fk_3: delivery_incidents.delivery_id > deliveries.id
+Ref delivery_incidents_fk_4: delivery_incidents.delivery_item_lot_allocation_id > delivery_item_lot_allocations.id
+Ref delivery_incidents_fk_5: delivery_incidents.related_stock_movement_id > stock_movements.id
+Ref delivery_incidents_fk_6: delivery_incidents.reported_by > users.id
+Ref delivery_incidents_fk_7: delivery_incidents.resolved_by > users.id
+Ref delivery_item_lot_allocations_fk_1: delivery_item_lot_allocations.deleted_by > users.id
+Ref delivery_item_lot_allocations_fk_2: delivery_item_lot_allocations.delivery_item_id > delivery_items.id
+Ref delivery_item_lot_allocations_fk_3: delivery_item_lot_allocations.inventory_lot_id > inventory_lots.id
+Ref delivery_item_lot_allocations_fk_4: delivery_item_lot_allocations.inventory_reservation_item_id > inventory_reservation_items.id
+Ref delivery_items_fk_1: delivery_items.deleted_by > users.id
+Ref delivery_items_fk_2: delivery_items.delivery_id > deliveries.id
+Ref delivery_items_fk_3: delivery_items.order_item_id > order_items.id
+Ref diagnosis_cases_fk_1: diagnosis_cases.deleted_by > users.id
+Ref diagnosis_cases_fk_2: diagnosis_cases.farmer_profile_id > farmer_profiles.id
+Ref diagnosis_cases_fk_3: diagnosis_cases.final_disease_id > diseases.id
+Ref diagnosis_images_fk_1: diagnosis_images.deleted_by > users.id
+Ref diagnosis_images_fk_2: diagnosis_images.diagnosis_case_id > diagnosis_cases.id
+Ref disease_treatments_fk_1: disease_treatments.active_ingredient_id > active_ingredients.id
+Ref disease_treatments_fk_2: disease_treatments.deleted_by > users.id
+Ref disease_treatments_fk_3: disease_treatments.disease_id > diseases.id
+Ref diseases_fk_1: diseases.deleted_by > users.id
+Ref farmer_credit_profiles_fk_1: farmer_credit_profiles.approved_by > users.id
+Ref farmer_credit_profiles_fk_2: farmer_credit_profiles.credit_tier_id > credit_tiers.id
+Ref farmer_credit_profiles_fk_3: farmer_credit_profiles.deleted_by > users.id
+Ref farmer_credit_profiles_fk_4: farmer_credit_profiles.farmer_profile_id > farmer_profiles.id
+Ref farmer_credit_profiles_fk_5: farmer_credit_profiles.store_id > stores.id
+Ref farmer_profiles_fk_1: farmer_profiles.deleted_by > users.id
+Ref farmer_profiles_fk_2: users.id - farmer_profiles.user_id
+Ref goods_receipt_items_fk_1: goods_receipt_items.deleted_by > users.id
+Ref goods_receipt_items_fk_2: goods_receipt_items.goods_receipt_id > goods_receipts.id
+Ref goods_receipt_items_fk_3: goods_receipt_items.inventory_lot_id > inventory_lots.id
+Ref goods_receipt_items_fk_4: goods_receipt_items.product_packaging_id > product_packagings.id
+Ref goods_receipt_items_fk_5: goods_receipt_items.store_product_id > store_products.id
+Ref goods_receipts_fk_1: goods_receipts.cancelled_by > users.id
+Ref goods_receipts_fk_2: goods_receipts.confirmed_by > users.id
+Ref goods_receipts_fk_3: goods_receipts.deleted_by > users.id
+Ref goods_receipts_fk_4: goods_receipts.received_by > users.id
+Ref goods_receipts_fk_5: goods_receipts.store_id > stores.id
+Ref goods_receipts_fk_6: goods_receipts.supplier_id > suppliers.id
+Ref inventory_lot_balances_fk_1: inventory_lot_balances.deleted_by > users.id
+Ref inventory_lot_balances_fk_2: inventory_lots.id - inventory_lot_balances.inventory_lot_id
+Ref inventory_lots_fk_1: inventory_lots.deleted_by > users.id
+Ref inventory_lots_fk_2: inventory_lots.store_product_id > store_products.id
+Ref inventory_reservation_items_fk_1: inventory_reservation_items.deleted_by > users.id
+Ref inventory_reservation_items_fk_2: inventory_reservation_items.inventory_lot_id > inventory_lots.id
+Ref inventory_reservation_items_fk_3: inventory_reservation_items.inventory_reservation_id > inventory_reservations.id
+Ref inventory_reservation_items_fk_4: inventory_reservation_items.order_item_id > order_items.id
+Ref inventory_reservations_fk_1: inventory_reservations.deleted_by > users.id
+Ref inventory_reservations_fk_2: inventory_reservations.order_id > orders.id
+Ref inventory_reservations_fk_3: inventory_reservations.released_by > users.id
+Ref inventory_reservations_fk_4: inventory_reservations.reserved_by > users.id
+Ref inventory_reservations_fk_5: inventory_reservations.store_id > stores.id
+Ref notification_outbox_fk_1: audit_logs.id - notification_outbox.audit_log_id
+Ref notification_outbox_fk_2: notification_outbox.deleted_by > users.id
+Ref notifications_fk_1: notifications.deleted_by > users.id
+Ref notifications_fk_2: notifications.user_id > users.id
+Ref order_items_fk_1: order_items.deleted_by > users.id
+Ref order_items_fk_2: order_items.order_id > orders.id
+Ref order_items_fk_3: order_items.overridden_by > users.id
+Ref order_items_fk_4: order_items.product_packaging_id > product_packagings.id
+Ref order_items_fk_5: order_items.store_product_id > store_products.id
+Ref orders_fk_1: orders.cancelled_by > users.id
+Ref orders_fk_2: orders.confirmed_by > users.id
+Ref orders_fk_3: orders.created_by > users.id
+Ref orders_fk_4: orders.customer_group_id_snapshot > customer_groups.id
+Ref orders_fk_5: orders.deleted_by > users.id
+Ref orders_fk_6: orders.farmer_profile_id > farmer_profiles.id
+Ref orders_fk_7: orders.pickup_completed_by > users.id
+Ref orders_fk_8: orders.price_list_id_snapshot > price_lists.id
+Ref orders_fk_9: orders.source_address_id > user_addresses.id
+Ref orders_fk_10: orders.store_id > stores.id
+Ref payment_allocations_fk_1: payment_allocations.allocated_by > users.id
+Ref payment_allocations_fk_2: payment_allocations.debt_entry_id > debt_entries.id
+Ref payment_allocations_fk_3: payment_allocations.deleted_by > users.id
+Ref payment_allocations_fk_4: payment_allocations.order_id > orders.id
+Ref payment_allocations_fk_5: payment_allocations.payment_id > payments.id
+Ref payment_allocations_fk_6: payment_allocations.reversed_by > users.id
+Ref payments_fk_1: payments.confirmed_by > users.id
+Ref payments_fk_2: payments.created_by > users.id
+Ref payments_fk_3: payments.deleted_by > users.id
+Ref payments_fk_4: payments.order_id > orders.id
+Ref payments_fk_5: payments.payer_farmer_profile_id > farmer_profiles.id
+Ref payments_fk_6: payments.store_id > stores.id
+Ref price_list_items_fk_1: price_list_items.deleted_by > users.id
+Ref price_list_items_fk_2: price_list_items.price_list_id > price_lists.id
+Ref price_list_items_fk_3: price_list_items.product_packaging_id > product_packagings.id
+Ref price_list_items_fk_4: price_list_items.store_product_id > store_products.id
+Ref price_lists_fk_1: price_lists.deleted_by > users.id
+Ref price_lists_fk_2: price_lists.store_id > stores.id
+Ref product_active_ingredients_fk_1: product_active_ingredients.active_ingredient_id > active_ingredients.id
+Ref product_active_ingredients_fk_2: product_active_ingredients.deleted_by > users.id
+Ref product_active_ingredients_fk_3: product_active_ingredients.product_id > products.id
+Ref product_packagings_fk_1: product_packagings.deleted_by > users.id
+Ref product_packagings_fk_2: product_packagings.product_id > products.id
+Ref product_packagings_fk_3: product_packagings.unit_id > units.id
+Ref product_reviews_fk_1: product_reviews.deleted_by > users.id
+Ref product_reviews_fk_2: product_reviews.farmer_profile_id > farmer_profiles.id
+Ref product_reviews_fk_3: product_reviews.order_item_id > order_items.id
+Ref product_reviews_fk_4: product_reviews.store_product_id > store_products.id
+Ref products_fk_1: products.brand_id > brands.id
+Ref products_fk_2: products.category_id > categories.id
+Ref products_fk_3: products.deleted_by > users.id
+Ref recommendation_items_fk_1: recommendation_items.agent_review_id > agent_reviews.id
+Ref recommendation_items_fk_2: recommendation_items.approved_by > users.id
+Ref recommendation_items_fk_3: recommendation_items.deleted_by > users.id
+Ref recommendation_items_fk_4: recommendation_items.diagnosis_case_id > diagnosis_cases.id
+Ref recommendation_items_fk_5: recommendation_items.disease_treatment_id > disease_treatments.id
+Ref recommendation_items_fk_6: recommendation_items.store_product_id > store_products.id
+Ref refresh_tokens_fk_1: refresh_tokens.deleted_by > users.id
+Ref refresh_tokens_fk_2: refresh_tokens.session_id > auth_sessions.id
+Ref refunds_fk_1: refunds.cancelled_by > users.id
+Ref refunds_fk_2: refunds.completed_by > users.id
+Ref refunds_fk_3: refunds.deleted_by > users.id
+Ref refunds_fk_4: refunds.order_id > orders.id
+Ref refunds_fk_5: refunds.original_payment_id > payments.id
+Ref refunds_fk_6: refunds.requested_by > users.id
+Ref refunds_fk_7: refunds.sales_return_id > sales_returns.id
+Ref refunds_fk_8: refunds.store_id > stores.id
+Ref role_permissions_fk_1: role_permissions.permission_id > permissions.id
+Ref role_permissions_fk_2: role_permissions.role_id > roles.id
+Ref roles_fk_1: roles.deleted_by > users.id
+Ref sales_return_items_fk_1: sales_return_items.debt_adjustment_transaction_id > debt_transactions.id
+Ref sales_return_items_fk_2: sales_return_items.deleted_by > users.id
+Ref sales_return_items_fk_3: sales_return_items.delivery_item_id > delivery_items.id
+Ref sales_return_items_fk_4: sales_return_items.delivery_item_lot_allocation_id > delivery_item_lot_allocations.id
+Ref sales_return_items_fk_5: sales_return_items.inventory_lot_id > inventory_lots.id
+Ref sales_return_items_fk_6: sales_return_items.order_item_id > order_items.id
+Ref sales_return_items_fk_7: sales_return_items.original_stock_movement_item_id > stock_movement_items.id
+Ref sales_return_items_fk_8: sales_return_items.return_stock_movement_id > stock_movements.id
+Ref sales_return_items_fk_9: sales_return_items.sales_return_id > sales_returns.id
+Ref sales_returns_fk_1: sales_returns.approved_by > users.id
+Ref sales_returns_fk_2: sales_returns.cancelled_by > users.id
+Ref sales_returns_fk_3: sales_returns.deleted_by > users.id
+Ref sales_returns_fk_4: sales_returns.farmer_profile_id > farmer_profiles.id
+Ref sales_returns_fk_5: sales_returns.inspected_by > users.id
+Ref sales_returns_fk_6: sales_returns.order_id > orders.id
+Ref sales_returns_fk_7: sales_returns.received_by > users.id
+Ref sales_returns_fk_8: sales_returns.requested_by > users.id
+Ref sales_returns_fk_9: sales_returns.store_id > stores.id
+Ref stock_movement_items_fk_1: stock_movement_items.deleted_by > users.id
+Ref stock_movement_items_fk_2: stock_movement_items.inventory_lot_id > inventory_lots.id
+Ref stock_movement_items_fk_3: stock_movement_items.stock_movement_id > stock_movements.id
+Ref stock_movements_fk_1: stock_movements.created_by > users.id
+Ref stock_movements_fk_2: stock_movements.deleted_by > users.id
+Ref stock_movements_fk_3: stock_movements.delivery_id > deliveries.id
+Ref stock_movements_fk_4: stock_movements.goods_receipt_id > goods_receipts.id
+Ref stock_movements_fk_5: stock_movements.order_id > orders.id
+Ref stock_movements_fk_6: stock_movements.posted_by > users.id
+Ref stock_movements_fk_7: stock_movements.reversal_of_movement_id > stock_movements.id
+Ref stock_movements_fk_8: stock_movements.sales_return_id > sales_returns.id
+Ref stock_movements_fk_9: stock_movements.stocktake_id > stocktakes.id
+Ref stock_movements_fk_10: stock_movements.store_id > stores.id
+Ref stocktake_items_fk_1: stocktake_items.counted_by > users.id
+Ref stocktake_items_fk_2: stocktake_items.deleted_by > users.id
+Ref stocktake_items_fk_3: stocktake_items.inventory_lot_id > inventory_lots.id
+Ref stocktake_items_fk_4: stocktake_items.stocktake_id > stocktakes.id
+Ref stocktakes_fk_1: stocktakes.completed_by > users.id
+Ref stocktakes_fk_2: stocktakes.created_by > users.id
+Ref stocktakes_fk_3: stocktakes.deleted_by > users.id
+Ref stocktakes_fk_4: stocktakes.started_by > users.id
+Ref stocktakes_fk_5: stocktakes.store_id > stores.id
+Ref store_member_permissions_fk_1: store_member_permissions.permission_id > permissions.id
+Ref store_member_permissions_fk_2: store_member_permissions.store_member_id > store_members.id
+Ref store_members_fk_1: store_members.deleted_by > users.id
+Ref store_members_fk_2: store_members.store_id > stores.id
+Ref store_members_fk_3: store_members.user_id > users.id
+Ref store_products_fk_1: store_products.deleted_by > users.id
+Ref store_products_fk_2: store_products.product_id > products.id
+Ref store_products_fk_3: store_products.store_id > stores.id
+Ref stores_fk_1: stores.deleted_by > users.id
+Ref suppliers_fk_1: suppliers.deleted_by > users.id
+Ref suppliers_fk_2: suppliers.store_id > stores.id
+Ref units_fk_1: units.deleted_by > users.id
+Ref user_addresses_fk_1: user_addresses.deleted_by > users.id
+Ref user_addresses_fk_2: user_addresses.user_id > users.id
+Ref users_fk_1: users.deleted_by > users.id
+Ref users_fk_2: users.role_id > roles.id

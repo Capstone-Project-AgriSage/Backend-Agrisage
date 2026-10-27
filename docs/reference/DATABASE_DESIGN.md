@@ -6736,11 +6736,18 @@ role version covers concurrent edits. Seed initial grants only for absent pairs;
 ## 36.3 `store_member_permissions`
 
 `id uuid PK DEFAULT gen_random_uuid()`, `store_member_id uuid NOT NULL FK store_members.id RESTRICT`,
-`permission_id uuid NOT NULL FK permissions.id RESTRICT`, `is_granted boolean NOT NULL`,
+`permission_id uuid NOT NULL FK permissions.id RESTRICT`, `is_granted boolean NULL`,
 `created_at timestamptz NOT NULL`, `updated_at timestamptz NOT NULL`.
 UNIQUE `(store_member_id, permission_id)`; permission_id lookup index. An explicit override wins over the role
 default (absence inherits). Store identity is derived from store_member_id, never a duplicated/client-supplied store_id.
 No hard deletes; changing an override preserves the row and audits the change. Parent member version covers edits.
+
+User-requested Permission Management extension (2026-10-20): `is_granted = true` means explicit Allow,
+`false` means explicit Deny, and `NULL` semantically resets the row to live Role inheritance. An absent row
+also inherits. Reset retains the original row/id and audit history; it does not copy today's Role grant into
+an explicit override. Existing non-null grants/denies are preserved by a nullable-column migration.
+Role permission rows remain non-nullable. Reset is subject to the same delegable authority, active-store,
+target-role, advisory-lock, expected-version and audit checks as grant/deny.
 
 ## 36.4 Authority and transaction safety
 

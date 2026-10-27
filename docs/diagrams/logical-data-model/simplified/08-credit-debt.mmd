@@ -1,0 +1,89 @@
+erDiagram
+    direction TB
+    credit_limit_histories {
+        Identifier id PK
+        Identifier farmer_credit_profile_id FK
+        Decimal old_credit_limit
+        Decimal new_credit_limit
+        DateTime changed_at
+    }
+    credit_reservations {
+        Identifier id PK
+        Identifier farmer_credit_profile_id FK
+        Identifier order_id FK
+        Decimal amount_reserved
+        Decimal amount_consumed
+        Decimal amount_released
+        String status
+    }
+    credit_tiers {
+        Identifier id PK
+        String code
+        Decimal default_credit_limit
+        Integer default_payment_term_days
+    }
+    debt_accounts {
+        Identifier id PK
+        Identifier farmer_profile_id FK
+        Decimal current_balance
+        String status
+    }
+    debt_entries {
+        Identifier id PK
+        Identifier debt_account_id FK
+        Identifier order_id FK "optional"
+        String entry_number UK
+        Decimal original_amount
+        Decimal outstanding_amount
+        Date due_date
+        String status
+    }
+    debt_entry_actions {
+        Identifier id PK
+        Identifier debt_entry_id FK
+        String action_type
+        Decimal adjustment_amount "optional"
+        String reason
+    }
+    debt_transactions {
+        Identifier id PK
+        Identifier debt_account_id FK
+        Identifier debt_entry_id FK "optional"
+        Identifier payment_allocation_id FK "optional"
+        Identifier sales_return_id FK "optional"
+        String transaction_type
+        Decimal amount_delta
+        Decimal balance_after
+    }
+    farmer_credit_profiles {
+        Identifier id PK
+        Identifier credit_tier_id FK "optional"
+        Identifier farmer_profile_id FK
+        Decimal credit_limit
+        String status
+    }
+    farmer_profiles {
+        Identifier id PK
+    }
+    orders {
+        Identifier id PK
+    }
+    payment_allocations {
+        Identifier id PK
+    }
+    sales_returns {
+        Identifier id PK
+    }
+    credit_tiers |o--o{ farmer_credit_profiles : "credit_tier_id"
+    debt_accounts ||--o{ debt_entries : "debt_account_id"
+    debt_accounts ||--o{ debt_transactions : "debt_account_id"
+    debt_entries |o--o{ debt_transactions : "debt_entry_id"
+    debt_entries ||--o{ debt_entry_actions : "debt_entry_id"
+    farmer_credit_profiles ||--o{ credit_limit_histories : "farmer_credit_profile_id"
+    farmer_credit_profiles ||--o{ credit_reservations : "farmer_credit_profile_id"
+    farmer_profiles ||--o{ debt_accounts : "farmer_profile_id"
+    farmer_profiles ||--o{ farmer_credit_profiles : "farmer_profile_id"
+    orders |o--o{ debt_entries : "order_id"
+    orders ||--o{ credit_reservations : "order_id"
+    payment_allocations |o--o{ debt_transactions : "payment_allocation_id"
+    sales_returns |o--o{ debt_transactions : "sales_return_id"

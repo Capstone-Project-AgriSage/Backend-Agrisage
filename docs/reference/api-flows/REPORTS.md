@@ -65,6 +65,32 @@ Period reports return `fromDate`, `toDate`, normalized `groupBy`, `rows` and `to
 All grouping and monetary aggregation runs in SQL; only reference labels, date bucket formatting and KPI ratios
 are computed after aggregation. No edits, ledger writes or external-provider calls occur in reporting.
 
+## Counter sales today — 2026-10-11
+
+`GET /api/reports/counter-sales-today`, no query parameters. `Operate` roles plus `REPORTS.READ`,
+with the same active-store membership scope as other reports. Read-only; no schema change.
+`CounterSalesTodayResponse`: `date` (Vietnam calendar day), `asOf` (UTC), `paidSalesRevenue`,
+`completedOrderCount`, `receivedAmount`, `creditSalesAmount`. Empty activity returns zero for all four metrics.
+
+- All four metrics refer to `COUNTER` orders of the active store, including counter orders fulfilled by delivery.
+- `paidSalesRevenue`: gross fulfilled value of today's POSTED SALE movements for orders paid in full as of
+  the report. Reuse design §35.22's movement/product rounding. Full payment means active ORDER allocations
+  plus active DEBT allocations to that order's debt entries cover its total. Only confirmed payments count;
+  include PAID, PARTIALLY_REFUNDED and REFUNDED statuses, as in the existing payment ledger. Returns are
+  separate outflows and are not subtracted from this gross sales metric. Prepayment without fulfillment is not revenue.
+- `completedOrderCount`: orders currently COMPLETED whose `CompletedAt` falls today, regardless of payment
+  or settlement type; count each order once. Partial fulfillment is not a completed order.
+- `receivedAmount`: confirmed ORDER_PAYMENT amounts received today for counter orders, plus the active DEBT
+  allocation amounts from payments confirmed today attributed to those orders. Include CASH, BANK_TRANSFER
+  and PAYOS. Count only the counter share of a debt payment split across counter and online orders. Receipts
+  include subsequently refunded payments; refunds are separate outflows. Order creation date does not filter receipts.
+- `creditSalesAmount`: positive POSTED CREDIT_SALE `DebtTransaction.AmountDelta` occurring today, joined
+  through the DebtEntry to CREDIT counter orders. Exclude reservations, manual adjustments and subsequent
+  repayments; this is debt originated today, not the current outstanding balance.
+
+The backend clock defines today and the reporting cutoff. The frontend shows exactly four cards above the
+counter workspace, supports refresh, and reloads after successful relevant business writes.
+
 ## Calling the APIs
 
 Bearer authentication is required. For example:
@@ -80,4 +106,4 @@ GET /api/reports/credit-exposure
 
 The existing reports remain available: `/sales`, `/deliveries`, `/debt-aging`, `/debt-collections`,
 `/debt-by-customer-group`, `/inventory-movement`, `/inventory-valuation`. Together with the eight new routes,
-there are 15 report endpoints. Interactive schemas and query parameters are in `/swagger` in Development.
+and `/counter-sales-today`, there are 16 report endpoints. Interactive schemas and query parameters are in `/swagger` in Development.

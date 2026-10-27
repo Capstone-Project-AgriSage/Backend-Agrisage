@@ -1,0 +1,32 @@
+%%{init: {"theme":"dark"}}%%
+swimlane-beta TB
+  accTitle: WF-14 - External Refund and Completion
+  subgraph OWNER["Store Owner / Admin"]
+    S((Start))
+    O1("Open cancellation refund or create return refund request")
+    O2("Pay cash back or transfer externally")
+    D1{"Refund actually paid?"}
+    O3("Record reference or proof; confirm completion")
+    O4("Record FAILED or CANCELLED; create new refund to retry if needed")
+    E((End))
+  end
+  subgraph BACKEND["Backend System"]
+    B1("Check source, payment and remaining refundable cap; create/use PENDING refund")
+    B2("One transaction: set Refund COMPLETED; record actor and evidence")
+    B3("Update original Payment to PARTIALLY_REFUNDED or REFUNDED when linked")
+    D2{"Sales Return source?"}
+    D3{"All restock lines linked and total completed refunds covers refund due?"}
+    B4("Set Sales Return COMPLETED")
+    B5("Keep Sales Return PARTIALLY_RESOLVED")
+    B6("Persist refund failure/cancellation; do not mark money returned")
+  end
+  subgraph CUSTOMER["Customer"]
+    C1("Receive refunded money and updated status")
+  end
+  S --> O1 --> B1 --> O2 --> D1
+  D1 -->|No| O4 --> B6 --> E
+  D1 -->|Yes| O3 --> B2 --> B3 --> D2
+  D2 -->|No; cancelled order| C1 --> E
+  D2 -->|Yes| D3
+  D3 -->|Yes| B4 --> C1
+  D3 -->|No| B5 --> C1

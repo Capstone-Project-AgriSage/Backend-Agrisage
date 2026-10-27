@@ -1,0 +1,39 @@
+%%{init: {"theme":"dark"}}%%
+swimlane-beta TB
+  accTitle: WF-08 - Debt Repayment
+  subgraph FARMER["Farmer"]
+    S((Start))
+    F1("View debt; choose repayment amount and method")
+    F2("Pay cash, transfer externally or use payOS")
+    F3("Receive receipt and updated debt balance")
+    E((End))
+  end
+  subgraph SALES["Sales Staff"]
+    R1("Confirm cash received; optionally select debt entries")
+    R2("Record external bank transfer as PENDING")
+  end
+  subgraph OWNER["Store Owner / Admin"]
+    O1{"Verify external bank transfer?"}
+  end
+  subgraph BACKEND["Backend System"]
+    B1("Validate payer and amount against outstanding debt")
+    D1{"Repayment method?"}
+    B2("Create or confirm Payment PAID; lock customer and debt account")
+    B3("One transaction: create DEBT payment_allocations; PAYMENT DebtTransactions")
+    B4("Reduce entry outstanding and account balance; derive statuses; commit once")
+    B5("Mark manual payment FAILED; no debt reduction")
+    B6("Create payOS link; verify settlement through WF-04")
+    B7("Return pending/failed status; debt unchanged")
+  end
+  subgraph PAYOS["payOS"]
+    P1("Process payment; return trusted settlement")
+  end
+  S --> F1 --> B1 --> F2 --> D1
+  D1 -->|Cash| R1 --> B2
+  D1 -->|Manual bank transfer| R2 --> O1
+  O1 -->|Confirmed| B2
+  O1 -->|Rejected| B5 --> F3
+  D1 -->|payOS| B6 --> P1
+  P1 -->|Verified PAID| B2
+  P1 -->|Not paid| B7 --> F3
+  B2 --> B3 --> B4 --> F3 --> E

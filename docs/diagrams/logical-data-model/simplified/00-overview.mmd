@@ -1,0 +1,146 @@
+erDiagram
+    direction TB
+    agent_reviews {
+        Identifier id PK
+        String decision
+        Boolean is_current
+    }
+    debt_accounts {
+        Identifier id PK
+        Decimal current_balance
+        String status
+    }
+    debt_entries {
+        Identifier id PK
+        String entry_number UK
+        Decimal original_amount
+    }
+    deliveries {
+        Identifier id PK
+        String delivery_number
+        String status
+    }
+    diagnosis_cases {
+        Identifier id PK
+        String case_number UK
+        String crop_type
+    }
+    diseases {
+        Identifier id PK
+        String code UK
+        String name
+    }
+    farmer_profiles {
+        Identifier id PK
+        Date date_of_birth "optional"
+        String gender "optional"
+    }
+    goods_receipt_items {
+        Identifier id PK
+        Integer base_quantity
+        Decimal base_unit_cost
+    }
+    goods_receipts {
+        Identifier id PK
+        String receipt_number
+        DateTime received_at
+    }
+    inventory_lots {
+        Identifier id PK
+        String lot_number "optional"
+        Date expiry_date "optional"
+    }
+    order_items {
+        Identifier id PK
+        Integer base_quantity
+        Decimal unit_price
+    }
+    orders {
+        Identifier id PK
+        String order_number
+        String customer_type
+    }
+    payment_allocations {
+        Identifier id PK
+        String allocation_type
+        Decimal allocated_amount
+    }
+    payments {
+        Identifier id PK
+        String payment_number
+        String payment_method
+    }
+    products {
+        Identifier id PK
+        String sku UK
+        String name
+    }
+    recommendation_items {
+        Identifier id PK
+        String recommendation_type
+        Integer rank_order
+    }
+    refunds {
+        Identifier id PK
+        String refund_number
+        Decimal amount
+    }
+    sales_return_items {
+        Identifier id PK
+        Integer returned_base_quantity
+        Decimal return_value
+    }
+    sales_returns {
+        Identifier id PK
+        String return_number
+        Decimal total_return_amount
+    }
+    store_products {
+        Identifier id PK
+        String store_sku "optional"
+        Boolean is_sellable
+    }
+    stores {
+        Identifier id PK
+        String code UK
+        String name
+    }
+    suppliers {
+        Identifier id PK
+        String code "optional"
+        String name
+    }
+    users {
+        Identifier id PK
+        String full_name
+        String phone_number "optional"
+    }
+    agent_reviews ||--o{ recommendation_items : "agent_review_id"
+    debt_accounts ||--o{ debt_entries : "debt_account_id"
+    debt_entries |o--o{ payment_allocations : "debt_entry_id"
+    diagnosis_cases ||--o{ agent_reviews : "diagnosis_case_id"
+    diseases |o--o{ agent_reviews : "final_disease_id"
+    farmer_profiles |o--o{ orders : "farmer_profile_id"
+    farmer_profiles ||--o{ debt_accounts : "farmer_profile_id"
+    farmer_profiles ||--o{ diagnosis_cases : "farmer_profile_id"
+    goods_receipts ||--o{ goods_receipt_items : "goods_receipt_id"
+    inventory_lots |o--o{ goods_receipt_items : "inventory_lot_id"
+    order_items ||--o{ sales_return_items : "order_item_id"
+    orders |o--o{ debt_entries : "order_id"
+    orders |o--o{ payment_allocations : "order_id"
+    orders |o--o{ refunds : "order_id"
+    orders ||--o{ deliveries : "order_id"
+    orders ||--o{ order_items : "order_id"
+    orders ||--o{ sales_returns : "order_id"
+    payments |o--o{ refunds : "original_payment_id"
+    payments ||--o{ payment_allocations : "payment_id"
+    products ||--o{ store_products : "product_id"
+    sales_returns |o--o{ refunds : "sales_return_id"
+    sales_returns ||--o{ sales_return_items : "sales_return_id"
+    store_products |o--o{ recommendation_items : "store_product_id"
+    store_products ||--o{ goods_receipt_items : "store_product_id"
+    store_products ||--o{ inventory_lots : "store_product_id"
+    store_products ||--o{ order_items : "store_product_id"
+    stores ||--o{ store_products : "store_id"
+    suppliers ||--o{ goods_receipts : "supplier_id"
+    users ||--o| farmer_profiles : "user_id"

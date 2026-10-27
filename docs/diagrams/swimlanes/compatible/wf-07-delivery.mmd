@@ -1,0 +1,46 @@
+%%{init: {"theme":"dark"}}%%
+flowchart LR
+  accTitle: WF-07 - Delivery Attempts and Incidents
+  subgraph SALES["Sales Staff"]
+    direction TB
+    S((Start))
+    R1("Create delivery note; confirm actual lots; assign delivery staff")
+    R2("Choose retry, return to store, replacement or cancel remainder")
+    R3("If stock adjustment is needed, request authorized WF-11; link movement to incident")
+    E((End))
+  end
+  subgraph BACKEND["Backend System"]
+    direction TB
+    B1("Validate quantities and allocations; set ASSIGNED")
+    B2("Dispatch delivery; set OUT_FOR_DELIVERY")
+    B3("Start one IN_PROGRESS attempt")
+    D1{"Any quantity delivered?"}
+    B4("Require proof image and receiver; validate delivered quantities and lots")
+    B5("One transaction: SALE and COGS; consume reservations and prepayment")
+    B6("Create debt only for unpaid CREDIT fulfillment; update attempt, delivery and order")
+    D2{"Remaining delivery quantity?"}
+    B7("Set FAILED attempt and RETRY_PENDING; no SALE or debt")
+    B8("Record incident and resolution; preserve affected lot and quantity")
+    D3{"Retry delivery?"}
+    B9("Apply authorized cancellation/resolution; preserve completed fulfillment")
+  end
+  subgraph DELIVERY["Delivery Staff"]
+    direction TB
+    DLV1("Accept assignment; dispatch")
+    DLV2("Start attempt; travel to customer")
+    DLV3("Record actual delivered quantities, proof or failure reason")
+    DLV4("Report incident if needed")
+  end
+  subgraph FARMER["Farmer"]
+    direction TB
+    F1("Receive all/some goods, or cannot accept delivery")
+    F2("View delivery and order status")
+  end
+  S --> R1 --> B1 --> DLV1 --> B2 --> DLV2 --> B3 --> F1 --> DLV3 --> D1
+  D1 -->|Yes| B4 --> B5 --> B6 --> D2
+  D2 -->|No; DELIVERED| F2 --> E
+  D2 -->|Yes; PARTIALLY_DELIVERED| R2
+  D1 -->|No| B7 --> DLV4 --> B8 --> R2
+  R2 --> R3 --> D3
+  D3 -->|Yes| DLV1
+  D3 -->|No| B9 --> F2

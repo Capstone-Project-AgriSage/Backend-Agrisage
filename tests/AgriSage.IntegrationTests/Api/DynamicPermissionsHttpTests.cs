@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using AgriSage.Api.Authorization;
 using AgriSage.Application.Common.Interfaces;
 using AgriSage.Application.Features.Permissions;
@@ -55,9 +56,20 @@ public sealed class DynamicPermissionsHttpTests(StaffHttpTests.StaffApiFactory f
         Assert.False(members.Validate(new SetMemberPermissionsRequest([null!], 0, 0, "test")).IsValid);
         Assert.False(members.Validate(new SetMemberPermissionsRequest([new("ORDERS.READ", true), new("ORDERS.READ", false)], 0, 0, "test")).IsValid);
         Assert.True(members.Validate(new SetMemberPermissionsRequest([new("ORDERS.READ", false)], 0, 0, "test")).IsValid);
+        Assert.True(members.Validate(new SetMemberPermissionsRequest([new("ORDERS.READ", null)], 0, 0, "Restore inheritance")).IsValid);
         Assert.False(PermissionCatalog.ByCode["PERMISSIONS.MANAGE_ROLES"].AllowsRole("SALES_STAFF"));
         Assert.False(PermissionCatalog.ByCode["AUDIT.READ"].Delegable);
     }
+    [Fact]
+    public void Reset_requires_an_explicit_null_and_never_interprets_a_missing_grant_as_reset()
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<PermissionOverride>("""{"code":"ORDERS.READ"}""", options));
+        var reset = JsonSerializer.Deserialize<PermissionOverride>("""{"code":"ORDERS.READ","granted":null}""", options);
+        Assert.NotNull(reset);
+        Assert.Null(reset.Granted);
+    }
+
     private sealed class LivePermissions(ConcurrentDictionary<string, bool> grants) : IPermissionEvaluator
     {
         public Task<bool> HasAsync(string code, CancellationToken token) => Task.FromResult(grants.GetValueOrDefault(code));

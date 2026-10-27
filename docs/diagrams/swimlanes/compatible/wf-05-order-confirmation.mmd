@@ -1,0 +1,34 @@
+%%{init: {"theme":"dark"}}%%
+flowchart LR
+  accTitle: WF-05 - Order Confirmation Stock and Credit Reservation
+  subgraph SALES["Sales Staff"]
+    direction TB
+    S((Start))
+    R1("Review pending order; request confirmation")
+    R2("Resolve payment, credit or stock problem")
+    R3("Prepare goods; confirm physical lots at pickup or delivery allocation")
+    E((End))
+  end
+  subgraph BACKEND["Backend System"]
+    direction TB
+    B1("Start transaction; lock order; revalidate state and sellable lines")
+    D1{"Settlement type?"}
+    D2{"PAID allocations cover order total?"}
+    B2("Validate registered customer, active credit profile and debt account")
+    B3("Required credit = total minus paid; check available credit and policy")
+    D3{"Eligible and sufficient credit?"}
+    B4("Reserve required credit; snapshot term days from credit tier")
+    B5("Choose eligible FEFO lots; lock and recheck balances")
+    D4{"Enough available stock for every line?"}
+    B6("Create inventory reservation; set order CONFIRMED; commit")
+    B7("Reject confirmation; roll back all reservations")
+  end
+  S --> R1 --> B1 --> D1
+  D1 -->|FULL_PAYMENT| D2
+  D2 -->|No| B7
+  D2 -->|Yes| B5
+  D1 -->|CREDIT| B2 --> B3 --> D3
+  D3 -->|No| B7
+  D3 -->|Yes| B4 --> B5 --> D4
+  D4 -->|No| B7 --> R2 --> E
+  D4 -->|Yes| B6 --> R3 --> E

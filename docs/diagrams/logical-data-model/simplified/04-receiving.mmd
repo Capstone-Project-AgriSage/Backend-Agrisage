@@ -1,0 +1,39 @@
+erDiagram
+    direction TB
+    goods_receipt_items {
+        Identifier id PK
+        Identifier goods_receipt_id FK
+        Identifier inventory_lot_id FK "optional"
+        Identifier product_packaging_id FK
+        Identifier store_product_id FK
+        Integer base_quantity
+        Decimal base_unit_cost
+    }
+    goods_receipts {
+        Identifier id PK
+        Identifier supplier_id FK
+        String receipt_number
+        DateTime received_at
+        Decimal total_amount
+        String status
+    }
+    inventory_lots {
+        Identifier id PK
+    }
+    product_packagings {
+        Identifier id PK
+    }
+    store_products {
+        Identifier id PK
+    }
+    suppliers {
+        Identifier id PK
+        String code "optional"
+        String name
+        String phone_number "optional"
+    }
+    goods_receipts ||--o{ goods_receipt_items : "goods_receipt_id"
+    inventory_lots |o--o{ goods_receipt_items : "inventory_lot_id"
+    product_packagings ||--o{ goods_receipt_items : "product_packaging_id"
+    store_products ||--o{ goods_receipt_items : "store_product_id"
+    suppliers ||--o{ goods_receipts : "supplier_id"

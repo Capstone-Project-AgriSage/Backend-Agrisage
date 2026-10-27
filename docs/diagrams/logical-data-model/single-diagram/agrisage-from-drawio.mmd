@@ -1,0 +1,535 @@
+---
+config:
+  layout: elk
+  theme: base
+  look: classic
+  themeVariables:
+    primaryColor: '#ffffff'
+    primaryBorderColor: '#2d78b7'
+    primaryTextColor: '#2d78b7'
+    textColor: '#203042'
+    mainBkg: '#ffffff'
+    rowOdd: '#ffffff'
+    rowEven: '#ffffff'
+    lineColor: '#94a3b8'
+---
+erDiagram
+    direction TB
+    auth_challenges {
+        Identifier id PK
+        String purpose
+        String channel
+        DateTime expires_at
+    }
+    auth_sessions {
+        Identifier id PK
+        DateTime expires_at
+        DateTime revoked_at "optional"
+    }
+    permissions {
+        Identifier id PK
+        String code
+        String module
+        Boolean is_delegable
+    }
+    refresh_tokens {
+        Identifier id PK
+        DateTime expires_at
+        DateTime consumed_at "optional"
+    }
+    role_permissions {
+        Identifier id PK
+        Boolean is_granted
+    }
+    roles {
+        Identifier id PK
+        String code
+        String name
+    }
+    store_member_permissions {
+        Identifier id PK
+        Boolean is_granted "optional"
+    }
+    store_members {
+        Identifier id PK
+        String employee_code "optional"
+        Boolean can_review_ai
+        String status
+    }
+    stores {
+        Identifier id PK
+        String code
+        String name
+    }
+    user_addresses {
+        Identifier id PK
+        String address_line
+        String province
+        Boolean is_default
+    }
+    users {
+        Identifier id PK
+        String full_name
+        String phone_number "optional"
+        String status
+    }
+    customer_group_assignments {
+        Identifier id PK
+        DateTime effective_from
+        DateTime effective_to "optional"
+    }
+    customer_group_price_lists {
+        Identifier id PK
+        DateTime effective_from
+        DateTime effective_to "optional"
+    }
+    customer_groups {
+        Identifier id PK
+        String code
+        String name
+        Integer priority
+    }
+    farmer_profiles {
+        Identifier id PK
+        Date date_of_birth "optional"
+        String gender "optional"
+    }
+    price_list_items {
+        Identifier id PK
+        Decimal selling_price
+    }
+    price_lists {
+        Identifier id PK
+        String code
+        String name
+        String status
+    }
+    active_ingredients {
+        Identifier id PK
+        String code "optional"
+        String name
+    }
+    brands {
+        Identifier id PK
+        String code "optional"
+        String name
+    }
+    categories {
+        Identifier id PK
+        String code
+        String name
+    }
+    product_active_ingredients {
+        Identifier id PK
+        String concentration "optional"
+    }
+    product_packagings {
+        Identifier id PK
+        String packaging_name "optional"
+        Integer conversion_to_base
+        Boolean is_base_unit
+    }
+    product_reviews {
+        Identifier id PK
+        Integer rating
+        String status
+    }
+    products {
+        Identifier id PK
+        String sku
+        String name
+        String status
+    }
+    store_products {
+        Identifier id PK
+        String store_sku "optional"
+        Boolean is_sellable
+    }
+    units {
+        Identifier id PK
+        String code
+        String name
+        String symbol "optional"
+    }
+    goods_receipt_items {
+        Identifier id PK
+        Integer base_quantity
+        Decimal base_unit_cost
+    }
+    goods_receipts {
+        Identifier id PK
+        String receipt_number
+        Decimal total_amount
+        String status
+    }
+    suppliers {
+        Identifier id PK
+        String code "optional"
+        String name
+        String phone_number "optional"
+    }
+    inventory_lot_balances {
+        Identifier id PK
+        Integer quantity_on_hand
+        Integer quantity_reserved
+        Decimal total_cost_value
+    }
+    inventory_lots {
+        Identifier id PK
+        String lot_number "optional"
+        Date expiry_date "optional"
+        String status
+    }
+    inventory_reservation_items {
+        Identifier id PK
+        Integer base_quantity_reserved
+        Integer base_quantity_consumed
+        Integer base_quantity_released
+    }
+    inventory_reservations {
+        Identifier id PK
+        String status
+        DateTime reserved_at
+    }
+    stock_movement_items {
+        Identifier id PK
+        Integer quantity_delta_base
+        Decimal unit_cost_snapshot
+    }
+    stock_movements {
+        Identifier id PK
+        String movement_number
+        String movement_type
+        String status
+    }
+    stocktake_items {
+        Identifier id PK
+        Integer system_quantity_snapshot
+        Integer counted_quantity "optional"
+        Integer difference_quantity "optional"
+    }
+    stocktakes {
+        Identifier id PK
+        String stocktake_number
+        String status
+    }
+    cart_items {
+        Identifier id PK
+        Integer quantity
+    }
+    carts {
+        Identifier id PK
+        String status
+    }
+    order_items {
+        Identifier id PK
+        Integer base_quantity
+        Decimal unit_price
+        Decimal line_total_amount
+    }
+    orders {
+        Identifier id PK
+        String order_number
+        Decimal total_amount
+        String status
+    }
+    payment_allocations {
+        Identifier id PK
+        String allocation_type
+        Decimal allocated_amount
+        String status
+    }
+    payments {
+        Identifier id PK
+        String payment_method
+        Decimal amount
+        String status
+    }
+    deliveries {
+        Identifier id PK
+        String delivery_number
+        String status
+    }
+    delivery_attempt_items {
+        Identifier id PK
+        Integer attempted_base_quantity
+        Integer delivered_base_quantity
+        Integer failed_base_quantity
+    }
+    delivery_attempts {
+        Identifier id PK
+        Integer attempt_number
+        String status
+    }
+    delivery_incidents {
+        Identifier id PK
+        String incident_type
+        Integer affected_base_quantity "optional"
+        String status
+    }
+    delivery_item_lot_allocations {
+        Identifier id PK
+        Integer allocated_base_quantity
+        Integer delivered_base_quantity
+        String status
+    }
+    delivery_items {
+        Identifier id PK
+        Integer planned_base_quantity
+        Integer delivered_base_quantity
+        String status
+    }
+    credit_limit_histories {
+        Identifier id PK
+        Decimal old_credit_limit
+        Decimal new_credit_limit
+        DateTime changed_at
+    }
+    credit_reservations {
+        Identifier id PK
+        Decimal amount_reserved
+        Decimal amount_consumed
+        Decimal amount_released
+    }
+    credit_tiers {
+        Identifier id PK
+        String code
+        Decimal default_credit_limit
+        Integer default_payment_term_days
+    }
+    debt_accounts {
+        Identifier id PK
+        Decimal current_balance
+        String status
+    }
+    debt_entries {
+        Identifier id PK
+        Decimal original_amount
+        Decimal outstanding_amount
+        Date due_date
+    }
+    debt_entry_actions {
+        Identifier id PK
+        String action_type
+        Decimal adjustment_amount "optional"
+        String reason
+    }
+    debt_transactions {
+        Identifier id PK
+        String transaction_type
+        Decimal amount_delta
+        Decimal balance_after
+    }
+    farmer_credit_profiles {
+        Identifier id PK
+        Decimal credit_limit
+        String status
+    }
+    refunds {
+        Identifier id PK
+        String refund_number
+        Decimal amount
+        String status
+    }
+    sales_return_items {
+        Identifier id PK
+        Integer returned_base_quantity
+        Decimal return_value
+        String inventory_disposition
+    }
+    sales_returns {
+        Identifier id PK
+        String return_number
+        Decimal total_return_amount
+        String status
+    }
+    agent_reviews {
+        Identifier id PK
+        String decision
+        Boolean is_current
+    }
+    ai_inferences {
+        Identifier id PK
+        Decimal confidence
+        Boolean passed_policy
+        String status
+    }
+    ai_models {
+        Identifier id PK
+        String name
+        String version
+        String status
+    }
+    ai_policy_configs {
+        Identifier id PK
+        String version
+        Decimal minimum_confidence
+        Boolean requires_human_review
+    }
+    diagnosis_cases {
+        Identifier id PK
+        String case_number
+        String crop_type
+        String status
+    }
+    diagnosis_images {
+        Identifier id PK
+        String image_url
+        Boolean is_primary
+    }
+    disease_treatments {
+        Identifier id PK
+        String title
+        String treatment_type
+        String instructions
+    }
+    diseases {
+        Identifier id PK
+        String code
+        String name
+        Boolean is_healthy_class
+    }
+    recommendation_items {
+        Identifier id PK
+        String recommendation_type
+        Integer rank_order
+        Boolean is_active
+    }
+    articles {
+        Identifier id PK
+        String title
+        String slug
+        String status
+    }
+    audit_logs {
+        Identifier id PK
+        String action
+        String entity_type
+        Identifier entity_id "optional"
+    }
+    contact_requests {
+        Identifier id PK
+        String request_number
+        String subject
+        String status
+    }
+    notification_outbox {
+        Identifier id PK
+        DateTime available_at
+        DateTime processed_at "optional"
+        Integer attempts
+    }
+    notifications {
+        Identifier id PK
+        String notification_type
+        String title
+        String status
+    }
+
+    active_ingredients |o--o{ disease_treatments : ""
+    active_ingredients ||--o{ product_active_ingredients : ""
+    agent_reviews ||--o{ recommendation_items : ""
+    ai_inferences |o--o{ agent_reviews : ""
+    ai_models ||--o{ ai_policy_configs : ""
+    ai_policy_configs ||--o{ ai_inferences : ""
+    audit_logs ||--o| notification_outbox : ""
+    auth_sessions ||--o{ refresh_tokens : ""
+    brands |o--o{ products : ""
+    carts ||--o{ cart_items : ""
+    categories |o--o{ categories : ""
+    categories ||--o{ products : ""
+    credit_tiers |o--o{ customer_groups : ""
+    credit_tiers |o--o{ farmer_credit_profiles : ""
+    customer_groups ||--o{ customer_group_assignments : ""
+    customer_groups ||--o{ customer_group_price_lists : ""
+    debt_accounts ||--o{ debt_entries : ""
+    debt_accounts ||--o{ debt_transactions : ""
+    debt_entries |o--o{ debt_transactions : ""
+    debt_entries |o--o{ payment_allocations : ""
+    debt_entries ||--o{ debt_entry_actions : ""
+    deliveries ||--o{ delivery_attempts : ""
+    deliveries ||--o{ delivery_incidents : ""
+    deliveries ||--o{ delivery_items : ""
+    delivery_attempts ||--o{ delivery_attempt_items : ""
+    delivery_item_lot_allocations |o--o{ sales_return_items : ""
+    delivery_item_lot_allocations ||--o{ delivery_attempt_items : ""
+    delivery_items ||--o{ delivery_item_lot_allocations : ""
+    diagnosis_cases ||--o{ agent_reviews : ""
+    diagnosis_cases ||--o{ diagnosis_images : ""
+    diagnosis_images ||--o{ ai_inferences : ""
+    disease_treatments |o--o{ recommendation_items : ""
+    diseases |o--o{ agent_reviews : ""
+    diseases |o--o{ ai_inferences : ""
+    diseases ||--o{ disease_treatments : ""
+    farmer_credit_profiles ||--o{ credit_limit_histories : ""
+    farmer_credit_profiles ||--o{ credit_reservations : ""
+    farmer_profiles |o--o{ orders : ""
+    farmer_profiles ||--o{ carts : ""
+    farmer_profiles ||--o{ customer_group_assignments : ""
+    farmer_profiles ||--o{ debt_accounts : ""
+    farmer_profiles ||--o{ diagnosis_cases : ""
+    farmer_profiles ||--o{ farmer_credit_profiles : ""
+    farmer_profiles ||--o{ product_reviews : ""
+    goods_receipts ||--o{ goods_receipt_items : ""
+    inventory_lots |o--o{ goods_receipt_items : ""
+    inventory_lots ||--o{ delivery_item_lot_allocations : ""
+    inventory_lots ||--o{ inventory_reservation_items : ""
+    inventory_lots ||--o{ stock_movement_items : ""
+    inventory_lots ||--o{ stocktake_items : ""
+    inventory_lots ||--o| inventory_lot_balances : ""
+    inventory_reservations ||--o{ inventory_reservation_items : ""
+    order_items ||--o{ delivery_items : ""
+    order_items ||--o{ inventory_reservation_items : ""
+    order_items ||--o{ sales_return_items : ""
+    orders |o--o{ debt_entries : ""
+    orders |o--o{ payment_allocations : ""
+    orders |o--o{ refunds : ""
+    orders ||--o{ credit_reservations : ""
+    orders ||--o{ deliveries : ""
+    orders ||--o{ inventory_reservations : ""
+    orders ||--o{ order_items : ""
+    orders ||--o{ sales_returns : ""
+    payment_allocations |o--o{ debt_transactions : ""
+    payments |o--o{ refunds : ""
+    payments ||--o{ payment_allocations : ""
+    permissions ||--o{ role_permissions : ""
+    permissions ||--o{ store_member_permissions : ""
+    price_lists ||--o{ customer_group_price_lists : ""
+    price_lists ||--o{ price_list_items : ""
+    product_packagings ||--o{ cart_items : ""
+    product_packagings ||--o{ goods_receipt_items : ""
+    product_packagings ||--o{ order_items : ""
+    product_packagings ||--o{ price_list_items : ""
+    products ||--o{ product_active_ingredients : ""
+    products ||--o{ product_packagings : ""
+    products ||--o{ store_products : ""
+    roles ||--o{ role_permissions : ""
+    roles ||--o{ users : ""
+    sales_returns |o--o{ debt_transactions : ""
+    sales_returns |o--o{ refunds : ""
+    sales_returns ||--o{ sales_return_items : ""
+    stock_movement_items |o--o{ sales_return_items : ""
+    stock_movements ||--o{ stock_movement_items : ""
+    stocktakes ||--o{ stocktake_items : ""
+    store_members ||--o{ agent_reviews : ""
+    store_members ||--o{ store_member_permissions : ""
+    store_products |o--o{ recommendation_items : ""
+    store_products ||--o{ cart_items : ""
+    store_products ||--o{ goods_receipt_items : ""
+    store_products ||--o{ inventory_lots : ""
+    store_products ||--o{ order_items : ""
+    store_products ||--o{ price_list_items : ""
+    store_products ||--o{ product_reviews : ""
+    stores ||--o{ store_members : ""
+    stores ||--o{ store_products : ""
+    suppliers ||--o{ goods_receipts : ""
+    units ||--o{ product_packagings : ""
+    users |o--o{ contact_requests : ""
+    users ||--o{ auth_challenges : ""
+    users ||--o{ auth_sessions : ""
+    users ||--o{ notifications : ""
+    users ||--o{ store_members : ""
+    users ||--o{ user_addresses : ""
+    users ||--o| farmer_profiles : ""
+
+    classDef default fill:#ffffff,stroke:#2d78b7,color:#203042

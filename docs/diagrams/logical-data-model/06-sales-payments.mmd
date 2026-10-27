@@ -1,0 +1,161 @@
+erDiagram
+    cart_items {
+        Identifier id PK
+        Identifier cart_id FK
+        Identifier product_packaging_id FK
+        Integer64 quantity
+        Identifier store_product_id FK
+    }
+    carts {
+        Identifier id PK
+        DateTime converted_at "nullable"
+        Identifier converted_order_id FK "nullable"
+        Identifier farmer_profile_id FK
+        String_20_ status
+        Identifier store_id FK
+    }
+    customer_groups {
+        Identifier id PK
+    }
+    debt_entries {
+        Identifier id PK
+    }
+    farmer_profiles {
+        Identifier id PK
+    }
+    order_items {
+        Identifier id PK
+        Integer64 base_quantity
+        Integer64 cancelled_base_quantity
+        Integer64 conversion_to_base_snapshot
+        Integer64 fulfilled_base_quantity
+        Decimal_18_2_ line_total_amount
+        Identifier order_id FK
+        Identifier overridden_by FK "nullable"
+        String_500_ override_reason "nullable"
+        String_150_ packaging_name_snapshot
+        Boolean price_overridden
+        String_255_ product_name_snapshot
+        Identifier product_packaging_id FK
+        String_50_ product_sku_snapshot
+        Integer64 quantity
+        String_30_ status
+        Identifier store_product_id FK
+        Decimal_18_2_ suggested_unit_price
+        Decimal_18_2_ unit_price
+    }
+    orders {
+        Identifier id PK
+        String_1000_ cancel_reason "nullable"
+        DateTime cancelled_at "nullable"
+        Identifier cancelled_by FK "nullable"
+        DateTime completed_at "nullable"
+        DateTime confirmed_at "nullable"
+        Identifier confirmed_by FK "nullable"
+        Identifier created_by FK
+        Integer credit_term_days_snapshot "nullable"
+        Identifier customer_group_id_snapshot FK "nullable"
+        String_150_ customer_name_snapshot
+        String_20_ customer_phone_snapshot "nullable"
+        String_20_ customer_type
+        String_500_ delivery_address_line "nullable"
+        String_150_ delivery_district "nullable"
+        Decimal_10_7_ delivery_latitude "nullable"
+        Decimal_10_7_ delivery_longitude "nullable"
+        String_150_ delivery_province "nullable"
+        String_150_ delivery_ward "nullable"
+        Identifier farmer_profile_id FK "nullable"
+        String_20_ fulfillment_type
+        String_1000_ note "nullable"
+        String_50_ order_number
+        DateTime pickup_completed_at "nullable"
+        Identifier pickup_completed_by FK "nullable"
+        Identifier price_list_id_snapshot FK "nullable"
+        String_150_ recipient_name_snapshot "nullable"
+        String_20_ recipient_phone_snapshot "nullable"
+        String_20_ settlement_type
+        String_30_ source
+        Identifier source_address_id FK "nullable"
+        String_40_ status
+        Identifier store_id FK
+        Decimal_18_2_ subtotal_amount
+        Decimal_18_2_ total_amount
+        Integer64 version
+    }
+    payment_allocations {
+        Identifier id PK
+        Decimal_18_2_ allocated_amount
+        DateTime allocated_at
+        Identifier allocated_by FK "nullable"
+        String_20_ allocation_type
+        Identifier debt_entry_id FK "nullable"
+        Identifier order_id FK "nullable"
+        Identifier payment_id FK
+        Decimal_18_2_ prepayment_consumed_amount
+        String_500_ reversal_reason "nullable"
+        DateTime reversed_at "nullable"
+        Identifier reversed_by FK "nullable"
+        String_20_ status
+    }
+    payments {
+        Identifier id PK
+        Decimal_18_2_ amount
+        DateTime cancelled_at "nullable"
+        String_1500_ checkout_url "nullable"
+        String_30_ confirmation_source "nullable"
+        DateTime confirmed_at "nullable"
+        Identifier confirmed_by FK "nullable"
+        Identifier created_by FK "nullable"
+        String_3_ currency
+        DateTime failed_at "nullable"
+        DateTime initiated_at
+        DateTime last_reconciliation_attempt_at "nullable"
+        String_1000_ note "nullable"
+        Identifier order_id FK "nullable"
+        Identifier payer_farmer_profile_id FK "nullable"
+        String_30_ payment_context
+        String_20_ payment_method
+        String_50_ payment_number
+        String_30_ provider "nullable"
+        JSON provider_metadata "nullable"
+        Integer64 provider_order_code "nullable"
+        String_150_ provider_payment_link_id "nullable"
+        String_150_ provider_transaction_id "nullable"
+        String_30_ status
+        Identifier store_id FK
+    }
+    price_lists {
+        Identifier id PK
+    }
+    product_packagings {
+        Identifier id PK
+    }
+    store_products {
+        Identifier id PK
+    }
+    stores {
+        Identifier id PK
+    }
+    user_addresses {
+        Identifier id PK
+    }
+    carts ||--o{ cart_items : "cart_id"
+    product_packagings ||--o{ cart_items : "product_packaging_id"
+    store_products ||--o{ cart_items : "store_product_id"
+    orders |o--o{ carts : "converted_order_id"
+    farmer_profiles ||--o{ carts : "farmer_profile_id"
+    stores ||--o{ carts : "store_id"
+    orders ||--o{ order_items : "order_id"
+    product_packagings ||--o{ order_items : "product_packaging_id"
+    store_products ||--o{ order_items : "store_product_id"
+    customer_groups |o--o{ orders : "customer_group_id_snapshot"
+    farmer_profiles |o--o{ orders : "farmer_profile_id"
+    price_lists |o--o{ orders : "price_list_id_snapshot"
+    user_addresses |o--o{ orders : "source_address_id"
+    stores ||--o{ orders : "store_id"
+    debt_entries |o--o{ payment_allocations : "debt_entry_id"
+    orders |o--o{ payment_allocations : "order_id"
+    payments ||--o{ payment_allocations : "payment_id"
+    orders |o--o{ payments : "order_id"
+    farmer_profiles |o--o{ payments : "payer_farmer_profile_id"
+    stores ||--o{ payments : "store_id"

@@ -1,0 +1,53 @@
+%%{init: {"theme":"dark"}}%%
+flowchart LR
+  accTitle: WF-01 - AI Disease Diagnosis and Human Verification
+  subgraph FARMER["Farmer"]
+    direction TB
+    S((Start))
+    F1("Upload rice leaf image")
+    F2("Receive validation error")
+    F3("Receive verified result and guidance")
+    F4("Receive inconclusive result; retake photo")
+    E((End))
+  end
+  subgraph BACKEND["Backend System"]
+    direction TB
+    B1("Validate image and Farmer identity")
+    D1{"Valid image and request?"}
+    B2("Store private image; create SUBMITTED case")
+    B3("Call AI with active model; outside DB transaction")
+    D2{"Successful, valid model response?"}
+    B4("Apply confidence and margin policy; store inference")
+    B5("Set AI_COMPLETED; queue for human review")
+    B6("Set FAILED; queue for manual review")
+    B7("Check reviewer membership and can_review_ai")
+    B8("Save VERIFIED result and current review")
+    B9("Save INCONCLUSIVE; no recommendations")
+    B10("Validate and save recommendations; notify Farmer")
+  end
+  subgraph AI["AI System"]
+    direction TB
+    A1("Analyze image; predict rice disease")
+    A2("Return calibrated probabilities and model version")
+  end
+  subgraph REVIEWER["Agent / AI Reviewer"]
+    direction TB
+    R1("Request case for review")
+    R2("Inspect image and available AI evidence")
+    D3{"Review decision?"}
+    R3("CONFIRMED: keep successful AI prediction")
+    R4("CORRECTED: select final disease; manual if AI failed")
+    R5("INCONCLUSIVE: record comment and retake hint")
+    R6("Select treatments; products only if not Healthy")
+  end
+  S --> F1 --> B1 --> D1
+  D1 -->|No| F2 --> E
+  D1 -->|Yes| B2 --> B3 --> A1 --> A2 --> D2
+  B3 -->|Timeout or service failure| B6
+  D2 -->|Yes| B4 --> B5 --> R1
+  D2 -->|No| B6 --> R1
+  R1 --> B7 -->|Authorized| R2 --> D3
+  D3 -->|Confirm; successful inference required| R3 --> B8
+  D3 -->|Correct or manual diagnosis| R4 --> B8
+  D3 -->|Inconclusive| R5 --> B9 --> F4 --> E
+  B8 --> R6 --> B10 --> F3 --> E

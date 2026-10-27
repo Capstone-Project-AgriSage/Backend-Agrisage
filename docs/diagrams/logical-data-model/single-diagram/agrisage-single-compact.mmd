@@ -1,0 +1,330 @@
+erDiagram
+    direction TB
+    active_ingredients {
+        Identifier id PK
+    }
+    agent_reviews {
+        Identifier id PK
+    }
+    ai_inferences {
+        Identifier id PK
+    }
+    ai_models {
+        Identifier id PK
+    }
+    ai_policy_configs {
+        Identifier id PK
+    }
+    articles {
+        Identifier id PK
+    }
+    audit_logs {
+        Identifier id PK
+    }
+    auth_challenges {
+        Identifier id PK
+    }
+    auth_sessions {
+        Identifier id PK
+    }
+    brands {
+        Identifier id PK
+    }
+    cart_items {
+        Identifier id PK
+    }
+    carts {
+        Identifier id PK
+    }
+    categories {
+        Identifier id PK
+    }
+    contact_requests {
+        Identifier id PK
+    }
+    credit_limit_histories {
+        Identifier id PK
+    }
+    credit_reservations {
+        Identifier id PK
+    }
+    credit_tiers {
+        Identifier id PK
+    }
+    customer_group_assignments {
+        Identifier id PK
+    }
+    customer_group_price_lists {
+        Identifier id PK
+    }
+    customer_groups {
+        Identifier id PK
+    }
+    debt_accounts {
+        Identifier id PK
+    }
+    debt_entries {
+        Identifier id PK
+    }
+    debt_entry_actions {
+        Identifier id PK
+    }
+    debt_transactions {
+        Identifier id PK
+    }
+    deliveries {
+        Identifier id PK
+    }
+    delivery_attempt_items {
+        Identifier id PK
+    }
+    delivery_attempts {
+        Identifier id PK
+    }
+    delivery_incidents {
+        Identifier id PK
+    }
+    delivery_item_lot_allocations {
+        Identifier id PK
+    }
+    delivery_items {
+        Identifier id PK
+    }
+    diagnosis_cases {
+        Identifier id PK
+    }
+    diagnosis_images {
+        Identifier id PK
+    }
+    disease_treatments {
+        Identifier id PK
+    }
+    diseases {
+        Identifier id PK
+    }
+    farmer_credit_profiles {
+        Identifier id PK
+    }
+    farmer_profiles {
+        Identifier id PK
+    }
+    goods_receipt_items {
+        Identifier id PK
+    }
+    goods_receipts {
+        Identifier id PK
+    }
+    inventory_lot_balances {
+        Identifier id PK
+    }
+    inventory_lots {
+        Identifier id PK
+    }
+    inventory_reservation_items {
+        Identifier id PK
+    }
+    inventory_reservations {
+        Identifier id PK
+    }
+    notification_outbox {
+        Identifier id PK
+    }
+    notifications {
+        Identifier id PK
+    }
+    order_items {
+        Identifier id PK
+    }
+    orders {
+        Identifier id PK
+    }
+    payment_allocations {
+        Identifier id PK
+    }
+    payments {
+        Identifier id PK
+    }
+    permissions {
+        Identifier id PK
+    }
+    price_list_items {
+        Identifier id PK
+    }
+    price_lists {
+        Identifier id PK
+    }
+    product_active_ingredients {
+        Identifier id PK
+    }
+    product_packagings {
+        Identifier id PK
+    }
+    product_reviews {
+        Identifier id PK
+    }
+    products {
+        Identifier id PK
+    }
+    recommendation_items {
+        Identifier id PK
+    }
+    refresh_tokens {
+        Identifier id PK
+    }
+    refunds {
+        Identifier id PK
+    }
+    role_permissions {
+        Identifier id PK
+    }
+    roles {
+        Identifier id PK
+    }
+    sales_return_items {
+        Identifier id PK
+    }
+    sales_returns {
+        Identifier id PK
+    }
+    stock_movement_items {
+        Identifier id PK
+    }
+    stock_movements {
+        Identifier id PK
+    }
+    stocktake_items {
+        Identifier id PK
+    }
+    stocktakes {
+        Identifier id PK
+    }
+    store_member_permissions {
+        Identifier id PK
+    }
+    store_members {
+        Identifier id PK
+    }
+    store_products {
+        Identifier id PK
+    }
+    stores {
+        Identifier id PK
+    }
+    suppliers {
+        Identifier id PK
+    }
+    units {
+        Identifier id PK
+    }
+    user_addresses {
+        Identifier id PK
+    }
+    users {
+        Identifier id PK
+    }
+    active_ingredients |o--o{ disease_treatments : ""
+    active_ingredients ||--o{ product_active_ingredients : ""
+    agent_reviews ||--o{ recommendation_items : ""
+    ai_inferences |o--o{ agent_reviews : ""
+    ai_models ||--o{ ai_policy_configs : ""
+    ai_policy_configs ||--o{ ai_inferences : ""
+    audit_logs ||--o| notification_outbox : ""
+    auth_sessions ||--o{ refresh_tokens : ""
+    brands |o--o{ products : ""
+    carts ||--o{ cart_items : ""
+    categories |o--o{ categories : ""
+    categories ||--o{ products : ""
+    credit_tiers |o--o{ customer_groups : ""
+    credit_tiers |o--o{ farmer_credit_profiles : ""
+    customer_groups ||--o{ customer_group_assignments : ""
+    customer_groups ||--o{ customer_group_price_lists : ""
+    debt_accounts ||--o{ debt_entries : ""
+    debt_accounts ||--o{ debt_transactions : ""
+    debt_entries |o--o{ debt_transactions : ""
+    debt_entries |o--o{ payment_allocations : ""
+    debt_entries ||--o{ debt_entry_actions : ""
+    deliveries ||--o{ delivery_attempts : ""
+    deliveries ||--o{ delivery_incidents : ""
+    deliveries ||--o{ delivery_items : ""
+    delivery_attempts ||--o{ delivery_attempt_items : ""
+    delivery_item_lot_allocations |o--o{ sales_return_items : ""
+    delivery_item_lot_allocations ||--o{ delivery_attempt_items : ""
+    delivery_items ||--o{ delivery_item_lot_allocations : ""
+    diagnosis_cases ||--o{ agent_reviews : ""
+    diagnosis_cases ||--o{ diagnosis_images : ""
+    diagnosis_images ||--o{ ai_inferences : ""
+    disease_treatments |o--o{ recommendation_items : ""
+    diseases |o--o{ agent_reviews : ""
+    diseases |o--o{ ai_inferences : ""
+    diseases ||--o{ disease_treatments : ""
+    farmer_credit_profiles ||--o{ credit_limit_histories : ""
+    farmer_credit_profiles ||--o{ credit_reservations : ""
+    farmer_profiles |o--o{ orders : ""
+    farmer_profiles ||--o{ carts : ""
+    farmer_profiles ||--o{ customer_group_assignments : ""
+    farmer_profiles ||--o{ debt_accounts : ""
+    farmer_profiles ||--o{ diagnosis_cases : ""
+    farmer_profiles ||--o{ farmer_credit_profiles : ""
+    farmer_profiles ||--o{ product_reviews : ""
+    goods_receipts ||--o{ goods_receipt_items : ""
+    inventory_lots |o--o{ goods_receipt_items : ""
+    inventory_lots ||--o{ delivery_item_lot_allocations : ""
+    inventory_lots ||--o{ inventory_reservation_items : ""
+    inventory_lots ||--o{ stock_movement_items : ""
+    inventory_lots ||--o{ stocktake_items : ""
+    inventory_lots ||--o| inventory_lot_balances : ""
+    inventory_reservations ||--o{ inventory_reservation_items : ""
+    order_items ||--o{ delivery_items : ""
+    order_items ||--o{ inventory_reservation_items : ""
+    order_items ||--o{ sales_return_items : ""
+    orders |o--o{ debt_entries : ""
+    orders |o--o{ payment_allocations : ""
+    orders |o--o{ refunds : ""
+    orders ||--o{ credit_reservations : ""
+    orders ||--o{ deliveries : ""
+    orders ||--o{ inventory_reservations : ""
+    orders ||--o{ order_items : ""
+    orders ||--o{ sales_returns : ""
+    payment_allocations |o--o{ debt_transactions : ""
+    payments |o--o{ refunds : ""
+    payments ||--o{ payment_allocations : ""
+    permissions ||--o{ role_permissions : ""
+    permissions ||--o{ store_member_permissions : ""
+    price_lists ||--o{ customer_group_price_lists : ""
+    price_lists ||--o{ price_list_items : ""
+    product_packagings ||--o{ cart_items : ""
+    product_packagings ||--o{ goods_receipt_items : ""
+    product_packagings ||--o{ order_items : ""
+    product_packagings ||--o{ price_list_items : ""
+    products ||--o{ product_active_ingredients : ""
+    products ||--o{ product_packagings : ""
+    products ||--o{ store_products : ""
+    roles ||--o{ role_permissions : ""
+    roles ||--o{ users : ""
+    sales_returns |o--o{ debt_transactions : ""
+    sales_returns |o--o{ refunds : ""
+    sales_returns ||--o{ sales_return_items : ""
+    stock_movement_items |o--o{ sales_return_items : ""
+    stock_movements ||--o{ stock_movement_items : ""
+    stocktakes ||--o{ stocktake_items : ""
+    store_members ||--o{ agent_reviews : ""
+    store_members ||--o{ store_member_permissions : ""
+    store_products |o--o{ recommendation_items : ""
+    store_products ||--o{ cart_items : ""
+    store_products ||--o{ goods_receipt_items : ""
+    store_products ||--o{ inventory_lots : ""
+    store_products ||--o{ order_items : ""
+    store_products ||--o{ price_list_items : ""
+    store_products ||--o{ product_reviews : ""
+    stores ||--o{ store_members : ""
+    stores ||--o{ store_products : ""
+    suppliers ||--o{ goods_receipts : ""
+    units ||--o{ product_packagings : ""
+    users |o--o{ contact_requests : ""
+    users ||--o{ auth_challenges : ""
+    users ||--o{ auth_sessions : ""
+    users ||--o{ notifications : ""
+    users ||--o{ store_members : ""
+    users ||--o{ user_addresses : ""
+    users ||--o| farmer_profiles : ""
+    classDef default fill:#ffffff,stroke:#2d78b7,color:#203042

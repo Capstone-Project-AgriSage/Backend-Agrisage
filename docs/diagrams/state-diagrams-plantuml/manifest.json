@@ -1,0 +1,182 @@
+[
+  {
+    "id": "01-user-account",
+    "title": "User Account",
+    "source": "puml/01-user-account.puml",
+    "notes": "Administrative transitions shown are representative. Application authorization still applies. Status changes invalidate existing sessions."
+  },
+  {
+    "id": "02-auth-session",
+    "title": "Authentication Session",
+    "source": "puml/02-auth-session.puml",
+    "notes": "These are derived session conditions, not a database status enum. Logging in again creates a new session."
+  },
+  {
+    "id": "03-cart",
+    "title": "Shopping Cart",
+    "source": "puml/03-cart.puml",
+    "notes": "A converted or abandoned cart is not reactivated; further shopping uses a new active cart."
+  },
+  {
+    "id": "04-order",
+    "title": "Sales Order",
+    "source": "puml/04-order.puml",
+    "notes": "FULFILLMENT is a visual group, not a stored status. Farmer cancellation is allowed only while PENDING_CONFIRMATION. Payments and refunds remain separate lifecycles."
+  },
+  {
+    "id": "05-payment",
+    "title": "Payment",
+    "source": "puml/05-payment.puml",
+    "notes": "Expired payOS links map to FAILED in the current PayOsPaymentService. Invalid or duplicate webhooks do not create a second receipt of money. Retrying a failed or cancelled payment creates a new Payment."
+  },
+  {
+    "id": "06-delivery",
+    "title": "Delivery",
+    "source": "puml/06-delivery.puml",
+    "notes": "OPEN_DELIVERY is a visual group. Delivery has no PARTIALLY_CANCELLED status: after partial delivery, cancelling the remainder ends the Delivery as DELIVERED; cancelled quantities stay on its items."
+  },
+  {
+    "id": "07-delivery-attempt",
+    "title": "Delivery Attempt",
+    "source": "puml/07-delivery-attempt.puml",
+    "notes": "Only one attempt may be IN_PROGRESS for a Delivery at a time. Another attempt is a new object."
+  },
+  {
+    "id": "08-delivery-incident",
+    "title": "Delivery Incident",
+    "source": "puml/08-delivery-incident.puml",
+    "notes": "Inventory consequences, when applicable, require an appropriate posted stock movement."
+  },
+  {
+    "id": "09-goods-receipt",
+    "title": "Goods Receipt",
+    "source": "puml/09-goods-receipt.puml",
+    "notes": "Only draft receipts are editable or cancellable. Confirmed receipt corrections require a separate adjustment or reversal operation."
+  },
+  {
+    "id": "10-inventory-lot",
+    "title": "Inventory Lot",
+    "source": "puml/10-inventory-lot.puml",
+    "notes": "Representative business transitions. DEPLETED is a declared status, not a claim that current stock-posting code changes status automatically at zero stock. Actual expiry date is checked independently; expired, quarantined, blocked or depleted lots cannot be sold/reserved/allocated."
+  },
+  {
+    "id": "11-stock-movement",
+    "title": "Stock Movement",
+    "source": "puml/11-stock-movement.puml",
+    "notes": "STOCK_IN, SALE, RETURN_IN and ADJUSTMENT are movement types, not lifecycle states. POSTED remains eligible for reversal, so it is not connected directly to final."
+  },
+  {
+    "id": "12-stocktake",
+    "title": "Stocktake",
+    "source": "puml/12-stocktake.puml",
+    "notes": "Completion requires all active items to be counted; stale lines must be handled according to the snapshot rules."
+  },
+  {
+    "id": "13-inventory-reservation",
+    "title": "Inventory Reservation",
+    "source": "puml/13-inventory-reservation.puml",
+    "notes": "Statuses are derived from reserved, consumed and released quantities. After any consumption, release the unused remainder instead of cancelling the reservation."
+  },
+  {
+    "id": "14-credit-reservation",
+    "title": "Credit Reservation",
+    "source": "puml/14-credit-reservation.puml",
+    "notes": "CONSUMED means some amount was consumed and no reservation remains; unused amounts may have been released. Credit exposure includes receivables plus active remaining reservations."
+  },
+  {
+    "id": "15-farmer-credit-profile",
+    "title": "Farmer Credit Profile",
+    "source": "puml/15-farmer-credit-profile.puml",
+    "notes": "Available credit = credit limit - outstanding receivables - remaining reserved credit. ACTIVE alone is insufficient: customer, debt account and other eligibility rules also apply."
+  },
+  {
+    "id": "16-debt-account",
+    "title": "Debt Account",
+    "source": "puml/16-debt-account.puml",
+    "notes": "Administrative status changes are shown. The Domain status setter does not make CLOSED irreversible; authorization and business restrictions belong to the use case."
+  },
+  {
+    "id": "17-debt-entry",
+    "title": "Debt Entry",
+    "source": "puml/17-debt-entry.puml",
+    "notes": "OPEN_DEBT is a visual group. A disputed entry may receive payments and stays DISPUTED until resolved. Overdue is derived from due date and balance, not an enum state. Receivable changes require DebtTransactions."
+  },
+  {
+    "id": "18-sales-return",
+    "title": "Sales Return",
+    "source": "puml/18-sales-return.puml",
+    "notes": "Only resellable goods may be restocked. Reduce attributable unpaid debt first, then refund the remaining eligible value. Only REQUESTED return items are editable."
+  },
+  {
+    "id": "19-refund",
+    "title": "Refund",
+    "source": "puml/19-refund.puml",
+    "notes": "Applies to sales-return and cancelled-order refunds. A failed refund is retried with a new Refund, never by reopening the failed object."
+  },
+  {
+    "id": "20-diagnosis-case",
+    "title": "AI Diagnosis Case",
+    "source": "puml/20-diagnosis-case.puml",
+    "notes": "Review requires can_review_ai. VERIFIED and INCONCLUSIVE allow re-review and are not final states. A new review supersedes the previous review and deactivates its recommendations. Recommendations require VERIFIED; Healthy cases receive treatment guidance only, no product recommendation."
+  },
+  {
+    "id": "21-ai-model",
+    "title": "AI Model",
+    "source": "puml/21-ai-model.puml",
+    "notes": "A retired model version is not reactivated by the current Domain lifecycle."
+  },
+  {
+    "id": "22-ai-policy-config",
+    "title": "AI Policy Config",
+    "source": "puml/22-ai-policy-config.puml",
+    "notes": "Inference requires an active policy of the selected active model, effective at inference time. Policies never bypass mandatory Human Review for recommendations."
+  },
+  {
+    "id": "23-product",
+    "title": "Product",
+    "source": "puml/23-product.puml",
+    "notes": "Representative administrative transitions. Product, StoreProduct, packaging, prices and eligible inventory jointly determine sellability. DISCONTINUED is not enforced as an irreversible terminal state by the Domain setter."
+  },
+  {
+    "id": "24-price-list",
+    "title": "Price List",
+    "source": "puml/24-price-list.puml",
+    "notes": "Actual price applicability also requires valid effective dates and customer-group assignments."
+  },
+  {
+    "id": "25-article",
+    "title": "Article",
+    "source": "puml/25-article.puml",
+    "notes": "The current design allows moving articles to draft, publishing and archiving without imposing an irreversible final state."
+  },
+  {
+    "id": "26-contact-request",
+    "title": "Contact Request",
+    "source": "puml/26-contact-request.puml",
+    "notes": "This is the usual handling flow, not an exhaustive transition restriction. The design does not impose a fixed state graph; resolving records resolved_at."
+  },
+  {
+    "id": "27-notification",
+    "title": "Notification",
+    "source": "puml/27-notification.puml",
+    "notes": "Reading records read_at. Archiving is a semantic lifecycle operation, not physical deletion."
+  },
+  {
+    "id": "28-notification-outbox",
+    "title": "Notification Outbox",
+    "source": "puml/28-notification-outbox.puml",
+    "notes": "Operational conditions derived from ProcessedAt, AvailableAt and attempt count, not a stored status enum. Retries use increasing delays."
+  },
+  {
+    "id": "29-payment-allocation",
+    "title": "Payment Allocation",
+    "source": "puml/29-payment-allocation.puml",
+    "notes": "An ORDER allocation cannot be reversed once prepayment has been consumed. ORDER_PAYMENT permits ORDER allocations; DEBT_REPAYMENT permits DEBT allocations."
+  },
+  {
+    "id": "30-debt-transaction",
+    "title": "Debt Transaction",
+    "source": "puml/30-debt-transaction.puml",
+    "notes": "Posted financial history is preserved; reversal is a semantic operation with corresponding ledger effects, never physical deletion."
+  }
+]

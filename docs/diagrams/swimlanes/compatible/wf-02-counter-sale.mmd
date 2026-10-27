@@ -1,0 +1,32 @@
+%%{init: {"theme":"dark"}}%%
+flowchart LR
+  accTitle: WF-02 - Quick Counter Sale
+  subgraph CUSTOMER["Customer"]
+    direction TB
+    S((Start))
+    C1("Request products and quantities")
+    C2("Approve quote and pay cash")
+    C3("Receive goods and sale receipt")
+    E((End))
+  end
+  subgraph SALES["Sales Staff"]
+    direction TB
+    R1("Select registered Farmer or walk-in; enter sale lines")
+    R2("Check quote; confirm actual physical lots")
+    R3("Correct request or stop sale")
+    R4("Confirm cash received, actual goods and sale")
+  end
+  subgraph BACKEND["Backend System"]
+    direction TB
+    B1("Resolve group/default price list; validate price override reason")
+    B2("Return preview with total and FEFO suggestions; save nothing")
+    B3("Recheck prices, quantities and eligible available lots")
+    D1{"Sale valid and sufficient stock?"}
+    B4("One transaction: create order; cash Payment PAID; ORDER allocation")
+    B5("Confirm order; reserve actual lots; post SALE and COGS")
+    B6("Consume stock reservation and prepayment; set order COMPLETED; commit")
+    B7("Reject sale; no partial order, payment or stock changes")
+  end
+  S --> C1 --> R1 --> B1 --> B2 --> R2 --> C2 --> R4 --> B3 --> D1
+  D1 -->|No| B7 --> R3 --> E
+  D1 -->|Yes| B4 --> B5 --> B6 --> C3 --> E

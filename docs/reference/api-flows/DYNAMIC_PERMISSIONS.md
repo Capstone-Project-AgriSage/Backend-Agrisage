@@ -12,6 +12,15 @@ from the reviewed API inventory; arbitrary client-defined codes cannot confer ac
 stored in the database; member rows are explicit grant/deny overrides (absence inherits defaults). Revoking is an
 explicit deny, never physical deletion. Re-saving the same settings is a no-op.
 
+Permission Management extension (user-requested, 2026-10-20): PUT member entries accept `granted: null`
+to reset a permission to live Role inheritance, retaining its row with nullable `is_granted` and an audit.
+The `granted` property must be explicitly present; omission is a 400 rather than an accidental reset.
+Existing boolean requests remain compatible. Responses omit inherited rows from `overrides` (so legacy
+clients still receive only boolean entries), and add `permissionCeiling: [code]`, the current Owner-role
+ceiling allowed for SALES_STAFF. Clients must intersect draft defaults/overrides with that ceiling when
+previewing effective permissions. Unlisted overrides remain unchanged; bulk reset lists only codes the
+actor is authorized to manage. No reset can bypass delegation or ownership restrictions.
+
 ADMIN retains all active catalog permissions and cannot change its own role permissions. Only Admin changes other
 role defaults, within that role's allowed catalog (Farmer: own/customer APIs only; no staff/administrative APIs).
 Owner can change permissions of ACTIVE SALES_STAFF members in the active store only. Targeting self, another
@@ -39,7 +48,7 @@ return 409 rather than overwrite a newer configuration.
 | PUT `/api/staff/{userId}/permissions` | same scope | `{overrides:[{code, granted}], version, roleVersion, reason}` → configuration |
 
 PUT member request is a patch: only listed overrides change. Preserve unlisted overrides. This avoids granting other
-permissions indirectly when an Owner cannot edit them. The UI submits only changed checkboxes. Reasons required,
+permissions indirectly when an Owner cannot edit them. The UI submits only changed Allow/Deny/Inherited settings. Reasons required,
 ≤500 characters; at most catalog-size entries, no duplicates/unknown codes; all entries (including deny) must be
 delegable and within the actor's authority. `roleVersion` guards defaults changed while an Owner edited a draft.
 
@@ -62,3 +71,19 @@ Audit actions: ROLE_PERMISSIONS_CHANGED (global role; Admin only), STAFF_PERMISS
 Record old/new grants, actor, target, reason and request metadata atomically; do not record credentials/tokens.
 API errors: 400 invalid input, 401 unauthenticated, 403 outside authority/self-elevation, 404 inaccessible target,
 409 stale version. No API mutates the audit history.
+
+## Permission Management rollout (2026-10-20)
+
+Apply reviewed migration `20261020030801_PermissionOverrideInheritance` before starting the updated API.
+It only drops NOT NULL on `store_member_permissions.is_granted`; existing Allow/Deny values are unchanged.
+Update/restart every API instance before enabling reset writes: an older binary expects a non-nullable boolean
+and cannot read reset rows. Existing boolean request clients remain compatible with the updated API.
+The web disables reset until the member response includes the new `permissionCeiling` field; grant/deny remain
+usable against the previous API. Down migration refuses rollback while inherited NULL rows exist, avoiding an
+implicit conversion to Deny. No migration is automatically applied by API startup.
+
+The Admin page `/admin/roles` has Role Permissions and User Permissions tabs. Catalog, roles and paginated
+active Sale staff are read from the existing APIs. Module/search/status filters restrict bulk operations to
+visible editable permissions; inactive/nondelegable/out-of-scope rights remain protected. User changes are a
+three-state draft (Role inheritance, Allow, Deny), and reset stages only manageable overrides. Save requires a
+reason; switching role/user/tab or route guards unsaved edits, and 409 freezes the stale editor until reload.

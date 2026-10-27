@@ -1,0 +1,71 @@
+erDiagram
+    direction TB
+    cart_items {
+        Identifier id PK
+        Identifier cart_id FK
+        Identifier product_packaging_id FK
+        Identifier store_product_id FK
+        Integer quantity
+    }
+    carts {
+        Identifier id PK
+        Identifier farmer_profile_id FK
+        String status
+    }
+    debt_entries {
+        Identifier id PK
+    }
+    farmer_profiles {
+        Identifier id PK
+    }
+    order_items {
+        Identifier id PK
+        Identifier order_id FK
+        Identifier product_packaging_id FK
+        Identifier store_product_id FK
+        Integer base_quantity
+        Decimal unit_price
+        Decimal line_total_amount
+    }
+    orders {
+        Identifier id PK
+        Identifier farmer_profile_id FK "optional"
+        String order_number
+        String customer_type
+        String fulfillment_type
+        Decimal total_amount
+        String status
+    }
+    payment_allocations {
+        Identifier id PK
+        Identifier debt_entry_id FK "optional"
+        Identifier order_id FK "optional"
+        Identifier payment_id FK
+        String allocation_type
+        Decimal allocated_amount
+        String status
+    }
+    payments {
+        Identifier id PK
+        String payment_number
+        String payment_method
+        Decimal amount
+        String status
+    }
+    product_packagings {
+        Identifier id PK
+    }
+    store_products {
+        Identifier id PK
+    }
+    carts ||--o{ cart_items : "cart_id"
+    debt_entries |o--o{ payment_allocations : "debt_entry_id"
+    farmer_profiles |o--o{ orders : "farmer_profile_id"
+    farmer_profiles ||--o{ carts : "farmer_profile_id"
+    orders |o--o{ payment_allocations : "order_id"
+    orders ||--o{ order_items : "order_id"
+    payments ||--o{ payment_allocations : "payment_id"
+    product_packagings ||--o{ cart_items : "product_packaging_id"
+    product_packagings ||--o{ order_items : "product_packaging_id"
+    store_products ||--o{ cart_items : "store_product_id"
+    store_products ||--o{ order_items : "store_product_id"

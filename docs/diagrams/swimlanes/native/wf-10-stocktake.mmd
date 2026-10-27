@@ -1,0 +1,30 @@
+%%{init: {"theme":"dark"}}%%
+swimlane-beta TB
+  accTitle: WF-10 - Stocktake and Reconciliation
+  subgraph SALES["Sales Staff"]
+    S((Start))
+    R1("Create stocktake scope; start counting")
+    R2("Count each lot in base units; record quantity and difference reason")
+    R3("Recount missing or refreshed stale lines")
+    R4("Resolve cost, reason or reserved-stock conflict")
+    E((End))
+  end
+  subgraph BACKEND["Backend System"]
+    B1("Snapshot each lot quantity, cost and timestamp; create DRAFT; start IN_PROGRESS")
+    B2("Save counts")
+    B3("Lock balances; check every line counted and not stale")
+    D1{"Any missing or stale line?"}
+    B4("Refuse completion; refresh only stale snapshots and clear their counts")
+    B5("Compute counted minus snapshot; validate reasons, positive cost and reserved floor")
+    D2{"Adjustments valid?"}
+    B6("One transaction: post ADJUSTMENT_IN/OUT for nonzero differences; update stock and costs")
+    B7("Set stocktake COMPLETED; commit; unchanged lines have no movement")
+  end
+  subgraph OWNER["Store Owner / Admin"]
+    O1("Review results; request stocktake completion")
+  end
+  S --> R1 --> B1 --> R2 --> B2 --> O1 --> B3 --> D1
+  D1 -->|Yes| B4 --> R3 --> B2
+  D1 -->|No| B5 --> D2
+  D2 -->|No; rollback| R4 --> R2
+  D2 -->|Yes| B6 --> B7 --> E

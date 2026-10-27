@@ -8547,7 +8547,7 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<bool>("IsGranted")
+                    b.Property<bool?>("IsGranted")
                         .HasColumnType("boolean")
                         .HasColumnName("is_granted");
 

@@ -1,0 +1,630 @@
+erDiagram
+    direction TB
+    active_ingredients {
+        Identifier id PK
+        String code "optional"
+        String name
+    }
+    agent_reviews {
+        Identifier id PK
+        Identifier diagnosis_case_id FK
+        Identifier final_disease_id FK "optional"
+        Identifier primary_ai_inference_id FK "optional"
+        Identifier reviewer_member_id FK
+        String decision
+        Boolean is_current
+    }
+    ai_inferences {
+        Identifier id PK
+        Identifier ai_policy_config_id FK
+        Identifier diagnosis_image_id FK
+        Identifier predicted_disease_id FK "optional"
+        Decimal confidence
+        Boolean passed_policy
+        String status
+    }
+    ai_models {
+        Identifier id PK
+        String name
+        String version
+        String status
+    }
+    ai_policy_configs {
+        Identifier id PK
+        Identifier ai_model_id FK
+        String version
+        Decimal minimum_confidence
+        Boolean requires_human_review
+    }
+    articles {
+        Identifier id PK
+        String title
+        String slug
+        String status
+    }
+    audit_logs {
+        Identifier id PK
+        String action
+        String entity_type
+        Identifier entity_id "optional"
+        DateTime occurred_at
+    }
+    auth_challenges {
+        Identifier id PK
+        Identifier user_id FK
+        String purpose
+        String channel
+        DateTime expires_at
+    }
+    auth_sessions {
+        Identifier id PK
+        Identifier user_id FK
+        DateTime expires_at
+        DateTime revoked_at "optional"
+    }
+    brands {
+        Identifier id PK
+        String code "optional"
+        String name
+    }
+    cart_items {
+        Identifier id PK
+        Identifier cart_id FK
+        Identifier product_packaging_id FK
+        Identifier store_product_id FK
+        Integer quantity
+    }
+    carts {
+        Identifier id PK
+        Identifier farmer_profile_id FK
+        String status
+    }
+    categories {
+        Identifier id PK
+        Identifier parent_id FK "optional"
+        String code
+        String name
+    }
+    contact_requests {
+        Identifier id PK
+        Identifier user_id FK "optional"
+        String request_number UK
+        String subject
+        String status
+    }
+    credit_limit_histories {
+        Identifier id PK
+        Identifier farmer_credit_profile_id FK
+        Decimal old_credit_limit
+        Decimal new_credit_limit
+        DateTime changed_at
+    }
+    credit_reservations {
+        Identifier id PK
+        Identifier farmer_credit_profile_id FK
+        Identifier order_id FK
+        Decimal amount_reserved
+        Decimal amount_consumed
+        Decimal amount_released
+        String status
+    }
+    credit_tiers {
+        Identifier id PK
+        String code
+        Decimal default_credit_limit
+        Integer default_payment_term_days
+    }
+    customer_group_assignments {
+        Identifier id PK
+        Identifier customer_group_id FK
+        Identifier farmer_profile_id FK
+        DateTime effective_from
+        DateTime effective_to "optional"
+    }
+    customer_group_price_lists {
+        Identifier id PK
+        Identifier customer_group_id FK
+        Identifier price_list_id FK
+        DateTime effective_from
+        DateTime effective_to "optional"
+    }
+    customer_groups {
+        Identifier id PK
+        Identifier default_credit_tier_id FK "optional"
+        String code
+        String name
+        Integer priority
+    }
+    debt_accounts {
+        Identifier id PK
+        Identifier farmer_profile_id FK
+        Decimal current_balance
+        String status
+    }
+    debt_entries {
+        Identifier id PK
+        Identifier debt_account_id FK
+        Identifier order_id FK "optional"
+        String entry_number UK
+        Decimal original_amount
+        Decimal outstanding_amount
+        Date due_date
+        String status
+    }
+    debt_entry_actions {
+        Identifier id PK
+        Identifier debt_entry_id FK
+        String action_type
+        Decimal adjustment_amount "optional"
+        String reason
+    }
+    debt_transactions {
+        Identifier id PK
+        Identifier debt_account_id FK
+        Identifier debt_entry_id FK "optional"
+        Identifier payment_allocation_id FK "optional"
+        Identifier sales_return_id FK "optional"
+        String transaction_type
+        Decimal amount_delta
+        Decimal balance_after
+    }
+    deliveries {
+        Identifier id PK
+        Identifier order_id FK
+        String delivery_number
+        String status
+    }
+    delivery_attempt_items {
+        Identifier id PK
+        Identifier delivery_attempt_id FK
+        Identifier delivery_item_lot_allocation_id FK
+        Integer attempted_base_quantity
+        Integer delivered_base_quantity
+        Integer failed_base_quantity
+    }
+    delivery_attempts {
+        Identifier id PK
+        Identifier delivery_id FK
+        Integer attempt_number
+        String status
+    }
+    delivery_incidents {
+        Identifier id PK
+        Identifier delivery_id FK
+        String incident_type
+        Integer affected_base_quantity "optional"
+        String status
+    }
+    delivery_item_lot_allocations {
+        Identifier id PK
+        Identifier delivery_item_id FK
+        Identifier inventory_lot_id FK
+        Integer allocated_base_quantity
+        Integer delivered_base_quantity
+        String status
+    }
+    delivery_items {
+        Identifier id PK
+        Identifier delivery_id FK
+        Identifier order_item_id FK
+        Integer planned_base_quantity
+        Integer delivered_base_quantity
+        String status
+    }
+    diagnosis_cases {
+        Identifier id PK
+        Identifier farmer_profile_id FK
+        String case_number UK
+        String crop_type
+        String status
+    }
+    diagnosis_images {
+        Identifier id PK
+        Identifier diagnosis_case_id FK
+        String image_url
+        Boolean is_primary
+    }
+    disease_treatments {
+        Identifier id PK
+        Identifier active_ingredient_id FK "optional"
+        Identifier disease_id FK
+        String title
+        String treatment_type
+        String instructions
+    }
+    diseases {
+        Identifier id PK
+        String code UK
+        String name
+        Boolean is_healthy_class
+    }
+    farmer_credit_profiles {
+        Identifier id PK
+        Identifier credit_tier_id FK "optional"
+        Identifier farmer_profile_id FK
+        Decimal credit_limit
+        String status
+    }
+    farmer_profiles {
+        Identifier id PK
+        Identifier user_id FK,UK
+        Date date_of_birth "optional"
+        String gender "optional"
+    }
+    goods_receipt_items {
+        Identifier id PK
+        Identifier goods_receipt_id FK
+        Identifier inventory_lot_id FK "optional"
+        Identifier product_packaging_id FK
+        Identifier store_product_id FK
+        Integer base_quantity
+        Decimal base_unit_cost
+    }
+    goods_receipts {
+        Identifier id PK
+        Identifier supplier_id FK
+        String receipt_number
+        DateTime received_at
+        Decimal total_amount
+        String status
+    }
+    inventory_lot_balances {
+        Identifier id PK
+        Identifier inventory_lot_id FK,UK
+        Integer quantity_on_hand
+        Integer quantity_reserved
+        Decimal total_cost_value
+    }
+    inventory_lots {
+        Identifier id PK
+        Identifier store_product_id FK
+        String lot_number "optional"
+        Date expiry_date "optional"
+        String status
+    }
+    inventory_reservation_items {
+        Identifier id PK
+        Identifier inventory_lot_id FK
+        Identifier inventory_reservation_id FK
+        Identifier order_item_id FK
+        Integer base_quantity_reserved
+        Integer base_quantity_consumed
+        Integer base_quantity_released
+    }
+    inventory_reservations {
+        Identifier id PK
+        Identifier order_id FK
+        String status
+        DateTime reserved_at
+    }
+    notification_outbox {
+        Identifier id PK
+        Identifier audit_log_id FK,UK
+        DateTime available_at
+        DateTime processed_at "optional"
+        Integer attempts
+    }
+    notifications {
+        Identifier id PK
+        Identifier user_id FK
+        String notification_type
+        String title
+        String status
+    }
+    order_items {
+        Identifier id PK
+        Identifier order_id FK
+        Identifier product_packaging_id FK
+        Identifier store_product_id FK
+        Integer base_quantity
+        Decimal unit_price
+        Decimal line_total_amount
+    }
+    orders {
+        Identifier id PK
+        Identifier farmer_profile_id FK "optional"
+        String order_number
+        String customer_type
+        String fulfillment_type
+        Decimal total_amount
+        String status
+    }
+    payment_allocations {
+        Identifier id PK
+        Identifier debt_entry_id FK "optional"
+        Identifier order_id FK "optional"
+        Identifier payment_id FK
+        String allocation_type
+        Decimal allocated_amount
+        String status
+    }
+    payments {
+        Identifier id PK
+        String payment_number
+        String payment_method
+        Decimal amount
+        String status
+    }
+    permissions {
+        Identifier id PK
+        String code UK
+        String module
+        Boolean is_delegable
+    }
+    price_list_items {
+        Identifier id PK
+        Identifier price_list_id FK
+        Identifier product_packaging_id FK
+        Identifier store_product_id FK
+        Decimal selling_price
+    }
+    price_lists {
+        Identifier id PK
+        String code
+        String name
+        String status
+    }
+    product_active_ingredients {
+        Identifier id PK
+        Identifier active_ingredient_id FK
+        Identifier product_id FK
+        String concentration "optional"
+    }
+    product_packagings {
+        Identifier id PK
+        Identifier product_id FK
+        Identifier unit_id FK
+        String packaging_name "optional"
+        Integer conversion_to_base
+        Boolean is_base_unit
+    }
+    product_reviews {
+        Identifier id PK
+        Identifier farmer_profile_id FK
+        Identifier store_product_id FK
+        Integer rating
+        String status
+    }
+    products {
+        Identifier id PK
+        Identifier brand_id FK "optional"
+        Identifier category_id FK
+        String sku UK
+        String name
+        String status
+    }
+    recommendation_items {
+        Identifier id PK
+        Identifier agent_review_id FK
+        Identifier disease_treatment_id FK "optional"
+        Identifier store_product_id FK "optional"
+        String recommendation_type
+        Integer rank_order
+        Boolean is_active
+    }
+    refresh_tokens {
+        Identifier id PK
+        Identifier session_id FK
+        DateTime expires_at
+        DateTime consumed_at "optional"
+    }
+    refunds {
+        Identifier id PK
+        Identifier order_id FK "optional"
+        Identifier original_payment_id FK "optional"
+        Identifier sales_return_id FK "optional"
+        String refund_number
+        Decimal amount
+        String status
+    }
+    role_permissions {
+        Identifier id PK
+        Identifier role_id FK
+        Identifier permission_id FK
+        Boolean is_granted
+    }
+    roles {
+        Identifier id PK
+        String code
+        String name
+    }
+    sales_return_items {
+        Identifier id PK
+        Identifier delivery_item_lot_allocation_id FK "optional"
+        Identifier order_item_id FK
+        Identifier original_stock_movement_item_id FK "optional"
+        Identifier sales_return_id FK
+        Integer returned_base_quantity
+        Decimal return_value
+        String inventory_disposition
+    }
+    sales_returns {
+        Identifier id PK
+        Identifier order_id FK
+        String return_number
+        Decimal total_return_amount
+        String status
+    }
+    stock_movement_items {
+        Identifier id PK
+        Identifier inventory_lot_id FK
+        Identifier stock_movement_id FK
+        Integer quantity_delta_base
+        Decimal unit_cost_snapshot
+    }
+    stock_movements {
+        Identifier id PK
+        String movement_number
+        String movement_type
+        String status
+    }
+    stocktake_items {
+        Identifier id PK
+        Identifier inventory_lot_id FK
+        Identifier stocktake_id FK
+        Integer system_quantity_snapshot
+        Integer counted_quantity "optional"
+        Integer difference_quantity "optional"
+    }
+    stocktakes {
+        Identifier id PK
+        String stocktake_number
+        String status
+    }
+    store_member_permissions {
+        Identifier id PK
+        Identifier store_member_id FK
+        Identifier permission_id FK
+        Boolean is_granted "optional"
+    }
+    store_members {
+        Identifier id PK
+        Identifier store_id FK
+        Identifier user_id FK
+        String employee_code "optional"
+        Boolean can_review_ai
+        String status
+    }
+    store_products {
+        Identifier id PK
+        Identifier product_id FK
+        Identifier store_id FK
+        String store_sku "optional"
+        Boolean is_sellable
+    }
+    stores {
+        Identifier id PK
+        String code UK
+        String name
+    }
+    suppliers {
+        Identifier id PK
+        String code "optional"
+        String name
+        String phone_number "optional"
+    }
+    units {
+        Identifier id PK
+        String code UK
+        String name
+        String symbol "optional"
+    }
+    user_addresses {
+        Identifier id PK
+        Identifier user_id FK
+        String address_line
+        String province
+        Boolean is_default
+    }
+    users {
+        Identifier id PK
+        Identifier role_id FK
+        String full_name
+        String phone_number "optional"
+        String status
+    }
+    active_ingredients |o--o{ disease_treatments : "active_ingredient_id"
+    active_ingredients ||--o{ product_active_ingredients : "active_ingredient_id"
+    agent_reviews ||--o{ recommendation_items : "agent_review_id"
+    ai_inferences |o--o{ agent_reviews : "primary_ai_inference_id"
+    ai_models ||--o{ ai_policy_configs : "ai_model_id"
+    ai_policy_configs ||--o{ ai_inferences : "ai_policy_config_id"
+    audit_logs ||--o| notification_outbox : "audit_log_id"
+    auth_sessions ||--o{ refresh_tokens : "session_id"
+    brands |o--o{ products : "brand_id"
+    carts ||--o{ cart_items : "cart_id"
+    categories |o--o{ categories : "parent_id"
+    categories ||--o{ products : "category_id"
+    credit_tiers |o--o{ customer_groups : "default_credit_tier_id"
+    credit_tiers |o--o{ farmer_credit_profiles : "credit_tier_id"
+    customer_groups ||--o{ customer_group_assignments : "customer_group_id"
+    customer_groups ||--o{ customer_group_price_lists : "customer_group_id"
+    debt_accounts ||--o{ debt_entries : "debt_account_id"
+    debt_accounts ||--o{ debt_transactions : "debt_account_id"
+    debt_entries |o--o{ debt_transactions : "debt_entry_id"
+    debt_entries |o--o{ payment_allocations : "debt_entry_id"
+    debt_entries ||--o{ debt_entry_actions : "debt_entry_id"
+    deliveries ||--o{ delivery_attempts : "delivery_id"
+    deliveries ||--o{ delivery_incidents : "delivery_id"
+    deliveries ||--o{ delivery_items : "delivery_id"
+    delivery_attempts ||--o{ delivery_attempt_items : "delivery_attempt_id"
+    delivery_item_lot_allocations |o--o{ sales_return_items : "delivery_item_lot_allocation_id"
+    delivery_item_lot_allocations ||--o{ delivery_attempt_items : "delivery_item_lot_allocation_id"
+    delivery_items ||--o{ delivery_item_lot_allocations : "delivery_item_id"
+    diagnosis_cases ||--o{ agent_reviews : "diagnosis_case_id"
+    diagnosis_cases ||--o{ diagnosis_images : "diagnosis_case_id"
+    diagnosis_images ||--o{ ai_inferences : "diagnosis_image_id"
+    disease_treatments |o--o{ recommendation_items : "disease_treatment_id"
+    diseases |o--o{ agent_reviews : "final_disease_id"
+    diseases |o--o{ ai_inferences : "predicted_disease_id"
+    diseases ||--o{ disease_treatments : "disease_id"
+    farmer_credit_profiles ||--o{ credit_limit_histories : "farmer_credit_profile_id"
+    farmer_credit_profiles ||--o{ credit_reservations : "farmer_credit_profile_id"
+    farmer_profiles |o--o{ orders : "farmer_profile_id"
+    farmer_profiles ||--o{ carts : "farmer_profile_id"
+    farmer_profiles ||--o{ customer_group_assignments : "farmer_profile_id"
+    farmer_profiles ||--o{ debt_accounts : "farmer_profile_id"
+    farmer_profiles ||--o{ diagnosis_cases : "farmer_profile_id"
+    farmer_profiles ||--o{ farmer_credit_profiles : "farmer_profile_id"
+    farmer_profiles ||--o{ product_reviews : "farmer_profile_id"
+    goods_receipts ||--o{ goods_receipt_items : "goods_receipt_id"
+    inventory_lots |o--o{ goods_receipt_items : "inventory_lot_id"
+    inventory_lots ||--o{ delivery_item_lot_allocations : "inventory_lot_id"
+    inventory_lots ||--o{ inventory_reservation_items : "inventory_lot_id"
+    inventory_lots ||--o{ stock_movement_items : "inventory_lot_id"
+    inventory_lots ||--o{ stocktake_items : "inventory_lot_id"
+    inventory_lots ||--o| inventory_lot_balances : "inventory_lot_id"
+    inventory_reservations ||--o{ inventory_reservation_items : "inventory_reservation_id"
+    order_items ||--o{ delivery_items : "order_item_id"
+    order_items ||--o{ inventory_reservation_items : "order_item_id"
+    order_items ||--o{ sales_return_items : "order_item_id"
+    orders |o--o{ debt_entries : "order_id"
+    orders |o--o{ payment_allocations : "order_id"
+    orders |o--o{ refunds : "order_id"
+    orders ||--o{ credit_reservations : "order_id"
+    orders ||--o{ deliveries : "order_id"
+    orders ||--o{ inventory_reservations : "order_id"
+    orders ||--o{ order_items : "order_id"
+    orders ||--o{ sales_returns : "order_id"
+    payment_allocations |o--o{ debt_transactions : "payment_allocation_id"
+    payments |o--o{ refunds : "original_payment_id"
+    payments ||--o{ payment_allocations : "payment_id"
+    permissions ||--o{ role_permissions : "permission_id"
+    permissions ||--o{ store_member_permissions : "permission_id"
+    price_lists ||--o{ customer_group_price_lists : "price_list_id"
+    price_lists ||--o{ price_list_items : "price_list_id"
+    product_packagings ||--o{ cart_items : "product_packaging_id"
+    product_packagings ||--o{ goods_receipt_items : "product_packaging_id"
+    product_packagings ||--o{ order_items : "product_packaging_id"
+    product_packagings ||--o{ price_list_items : "product_packaging_id"
+    products ||--o{ product_active_ingredients : "product_id"
+    products ||--o{ product_packagings : "product_id"
+    products ||--o{ store_products : "product_id"
+    roles ||--o{ role_permissions : "role_id"
+    roles ||--o{ users : "role_id"
+    sales_returns |o--o{ debt_transactions : "sales_return_id"
+    sales_returns |o--o{ refunds : "sales_return_id"
+    sales_returns ||--o{ sales_return_items : "sales_return_id"
+    stock_movement_items |o--o{ sales_return_items : "original_stock_movement_item_id"
+    stock_movements ||--o{ stock_movement_items : "stock_movement_id"
+    stocktakes ||--o{ stocktake_items : "stocktake_id"
+    store_members ||--o{ agent_reviews : "reviewer_member_id"
+    store_members ||--o{ store_member_permissions : "store_member_id"
+    store_products |o--o{ recommendation_items : "store_product_id"
+    store_products ||--o{ cart_items : "store_product_id"
+    store_products ||--o{ goods_receipt_items : "store_product_id"
+    store_products ||--o{ inventory_lots : "store_product_id"
+    store_products ||--o{ order_items : "store_product_id"
+    store_products ||--o{ price_list_items : "store_product_id"
+    store_products ||--o{ product_reviews : "store_product_id"
+    stores ||--o{ store_members : "store_id"
+    stores ||--o{ store_products : "store_id"
+    suppliers ||--o{ goods_receipts : "supplier_id"
+    units ||--o{ product_packagings : "unit_id"
+    users |o--o{ contact_requests : "user_id"
+    users ||--o{ auth_challenges : "user_id"
+    users ||--o{ auth_sessions : "user_id"
+    users ||--o{ notifications : "user_id"
+    users ||--o{ store_members : "user_id"
+    users ||--o{ user_addresses : "user_id"
+    users ||--o| farmer_profiles : "user_id"

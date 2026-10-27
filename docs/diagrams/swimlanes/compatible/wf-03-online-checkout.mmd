@@ -1,0 +1,32 @@
+%%{init: {"theme":"dark"}}%%
+flowchart LR
+  accTitle: WF-03 - Online Cart and Checkout
+  subgraph FARMER["Farmer"]
+    direction TB
+    S((Start))
+    F1("Browse catalog; add or update cart")
+    F2("Choose FULL_PAYMENT or CREDIT; PICKUP or DELIVERY")
+    F3("Provide own address for DELIVERY; submit checkout")
+    F4("Correct cart or checkout details")
+    F5("Pay through WF-04 or arrange payment with staff")
+    F6("View pending order")
+    E((End))
+  end
+  subgraph BACKEND["Backend System"]
+    direction TB
+    B1("Resolve current prices and cart availability")
+    B2("Validate cart, packaging, address ownership and credit eligibility")
+    D1{"Checkout valid?"}
+    B3("One transaction: snapshot order prices and customer data; convert cart")
+    B4("Create PENDING_CONFIRMATION; no stock or credit reservation")
+    D2{"Settlement type?"}
+  end
+  subgraph SALES["Sales Staff"]
+    direction TB
+    R1("Review order; proceed to WF-05 confirmation")
+  end
+  S --> F1 --> B1 --> F2 --> F3 --> B2 --> D1
+  D1 -->|No| F4 --> E
+  D1 -->|Yes| B3 --> B4 --> D2
+  D2 -->|FULL_PAYMENT| F5 --> R1 --> E
+  D2 -->|CREDIT; optional prepayment| F6 --> R1

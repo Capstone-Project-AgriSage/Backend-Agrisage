@@ -1,0 +1,36 @@
+@startuml 03-cart
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title Shopping Cart
+
+[*] --> ACTIVE : Farmer / Create cart
+ACTIVE --> ACTIVE : Farmer / Add, update, or remove products
+ACTIVE --> ACTIVE : System / Reject invalid checkout
+ACTIVE --> CONVERTED : Farmer / Complete checkout\nSystem / Create order atomically
+ACTIVE --> ABANDONED : System / Mark cart abandoned
+CONVERTED --> [*]
+ABANDONED --> [*]
+@enduml

@@ -1,0 +1,40 @@
+%%{init: {"theme":"dark"}}%%
+swimlane-beta TB
+  accTitle: WF-13 - Post-fulfillment Return and Inspection
+  subgraph CUSTOMER["Customer"]
+    S((Start))
+    C1("Request full or partial return of fulfilled goods")
+    C2("Send or hand goods back after approval")
+    C3("Receive rejection or return settlement status")
+    E((End))
+  end
+  subgraph SALES["Sales Staff"]
+    R1("Create request for walk-in/staff-assisted return")
+    R2("Receive returned goods; inspect every line")
+    R3("Record RESELLABLE, DAMAGED, EXPIRED or UNUSABLE")
+  end
+  subgraph OWNER["Store Owner / Admin"]
+    O1{"Approve return request?"}
+    O2("Confirm completed inspection")
+  end
+  subgraph BACKEND["Backend System"]
+    B1("Validate ownership, fulfilled source and returnable quantity; create REQUESTED")
+    B2("Record REJECTED and audit reason")
+    B3("Set APPROVED")
+    B3R("Set RECEIVED on physical handback")
+    B4("Validate all inspections; mark INSPECTED; calculate value using original selling price")
+    B5("One transaction: reduce attributable unpaid debt first; post RETURN debt transactions")
+    B6("For RESELLABLE: RETURN_IN into original lot at original COGS; other lines WRITE_OFF without stock-in")
+    B7("Refund due = return value minus debt reduction")
+    D1{"Any refund due?"}
+    B8("Set PARTIALLY_RESOLVED; continue to WF-14")
+    B9("Set COMPLETED when all restock links exist and no refund remains")
+  end
+  S --> C1
+  C1 -->|Registered Farmer self-service| B1
+  C1 -->|Via staff| R1 --> B1
+  B1 --> O1
+  O1 -->|No| B2 --> C3 --> E
+  O1 -->|Yes| B3 --> C2 --> R2 --> B3R --> R3 --> O2 --> B4 --> B5 --> B6 --> B7 --> D1
+  D1 -->|Yes| B8 --> C3
+  D1 -->|No| B9 --> C3

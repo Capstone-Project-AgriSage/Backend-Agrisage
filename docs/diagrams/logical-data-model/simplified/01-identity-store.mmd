@@ -1,0 +1,82 @@
+erDiagram
+    direction TB
+    auth_challenges {
+        Identifier id PK
+        Identifier user_id FK
+        String purpose
+        String channel
+        DateTime expires_at
+    }
+    auth_sessions {
+        Identifier id PK
+        Identifier user_id FK
+        DateTime expires_at
+        DateTime revoked_at "optional"
+    }
+    permissions {
+        Identifier id PK
+        String code UK
+        String module
+        Boolean is_delegable
+    }
+    refresh_tokens {
+        Identifier id PK
+        Identifier session_id FK
+        DateTime expires_at
+        DateTime consumed_at "optional"
+    }
+    role_permissions {
+        Identifier id PK
+        Identifier role_id FK
+        Identifier permission_id FK
+        Boolean is_granted
+    }
+    roles {
+        Identifier id PK
+        String code
+        String name
+    }
+    store_member_permissions {
+        Identifier id PK
+        Identifier store_member_id FK
+        Identifier permission_id FK
+        Boolean is_granted "optional"
+    }
+    store_members {
+        Identifier id PK
+        Identifier store_id FK
+        Identifier user_id FK
+        String employee_code "optional"
+        Boolean can_review_ai
+        String status
+    }
+    stores {
+        Identifier id PK
+        String code UK
+        String name
+    }
+    user_addresses {
+        Identifier id PK
+        Identifier user_id FK
+        String address_line
+        String province
+        Boolean is_default
+    }
+    users {
+        Identifier id PK
+        Identifier role_id FK
+        String full_name
+        String phone_number "optional"
+        String status
+    }
+    auth_sessions ||--o{ refresh_tokens : "session_id"
+    permissions ||--o{ role_permissions : "permission_id"
+    permissions ||--o{ store_member_permissions : "permission_id"
+    roles ||--o{ role_permissions : "role_id"
+    roles ||--o{ users : "role_id"
+    store_members ||--o{ store_member_permissions : "store_member_id"
+    stores ||--o{ store_members : "store_id"
+    users ||--o{ auth_challenges : "user_id"
+    users ||--o{ auth_sessions : "user_id"
+    users ||--o{ store_members : "user_id"
+    users ||--o{ user_addresses : "user_id"

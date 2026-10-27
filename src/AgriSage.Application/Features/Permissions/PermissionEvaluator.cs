@@ -40,15 +40,24 @@ public sealed class PermissionEvaluator(IAgriSageDbContext db, ICurrentUserServi
                     join p in db.Permissions.AsNoTracking() on o.PermissionId equals p.Id
                     where o.StoreMemberId == member.Id && p.IsActive select new { p.Code, o.IsGranted }).ToListAsync(token);
                 foreach (var item in overrides)
-                    if (item.IsGranted) granted.Add(item.Code); else granted.Remove(item.Code);
-                var ownerRole = await db.Roles.AsNoTracking().Where(r => r.Code == RoleCode.StoreOwner && r.IsActive).Select(r => (Guid?)r.Id).SingleOrDefaultAsync(token);
-                var ceiling = ownerRole is { } owner ? (await RoleDefaultsAsync(owner, token)).ToHashSet(StringComparer.Ordinal) : [];
-                granted.IntersectWith(ceiling);
+                    if (item.IsGranted is true) granted.Add(item.Code);
+                    else if (item.IsGranted is false) granted.Remove(item.Code);
+                granted.IntersectWith(await SaleCeilingAsync(token));
             }
         }
         var activeCodes = active.Select(p => p.Code).ToHashSet(StringComparer.Ordinal);
         return new(role, store, user.Version, memberVersion, granted.Where(c => activeCodes.Contains(c)
             && PermissionCatalog.ByCode.TryGetValue(c, out var definition) && definition.AllowsRole(role)).Order(StringComparer.Ordinal).ToList());
+    }
+
+    internal async Task<List<string>> SaleCeilingAsync(CancellationToken token)
+    {
+        var ownerRole = await db.Roles.AsNoTracking().Where(r => r.Code == RoleCode.StoreOwner && r.IsActive)
+            .Select(r => (Guid?)r.Id).SingleOrDefaultAsync(token);
+        return ownerRole is { } owner
+            ? (await RoleDefaultsAsync(owner, token)).Where(c => PermissionCatalog.ByCode.TryGetValue(c, out var definition)
+                && definition.AllowsRole("SALES_STAFF")).Order(StringComparer.Ordinal).ToList()
+            : [];
     }
 
     internal Task<List<string>> RoleDefaultsAsync(Guid roleId, CancellationToken token) =>

@@ -1,0 +1,37 @@
+%%{init: {"theme":"dark"}}%%
+flowchart LR
+  accTitle: WF-15 - Debt Dispute and Resolution
+  subgraph FARMER["Farmer"]
+    direction TB
+    S((Start))
+    F1("View own debt; submit dispute and reason")
+    F2("Receive resolution and updated outstanding amount")
+    E((End))
+  end
+  subgraph SALES["Sales Staff"]
+    direction TB
+    R1("Review order, fulfillment and repayment evidence")
+    D1{"Keep debt or request reduction/cancellation?"}
+    R2("KEEP debt; record reason")
+  end
+  subgraph OWNER["Store Owner / Admin"]
+    direction TB
+    D2{"Authorized resolution?"}
+    O1("ADJUST: specify reduction no greater than outstanding")
+    O2("CANCEL: waive remaining outstanding with reason")
+    O3("Reject proposed reduction; keep debt")
+  end
+  subgraph BACKEND["Backend System"]
+    direction TB
+    B1("Check ownership and entry state; record DISPUTE; keep payment allocation allowed")
+    B2("Record KEEP and resolve dispute; balance unchanged")
+    B3("One transaction: lock account; post ADJUSTMENT_OUT; update outstanding and account balance")
+    B4("Record action history and audit; preserve posted ledger")
+  end
+  S --> F1 --> B1 --> R1 --> D1
+  D1 -->|Keep| R2 --> B2 --> B4
+  D1 -->|Reduce or cancel| D2
+  D2 -->|Reduce| O1 --> B3 --> B4
+  D2 -->|Cancel| O2 --> B3
+  D2 -->|Reject change| O3 --> B2
+  B4 --> F2 --> E

@@ -1,0 +1,42 @@
+%%{init: {"theme":"dark"}}%%
+swimlane-beta TB
+  accTitle: WF-04 - payOS Payment and Reconciliation
+  subgraph PAYER["Payer"]
+    S((Start))
+    P1("Request payment link for order or debt")
+    P2("Open checkout or scan QR; transfer money")
+    P3("Read payment status from Backend")
+    E((End))
+  end
+  subgraph BACKEND["Backend System"]
+    B1("Validate ownership, amount and whole VND; create PENDING payment")
+    B2("Return checkout URL and QR payload")
+    B3("Verify webhook signature or query payOS status")
+    D1{"Trusted provider result?"}
+    D2{"Already settled?"}
+    D3{"Locally cancelled or amount mismatch?"}
+    B4("Acknowledge duplicate; do not repost")
+    B5("Flag for staff reconciliation; do not allocate")
+    D4{"Provider confirms PAID?"}
+    B6("One transaction: mark PAID; allocate to ORDER or DEBT")
+    B7("Release unused credit reservation for order prepayment; or post debt repayment")
+    B8("Keep pending or record provider failure/cancellation; no allocation")
+    B9("Reject invalid webhook; do not change payment")
+    B10("Record link creation failure; return dependency error")
+  end
+  subgraph PAYOS["payOS"]
+    G1("Create payment link")
+    G2("Process payment")
+    G3("Send webhook or return queried status")
+  end
+  S --> P1 --> B1 --> G1
+  G1 -->|Created| B2 --> P2 --> G2 --> G3 --> B3 --> D1
+  G1 -->|Failure| B10 --> P3 --> E
+  D1 -->|No| B9 --> E
+  D1 -->|Yes| D2
+  D2 -->|Yes| B4 --> P3
+  D2 -->|No| D3
+  D3 -->|Yes| B5 --> P3
+  D3 -->|No| D4
+  D4 -->|Yes| B6 --> B7 --> P3
+  D4 -->|No| B8 --> P3

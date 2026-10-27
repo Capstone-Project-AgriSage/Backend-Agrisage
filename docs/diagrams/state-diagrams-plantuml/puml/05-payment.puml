@@ -1,0 +1,40 @@
+@startuml 05-payment
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title Payment
+
+[*] --> PENDING : Farmer / Sales Staff creates payOS link\nSales Staff records cash or bank transfer
+PENDING --> PAID : payOS webhook / status synchronization\nSales Staff / Store Owner receives cash\nStore Owner confirms bank transfer
+PENDING --> FAILED : payOS [link expired or failed]\nStore Owner rejects bank transfer
+PENDING --> CANCELLED : Farmer cancels payOS link\npayOS [link cancelled]\nSales Staff / Store Owner cancels bank transfer\nSystem [order cancelled]
+PAID --> PARTIALLY_REFUNDED : System / Record completed refund\n[0 < total refunded < payment amount]
+PAID --> REFUNDED : System / Record completed refund\n[total refunded = payment amount]
+PARTIALLY_REFUNDED --> REFUNDED : System / Record completed refund\n[total refunded = payment amount]
+PARTIALLY_REFUNDED --> PARTIALLY_REFUNDED : System / Record additional completed refund\n[total refunded < payment amount]
+REFUNDED --> [*]
+FAILED --> [*]
+CANCELLED --> [*]
+@enduml

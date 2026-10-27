@@ -1,0 +1,48 @@
+%%{init: {"theme":"dark"}}%%
+flowchart LR
+  accTitle: WF-12 - Order Cancellation and Cancel Remaining
+  subgraph REQUESTER["Requester"]
+    direction TB
+    S((Start))
+    Q1("Farmer requests own pending cancellation; or customer contacts staff")
+    Q2("Receive updated order and refund requests")
+    E((End))
+  end
+  subgraph SALES["Sales Staff"]
+    direction TB
+    R1("For staff requests: choose full cancel or cancel line remainder; record reason")
+  end
+  subgraph BACKEND["Backend System"]
+    direction TB
+    B1("Check actor, ownership and state; lock order and affected records")
+    D1{"Cancellation allowed?"}
+    D2{"Any fulfilled quantity?"}
+    B2("Cancel entire order before fulfillment")
+    B3("Staff only: cancel remaining quantity; preserve fulfilled portion")
+    B4("Release affected inventory and unused credit reservations")
+    D3{"Order terminal with cancelled quantity?"}
+    D4{"Pending payOS link?"}
+    B5("Recheck provider result; abort/reconcile if already paid or cancellation failed")
+    B6("Release refundable unconsumed prepayment; request PENDING refunds per payment")
+    B7("Persist cancellation, reservations and audit atomically; commit")
+    B8("Reject; no successful local cancellation")
+  end
+  subgraph PAYOS["payOS"]
+    direction TB
+    P1("Cancel pending link; return authoritative status")
+  end
+  S --> Q1
+  Q1 -->|Farmer self-service| B1
+  Q1 -->|Via staff| R1 --> B1
+  B1 --> D1
+  D1 -->|No| B8 --> E
+  D1 -->|Yes| D2
+  D2 -->|No| B2 --> B4
+  D2 -->|Yes; remaining only| B3 --> B4
+  B4 --> D3
+  D3 -->|No; other lines remain open| B7
+  D3 -->|Yes| D4
+  D4 -->|Yes| P1
+  P1 -->|Cancelled| B6
+  P1 -->|Paid or error| B5 --> B8
+  D4 -->|No| B6 --> B7 --> Q2 --> E

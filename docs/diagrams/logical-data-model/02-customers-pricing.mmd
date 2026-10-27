@@ -1,0 +1,80 @@
+erDiagram
+    credit_tiers {
+        Identifier id PK
+    }
+    customer_group_assignments {
+        Identifier id PK
+        Identifier assigned_by FK
+        Identifier customer_group_id FK
+        DateTime effective_from
+        DateTime effective_to "nullable"
+        Identifier farmer_profile_id FK
+        String_500_ reason "nullable"
+    }
+    customer_group_price_lists {
+        Identifier id PK
+        Identifier assigned_by FK
+        Identifier customer_group_id FK
+        DateTime effective_from
+        DateTime effective_to "nullable"
+        Identifier price_list_id FK
+    }
+    customer_groups {
+        Identifier id PK
+        String_30_ code
+        Identifier default_credit_tier_id FK "nullable"
+        String_500_ description "nullable"
+        Boolean is_active
+        Boolean is_default
+        String_100_ name
+        Integer priority
+        Identifier store_id FK
+    }
+    farmer_profiles {
+        Identifier id PK
+        Date date_of_birth "nullable"
+        String_20_ gender "nullable"
+        String_1000_ notes "nullable"
+        Identifier user_id FK,UQ
+    }
+    price_list_items {
+        Identifier id PK
+        Identifier price_list_id FK
+        Identifier product_packaging_id FK
+        Decimal_18_2_ selling_price
+        Identifier store_product_id FK
+    }
+    price_lists {
+        Identifier id PK
+        String_50_ code
+        String_500_ description "nullable"
+        DateTime effective_from
+        DateTime effective_to "nullable"
+        Boolean is_walk_in_default
+        String_150_ name
+        String_20_ status
+        Identifier store_id FK
+    }
+    product_packagings {
+        Identifier id PK
+    }
+    store_products {
+        Identifier id PK
+    }
+    stores {
+        Identifier id PK
+    }
+    users {
+        Identifier id PK
+    }
+    customer_groups ||--o{ customer_group_assignments : "customer_group_id"
+    farmer_profiles ||--o{ customer_group_assignments : "farmer_profile_id"
+    customer_groups ||--o{ customer_group_price_lists : "customer_group_id"
+    price_lists ||--o{ customer_group_price_lists : "price_list_id"
+    credit_tiers |o--o{ customer_groups : "default_credit_tier_id"
+    stores ||--o{ customer_groups : "store_id"
+    users ||--o| farmer_profiles : "user_id"
+    price_lists ||--o{ price_list_items : "price_list_id"
+    product_packagings ||--o{ price_list_items : "product_packaging_id"
+    store_products ||--o{ price_list_items : "store_product_id"
+    stores ||--o{ price_lists : "store_id"

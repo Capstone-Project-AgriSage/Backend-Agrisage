@@ -1,0 +1,103 @@
+erDiagram
+    active_ingredients {
+        Identifier id PK
+        String_50_ code "nullable"
+        String description "nullable"
+        Boolean is_active
+        String_200_ name
+    }
+    brands {
+        Identifier id PK
+        String_50_ code "nullable"
+        String_500_ description "nullable"
+        Boolean is_active
+        String_1000_ logo_url "nullable"
+        String_150_ name
+    }
+    categories {
+        Identifier id PK
+        String_50_ code
+        String_500_ description "nullable"
+        Integer display_order
+        Boolean is_active
+        String_150_ name
+        Identifier parent_id FK "nullable"
+    }
+    farmer_profiles {
+        Identifier id PK
+    }
+    order_items {
+        Identifier id PK
+    }
+    product_active_ingredients {
+        Identifier id PK
+        Identifier active_ingredient_id FK
+        String_100_ concentration "nullable"
+        String_500_ note "nullable"
+        Identifier product_id FK
+    }
+    product_packagings {
+        Identifier id PK
+        String_100_ barcode "nullable"
+        Integer64 conversion_to_base
+        Boolean is_base_unit
+        Boolean is_purchase_unit
+        Boolean is_sale_unit
+        String_150_ packaging_name "nullable"
+        Identifier product_id FK
+        String_20_ status
+        Identifier unit_id FK
+    }
+    product_reviews {
+        Identifier id PK
+        String comment "nullable"
+        Identifier farmer_profile_id FK
+        Identifier order_item_id FK
+        Integer rating
+        String_20_ status
+        Identifier store_product_id FK
+    }
+    products {
+        Identifier id PK
+        Identifier brand_id FK "nullable"
+        Identifier category_id FK
+        String description "nullable"
+        String_1000_ image_url "nullable"
+        String_255_ name
+        Boolean requires_expiry_date
+        Boolean requires_lot_tracking
+        String_50_ sku UQ
+        String_20_ status
+        String usage_instructions "nullable"
+    }
+    store_products {
+        Identifier id PK
+        Boolean is_active
+        Boolean is_sellable
+        Integer64 min_stock_level_base "nullable"
+        Identifier product_id FK
+        Identifier store_id FK
+        String_50_ store_sku "nullable"
+    }
+    stores {
+        Identifier id PK
+    }
+    units {
+        Identifier id PK
+        String_30_ code UQ
+        Boolean is_active
+        String_100_ name
+        String_20_ symbol "nullable"
+    }
+    categories |o--o{ categories : "parent_id"
+    active_ingredients ||--o{ product_active_ingredients : "active_ingredient_id"
+    products ||--o{ product_active_ingredients : "product_id"
+    products ||--o{ product_packagings : "product_id"
+    units ||--o{ product_packagings : "unit_id"
+    farmer_profiles ||--o{ product_reviews : "farmer_profile_id"
+    order_items ||--o{ product_reviews : "order_item_id"
+    store_products ||--o{ product_reviews : "store_product_id"
+    brands |o--o{ products : "brand_id"
+    categories ||--o{ products : "category_id"
+    products ||--o{ store_products : "product_id"
+    stores ||--o{ store_products : "store_id"

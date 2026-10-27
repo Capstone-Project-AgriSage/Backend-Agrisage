@@ -1,0 +1,42 @@
+erDiagram
+    direction TB
+    articles {
+        Identifier id PK
+        String title
+        String slug
+        String status
+    }
+    audit_logs {
+        Identifier id PK
+        String action
+        String entity_type
+        Identifier entity_id "optional"
+        DateTime occurred_at
+    }
+    contact_requests {
+        Identifier id PK
+        Identifier user_id FK "optional"
+        String request_number UK
+        String subject
+        String status
+    }
+    notification_outbox {
+        Identifier id PK
+        Identifier audit_log_id FK,UK
+        DateTime available_at
+        DateTime processed_at "optional"
+        Integer attempts
+    }
+    notifications {
+        Identifier id PK
+        Identifier user_id FK
+        String notification_type
+        String title
+        String status
+    }
+    users {
+        Identifier id PK
+    }
+    audit_logs ||--o| notification_outbox : "audit_log_id"
+    users |o--o{ contact_requests : "user_id"
+    users ||--o{ notifications : "user_id"

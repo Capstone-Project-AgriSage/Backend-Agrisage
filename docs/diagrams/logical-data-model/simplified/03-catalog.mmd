@@ -1,0 +1,77 @@
+erDiagram
+    direction TB
+    active_ingredients {
+        Identifier id PK
+        String code "optional"
+        String name
+    }
+    brands {
+        Identifier id PK
+        String code "optional"
+        String name
+    }
+    categories {
+        Identifier id PK
+        Identifier parent_id FK "optional"
+        String code
+        String name
+    }
+    farmer_profiles {
+        Identifier id PK
+    }
+    product_active_ingredients {
+        Identifier id PK
+        Identifier active_ingredient_id FK
+        Identifier product_id FK
+        String concentration "optional"
+    }
+    product_packagings {
+        Identifier id PK
+        Identifier product_id FK
+        Identifier unit_id FK
+        String packaging_name "optional"
+        Integer conversion_to_base
+        Boolean is_base_unit
+    }
+    product_reviews {
+        Identifier id PK
+        Identifier farmer_profile_id FK
+        Identifier store_product_id FK
+        Integer rating
+        String status
+    }
+    products {
+        Identifier id PK
+        Identifier brand_id FK "optional"
+        Identifier category_id FK
+        String sku UK
+        String name
+        String status
+    }
+    store_products {
+        Identifier id PK
+        Identifier product_id FK
+        Identifier store_id FK
+        String store_sku "optional"
+        Boolean is_sellable
+    }
+    stores {
+        Identifier id PK
+    }
+    units {
+        Identifier id PK
+        String code UK
+        String name
+        String symbol "optional"
+    }
+    active_ingredients ||--o{ product_active_ingredients : "active_ingredient_id"
+    brands |o--o{ products : "brand_id"
+    categories |o--o{ categories : "parent_id"
+    categories ||--o{ products : "category_id"
+    farmer_profiles ||--o{ product_reviews : "farmer_profile_id"
+    products ||--o{ product_active_ingredients : "product_id"
+    products ||--o{ product_packagings : "product_id"
+    products ||--o{ store_products : "product_id"
+    store_products ||--o{ product_reviews : "store_product_id"
+    stores ||--o{ store_products : "store_id"
+    units ||--o{ product_packagings : "unit_id"

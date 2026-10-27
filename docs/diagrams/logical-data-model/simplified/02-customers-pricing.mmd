@@ -1,0 +1,63 @@
+erDiagram
+    direction TB
+    credit_tiers {
+        Identifier id PK
+    }
+    customer_group_assignments {
+        Identifier id PK
+        Identifier customer_group_id FK
+        Identifier farmer_profile_id FK
+        DateTime effective_from
+        DateTime effective_to "optional"
+    }
+    customer_group_price_lists {
+        Identifier id PK
+        Identifier customer_group_id FK
+        Identifier price_list_id FK
+        DateTime effective_from
+        DateTime effective_to "optional"
+    }
+    customer_groups {
+        Identifier id PK
+        Identifier default_credit_tier_id FK "optional"
+        String code
+        String name
+        Integer priority
+    }
+    farmer_profiles {
+        Identifier id PK
+        Identifier user_id FK,UK
+        Date date_of_birth "optional"
+        String gender "optional"
+    }
+    price_list_items {
+        Identifier id PK
+        Identifier price_list_id FK
+        Identifier product_packaging_id FK
+        Identifier store_product_id FK
+        Decimal selling_price
+    }
+    price_lists {
+        Identifier id PK
+        String code
+        String name
+        String status
+    }
+    product_packagings {
+        Identifier id PK
+    }
+    store_products {
+        Identifier id PK
+    }
+    users {
+        Identifier id PK
+    }
+    credit_tiers |o--o{ customer_groups : "default_credit_tier_id"
+    customer_groups ||--o{ customer_group_assignments : "customer_group_id"
+    customer_groups ||--o{ customer_group_price_lists : "customer_group_id"
+    farmer_profiles ||--o{ customer_group_assignments : "farmer_profile_id"
+    price_lists ||--o{ customer_group_price_lists : "price_list_id"
+    price_lists ||--o{ price_list_items : "price_list_id"
+    product_packagings ||--o{ price_list_items : "product_packaging_id"
+    store_products ||--o{ price_list_items : "store_product_id"
+    users ||--o| farmer_profiles : "user_id"

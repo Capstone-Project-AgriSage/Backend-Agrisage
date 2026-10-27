@@ -1,0 +1,55 @@
+@startuml 20-diagnosis-case
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title AI Diagnosis Case
+
+state "Human Review Not Yet Completed" as BEFORE_REVIEW {
+    state SUBMITTED
+    state PROCESSING
+    state AI_COMPLETED
+    state UNDER_REVIEW
+    state FAILED
+    SUBMITTED --> PROCESSING : System / Start AI analysis\n[at least one active image]
+    PROCESSING --> AI_COMPLETED : System / Complete AI analysis\n[at least one successful inference]
+    PROCESSING --> FAILED : System / Record AI failure
+    FAILED --> PROCESSING : System / Retry AI analysis
+    AI_COMPLETED --> UNDER_REVIEW : Authorized Reviewer / Start review
+}
+[*] --> SUBMITTED : Farmer / Submit diagnosis request
+AI_COMPLETED --> VERIFIED : Authorized Reviewer / CONFIRMED or CORRECTED
+UNDER_REVIEW --> VERIFIED : Authorized Reviewer / CONFIRMED or CORRECTED
+FAILED --> VERIFIED : Authorized Reviewer / Manual diagnosis\n[CORRECTED]
+AI_COMPLETED --> INCONCLUSIVE : Authorized Reviewer / INCONCLUSIVE
+UNDER_REVIEW --> INCONCLUSIVE : Authorized Reviewer / INCONCLUSIVE
+FAILED --> INCONCLUSIVE : Authorized Reviewer / INCONCLUSIVE
+VERIFIED --> VERIFIED : Authorized Reviewer / Review again\n[definitive diagnosis]
+VERIFIED --> INCONCLUSIVE : Authorized Reviewer / Review again\n[insufficient evidence]
+INCONCLUSIVE --> VERIFIED : Authorized Reviewer / Review again\n[definitive diagnosis]
+INCONCLUSIVE --> INCONCLUSIVE : Authorized Reviewer / Review again\n[still insufficient evidence]
+VERIFIED --> VERIFIED : Authorized Reviewer / Approve recommendations
+BEFORE_REVIEW --> CANCELLED : Farmer or Staff / Cancel before review completion
+CANCELLED --> [*]
+@enduml

@@ -30,7 +30,8 @@ public class InitialCreateMigrationTests
                 "20261004055235_CreditDebtPostingSafety",
                 "20261007062351_AuthSessionsNotificationsOperations",
                 "20261009151702_DynamicPermissions",
-                "20261010064131_AiDiagnosisPermissions"
+                "20261010064131_AiDiagnosisPermissions",
+                "20261020030801_PermissionOverrideInheritance"
             ],
             context.Database.GetMigrations());
     }

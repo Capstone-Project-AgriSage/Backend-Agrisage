@@ -1,0 +1,96 @@
+erDiagram
+    direction TB
+    active_ingredients {
+        Identifier id PK
+    }
+    agent_reviews {
+        Identifier id PK
+        Identifier diagnosis_case_id FK
+        Identifier final_disease_id FK "optional"
+        Identifier primary_ai_inference_id FK "optional"
+        Identifier reviewer_member_id FK
+        String decision
+        Boolean is_current
+    }
+    ai_inferences {
+        Identifier id PK
+        Identifier ai_policy_config_id FK
+        Identifier diagnosis_image_id FK
+        Identifier predicted_disease_id FK "optional"
+        Decimal confidence
+        Boolean passed_policy
+        String status
+    }
+    ai_models {
+        Identifier id PK
+        String name
+        String version
+        String status
+    }
+    ai_policy_configs {
+        Identifier id PK
+        Identifier ai_model_id FK
+        String version
+        Decimal minimum_confidence
+        Boolean requires_human_review
+    }
+    diagnosis_cases {
+        Identifier id PK
+        Identifier farmer_profile_id FK
+        String case_number UK
+        String crop_type
+        String status
+    }
+    diagnosis_images {
+        Identifier id PK
+        Identifier diagnosis_case_id FK
+        String image_url
+        Boolean is_primary
+    }
+    disease_treatments {
+        Identifier id PK
+        Identifier active_ingredient_id FK "optional"
+        Identifier disease_id FK
+        String title
+        String treatment_type
+        String instructions
+    }
+    diseases {
+        Identifier id PK
+        String code UK
+        String name
+        Boolean is_healthy_class
+    }
+    farmer_profiles {
+        Identifier id PK
+    }
+    recommendation_items {
+        Identifier id PK
+        Identifier agent_review_id FK
+        Identifier disease_treatment_id FK "optional"
+        Identifier store_product_id FK "optional"
+        String recommendation_type
+        Integer rank_order
+        Boolean is_active
+    }
+    store_members {
+        Identifier id PK
+    }
+    store_products {
+        Identifier id PK
+    }
+    active_ingredients |o--o{ disease_treatments : "active_ingredient_id"
+    agent_reviews ||--o{ recommendation_items : "agent_review_id"
+    ai_inferences |o--o{ agent_reviews : "primary_ai_inference_id"
+    ai_models ||--o{ ai_policy_configs : "ai_model_id"
+    ai_policy_configs ||--o{ ai_inferences : "ai_policy_config_id"
+    diagnosis_cases ||--o{ agent_reviews : "diagnosis_case_id"
+    diagnosis_cases ||--o{ diagnosis_images : "diagnosis_case_id"
+    diagnosis_images ||--o{ ai_inferences : "diagnosis_image_id"
+    disease_treatments |o--o{ recommendation_items : "disease_treatment_id"
+    diseases |o--o{ agent_reviews : "final_disease_id"
+    diseases |o--o{ ai_inferences : "predicted_disease_id"
+    diseases ||--o{ disease_treatments : "disease_id"
+    farmer_profiles ||--o{ diagnosis_cases : "farmer_profile_id"
+    store_members ||--o{ agent_reviews : "reviewer_member_id"
+    store_products |o--o{ recommendation_items : "store_product_id"

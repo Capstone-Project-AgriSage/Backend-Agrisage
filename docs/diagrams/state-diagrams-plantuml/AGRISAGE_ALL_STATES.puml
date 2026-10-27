@@ -1,0 +1,1182 @@
+@startuml 01-user-account
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title User Account
+
+[*] --> ACTIVE : System / Create account
+ACTIVE --> INACTIVE : Administrator / Deactivate account
+INACTIVE --> ACTIVE : Administrator / Reactivate account
+ACTIVE --> SUSPENDED : Administrator / Suspend account
+SUSPENDED --> ACTIVE : Administrator / Lift suspension
+ACTIVE --> LOCKED : Administrator / Lock account
+LOCKED --> ACTIVE : Administrator / Unlock account
+@enduml
+
+@startuml 02-auth-session
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title Authentication Session
+
+[*] --> VALID : User / Log in successfully
+VALID --> VALID : User / Use or refresh valid session
+VALID --> EXPIRED : System / Session expiry reached
+VALID --> REVOKED : User or Administrator / Log out or revoke session
+VALID --> INVALIDATED : System / Security version changed
+EXPIRED --> [*]
+REVOKED --> [*]
+INVALIDATED --> [*]
+@enduml
+
+@startuml 03-cart
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title Shopping Cart
+
+[*] --> ACTIVE : Farmer / Create cart
+ACTIVE --> ACTIVE : Farmer / Add, update, or remove products
+ACTIVE --> ACTIVE : System / Reject invalid checkout
+ACTIVE --> CONVERTED : Farmer / Complete checkout\nSystem / Create order atomically
+ACTIVE --> ABANDONED : System / Mark cart abandoned
+CONVERTED --> [*]
+ABANDONED --> [*]
+@enduml
+
+@startuml 04-order
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title Sales Order
+
+state "Order Fulfillment in Progress" as FULFILLMENT {
+    state CONFIRMED
+    state PREPARING
+    state READY_FOR_FULFILLMENT
+    state PARTIALLY_FULFILLED
+    CONFIRMED --> PREPARING : Staff / Start preparation
+    CONFIRMED --> READY_FOR_FULFILLMENT : Staff / Mark ready
+    PREPARING --> READY_FOR_FULFILLMENT : Staff / Finish preparation
+    CONFIRMED --> PARTIALLY_FULFILLED : System / Record partial fulfillment
+    PREPARING --> PARTIALLY_FULFILLED : System / Record partial fulfillment
+    READY_FOR_FULFILLMENT --> PARTIALLY_FULFILLED : System / Record partial fulfillment
+    PARTIALLY_FULFILLED --> PARTIALLY_FULFILLED : System / Record more fulfillment\n[remainder still open]
+}
+[*] --> PENDING_CONFIRMATION : Farmer or Staff / Create order
+PENDING_CONFIRMATION --> PENDING_CONFIRMATION : Farmer or Staff / Update pending order
+PENDING_CONFIRMATION --> CONFIRMED : Staff / Confirm order\nSystem / Reserve stock and credit if required
+PENDING_CONFIRMATION --> CANCELLED : Farmer or Staff / Cancel pending order
+FULFILLMENT --> COMPLETED : System / Close fulfillment\n[all quantities fulfilled, none cancelled]
+FULFILLMENT --> PARTIALLY_CANCELLED : System / Close fulfillment\n[some fulfilled, remaining quantities cancelled]
+FULFILLMENT --> CANCELLED : Staff / Cancel remaining quantities\n[nothing fulfilled and no open remainder]
+COMPLETED --> [*]
+PARTIALLY_CANCELLED --> [*]
+CANCELLED --> [*]
+@enduml
+
+@startuml 05-payment
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title Payment
+
+[*] --> PENDING : Farmer / Sales Staff creates payOS link\nSales Staff records cash or bank transfer
+PENDING --> PAID : payOS webhook / status synchronization\nSales Staff / Store Owner receives cash\nStore Owner confirms bank transfer
+PENDING --> FAILED : payOS [link expired or failed]\nStore Owner rejects bank transfer
+PENDING --> CANCELLED : Farmer cancels payOS link\npayOS [link cancelled]\nSales Staff / Store Owner cancels bank transfer\nSystem [order cancelled]
+PAID --> PARTIALLY_REFUNDED : System / Record completed refund\n[0 < total refunded < payment amount]
+PAID --> REFUNDED : System / Record completed refund\n[total refunded = payment amount]
+PARTIALLY_REFUNDED --> REFUNDED : System / Record completed refund\n[total refunded = payment amount]
+PARTIALLY_REFUNDED --> PARTIALLY_REFUNDED : System / Record additional completed refund\n[total refunded < payment amount]
+REFUNDED --> [*]
+FAILED --> [*]
+CANCELLED --> [*]
+@enduml
+
+@startuml 06-delivery
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title Delivery
+
+state "Delivery Not Yet Closed" as OPEN_DELIVERY {
+    state DRAFT
+    state ASSIGNED
+    state OUT_FOR_DELIVERY
+    state PARTIALLY_DELIVERED
+    state RETRY_PENDING
+    DRAFT --> ASSIGNED : Staff / Assign delivery staff
+    ASSIGNED --> OUT_FOR_DELIVERY : Delivery Staff / Dispatch delivery
+    OUT_FOR_DELIVERY --> PARTIALLY_DELIVERED : System / Complete attempt\n[some delivered, remainder still open]
+    OUT_FOR_DELIVERY --> RETRY_PENDING : System / Complete attempt\n[attempt delivered nothing, remainder still open]
+    PARTIALLY_DELIVERED --> OUT_FOR_DELIVERY : Delivery Staff / Dispatch remaining goods
+    RETRY_PENDING --> OUT_FOR_DELIVERY : Delivery Staff / Retry delivery
+}
+[*] --> DRAFT : Staff / Create delivery
+OUT_FOR_DELIVERY --> DELIVERED : System / Complete attempt\n[nothing remains to deliver]
+OPEN_DELIVERY --> CANCELLED : Staff / Cancel remainder\n[nothing ever delivered, no attempt in progress]
+OPEN_DELIVERY --> DELIVERED : Staff / Cancel remainder\n[some goods already delivered, no attempt in progress]
+DELIVERED --> [*]
+CANCELLED --> [*]
+@enduml
+
+@startuml 07-delivery-attempt
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title Delivery Attempt
+
+[*] --> IN_PROGRESS : Delivery Staff / Start attempt
+IN_PROGRESS --> SUCCESS : Delivery Staff / Complete attempt\n[all attempted quantities delivered]
+IN_PROGRESS --> PARTIAL_SUCCESS : Delivery Staff / Complete attempt\n[some attempted quantities delivered]
+IN_PROGRESS --> FAILED : Delivery Staff / Complete attempt\n[no goods delivered]
+IN_PROGRESS --> CANCELLED : Delivery Staff / Cancel attempt
+SUCCESS --> [*]
+PARTIAL_SUCCESS --> [*]
+FAILED --> [*]
+CANCELLED --> [*]
+@enduml
+
+@startuml 08-delivery-incident
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title Delivery Incident
+
+[*] --> OPEN : Staff / Report incident
+OPEN --> OPEN : Staff / Add incident details
+OPEN --> RESOLVED : Authorized Staff / Resolve incident\nand record resolution
+RESOLVED --> [*]
+@enduml
+
+@startuml 09-goods-receipt
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title Goods Receipt
+
+[*] --> DRAFT : Staff / Create goods receipt
+DRAFT --> DRAFT : Staff / Update receipt and items
+DRAFT --> CONFIRMED : Staff / Confirm receipt\nSystem / Post stock-in and update weighted average cost
+DRAFT --> CANCELLED : Staff / Cancel draft receipt
+CONFIRMED --> [*]
+CANCELLED --> [*]
+@enduml
+
+@startuml 10-inventory-lot
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title Inventory Lot
+
+[*] --> ACTIVE : System / Create inventory lot
+ACTIVE --> QUARANTINED : Staff / Quarantine lot
+QUARANTINED --> ACTIVE : Staff / Release quarantine\n[lot remains eligible]
+ACTIVE --> BLOCKED : Staff / Block lot
+BLOCKED --> ACTIVE : Staff / Unblock lot\n[lot remains eligible]
+ACTIVE --> EXPIRED : System / Mark expired\n[expiry date is before business date]
+ACTIVE --> DEPLETED : System / Record depleted status
+DEPLETED --> ACTIVE : System / Restore eligibility\n[stock available and lot remains eligible]
+@enduml
+
+@startuml 11-stock-movement
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title Stock Movement
+
+[*] --> DRAFT : System or Staff / Create stock movement
+DRAFT --> DRAFT : Staff / Update draft movement
+DRAFT --> POSTED : Owning use case / Post movement\nand update inventory
+DRAFT --> CANCELLED : Staff / Cancel draft movement
+POSTED --> REVERSED : Owning use case / Post corresponding reversal movement
+CANCELLED --> [*]
+REVERSED --> [*]
+@enduml
+
+@startuml 12-stocktake
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title Stocktake
+
+[*] --> DRAFT : Staff / Create stocktake
+DRAFT --> IN_PROGRESS : Staff / Start stocktake
+DRAFT --> CANCELLED : Staff / Cancel draft stocktake
+IN_PROGRESS --> IN_PROGRESS : Staff / Record physical count
+IN_PROGRESS --> IN_PROGRESS : Staff / Refresh stale snapshot and recount
+IN_PROGRESS --> COMPLETED : Staff / Complete stocktake\n[all items counted and validated]
+IN_PROGRESS --> CANCELLED : Staff / Cancel stocktake
+COMPLETED --> [*]
+CANCELLED --> [*]
+@enduml
+
+@startuml 13-inventory-reservation
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title Inventory Reservation
+
+[*] --> ACTIVE : System / Reserve inventory for order
+ACTIVE --> ACTIVE : System / Release part\n[nothing consumed, remainder still reserved]
+ACTIVE --> PARTIALLY_CONSUMED : Fulfillment / Consume part\n[remaining quantity > 0]
+ACTIVE --> CONSUMED : Fulfillment / Consume all remaining quantity
+ACTIVE --> RELEASED : System / Release all\n[nothing ever consumed]
+ACTIVE --> CANCELLED : System / Cancel order\n[nothing ever consumed]
+PARTIALLY_CONSUMED --> PARTIALLY_CONSUMED : System / Consume or release more\n[remaining quantity > 0]
+PARTIALLY_CONSUMED --> CONSUMED : System / Consume or release remainder\n[remaining quantity = 0]
+CONSUMED --> [*]
+RELEASED --> [*]
+CANCELLED --> [*]
+@enduml
+
+@startuml 14-credit-reservation
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title Credit Reservation
+
+[*] --> ACTIVE : System / Reserve credit for order
+ACTIVE --> ACTIVE : System / Release part\n[nothing consumed, remainder still reserved]
+ACTIVE --> PARTIALLY_CONSUMED : Fulfillment / Consume part\n[remaining amount > 0]
+ACTIVE --> CONSUMED : Fulfillment / Consume all remaining amount
+ACTIVE --> RELEASED : System / Release all\n[nothing ever consumed]
+ACTIVE --> CANCELLED : System / Cancel order\n[nothing ever consumed]
+PARTIALLY_CONSUMED --> PARTIALLY_CONSUMED : System / Consume or release more\n[remaining amount > 0]
+PARTIALLY_CONSUMED --> CONSUMED : System / Consume or release remainder\n[remaining amount = 0]
+CONSUMED --> [*]
+RELEASED --> [*]
+CANCELLED --> [*]
+@enduml
+
+@startuml 15-farmer-credit-profile
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title Farmer Credit Profile
+
+[*] --> ACTIVE : Staff / Create credit profile
+ACTIVE --> SUSPENDED : Authorized Manager / Suspend credit access
+SUSPENDED --> ACTIVE : Authorized Manager / Restore credit access
+ACTIVE --> BLOCKED : Authorized Manager / Block credit access
+SUSPENDED --> BLOCKED : Authorized Manager / Block credit access
+BLOCKED --> ACTIVE : Authorized Manager / Unblock credit access
+BLOCKED --> SUSPENDED : Authorized Manager / Change to suspended
+@enduml
+
+@startuml 16-debt-account
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title Debt Account
+
+[*] --> ACTIVE : System / Create debt account
+ACTIVE --> BLOCKED : Authorized Staff / Block account
+BLOCKED --> ACTIVE : Authorized Staff / Unblock account
+ACTIVE --> CLOSED : Authorized Staff / Close account\n[business conditions satisfied]
+BLOCKED --> CLOSED : Authorized Staff / Close account\n[business conditions satisfied]
+CLOSED --> ACTIVE : Authorized Staff / Reopen account\n[permitted by application policy]
+@enduml
+
+@startuml 17-debt-entry
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title Debt Entry
+
+state "Debt Entry Under Processing" as OPEN_DEBT {
+    state OPEN
+    state PARTIALLY_PAID
+    state ADJUSTED
+    state DISPUTED
+    OPEN --> PARTIALLY_PAID : System / Apply partial payment
+    PARTIALLY_PAID --> PARTIALLY_PAID : System / Apply additional payment\n[balance remains]
+    OPEN --> DISPUTED : Staff / DISPUTE
+    PARTIALLY_PAID --> DISPUTED : Staff / DISPUTE
+    ADJUSTED --> DISPUTED : Staff / DISPUTE
+    DISPUTED --> DISPUTED : System / Apply payment\n[dispute remains unresolved]
+    OPEN --> ADJUSTED : Manager / ADJUST\n[positive balance remains]
+    PARTIALLY_PAID --> ADJUSTED : Manager / ADJUST\n[positive balance remains]
+    DISPUTED --> ADJUSTED : Manager / ADJUST\n[positive balance remains]
+    ADJUSTED --> ADJUSTED : Manager / ADJUST\n[positive balance remains]
+    ADJUSTED --> PARTIALLY_PAID : System / Apply payment\n[positive balance remains]
+    DISPUTED --> OPEN : Staff / KEEP\n[outstanding = original amount]
+    DISPUTED --> PARTIALLY_PAID : Staff / KEEP\n[0 < outstanding < original amount]
+}
+[*] --> OPEN : Fulfillment or adjustment use case / Record receivable
+OPEN --> PAID : System / Apply payment\n[outstanding becomes zero]
+PARTIALLY_PAID --> PAID : System / Apply payment\n[outstanding becomes zero]
+ADJUSTED --> PAID : System / Apply payment\n[outstanding becomes zero]
+OPEN_DEBT --> PAID : Manager / ADJUST\n[outstanding becomes zero]
+DISPUTED --> PAID : Staff / KEEP\n[outstanding = 0]
+OPEN_DEBT --> CANCELLED : Manager / CANCEL\n[post reduction of full outstanding balance]
+PAID --> [*]
+CANCELLED --> [*]
+@enduml
+
+@startuml 18-sales-return
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title Sales Return
+
+[*] --> REQUESTED : Farmer or Staff / Submit return request
+REQUESTED --> REQUESTED : Staff / Update return items
+REQUESTED --> APPROVED : Staff / Approve request
+REQUESTED --> REJECTED : Staff / Reject request
+REQUESTED --> CANCELLED : Staff / Cancel request
+APPROVED --> RECEIVED : Staff / Receive returned goods
+APPROVED --> CANCELLED : Staff / Cancel before goods received
+RECEIVED --> RECEIVED : Staff / Inspect individual items
+RECEIVED --> INSPECTED : Staff / Complete all inspections\nSystem / Determine debt reduction and refund
+INSPECTED --> PARTIALLY_RESOLVED : System / Record partial resolution
+INSPECTED --> COMPLETED : Return use case / Complete all required resolution
+PARTIALLY_RESOLVED --> PARTIALLY_RESOLVED : System / Continue restocking or settlement
+PARTIALLY_RESOLVED --> COMPLETED : Return use case / Complete all required resolution
+REJECTED --> [*]
+CANCELLED --> [*]
+COMPLETED --> [*]
+@enduml
+
+@startuml 19-refund
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title Refund
+
+[*] --> PENDING : Staff / Create refund request
+PENDING --> PENDING : Staff / Update processing details
+PENDING --> COMPLETED : Staff / Confirm successful refund
+PENDING --> FAILED : Staff / Record refund failure
+PENDING --> CANCELLED : Staff / Cancel refund request
+COMPLETED --> [*]
+FAILED --> [*]
+CANCELLED --> [*]
+@enduml
+
+@startuml 20-diagnosis-case
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title AI Diagnosis Case
+
+state "Human Review Not Yet Completed" as BEFORE_REVIEW {
+    state SUBMITTED
+    state PROCESSING
+    state AI_COMPLETED
+    state UNDER_REVIEW
+    state FAILED
+    SUBMITTED --> PROCESSING : System / Start AI analysis\n[at least one active image]
+    PROCESSING --> AI_COMPLETED : System / Complete AI analysis\n[at least one successful inference]
+    PROCESSING --> FAILED : System / Record AI failure
+    FAILED --> PROCESSING : System / Retry AI analysis
+    AI_COMPLETED --> UNDER_REVIEW : Authorized Reviewer / Start review
+}
+[*] --> SUBMITTED : Farmer / Submit diagnosis request
+AI_COMPLETED --> VERIFIED : Authorized Reviewer / CONFIRMED or CORRECTED
+UNDER_REVIEW --> VERIFIED : Authorized Reviewer / CONFIRMED or CORRECTED
+FAILED --> VERIFIED : Authorized Reviewer / Manual diagnosis\n[CORRECTED]
+AI_COMPLETED --> INCONCLUSIVE : Authorized Reviewer / INCONCLUSIVE
+UNDER_REVIEW --> INCONCLUSIVE : Authorized Reviewer / INCONCLUSIVE
+FAILED --> INCONCLUSIVE : Authorized Reviewer / INCONCLUSIVE
+VERIFIED --> VERIFIED : Authorized Reviewer / Review again\n[definitive diagnosis]
+VERIFIED --> INCONCLUSIVE : Authorized Reviewer / Review again\n[insufficient evidence]
+INCONCLUSIVE --> VERIFIED : Authorized Reviewer / Review again\n[definitive diagnosis]
+INCONCLUSIVE --> INCONCLUSIVE : Authorized Reviewer / Review again\n[still insufficient evidence]
+VERIFIED --> VERIFIED : Authorized Reviewer / Approve recommendations
+BEFORE_REVIEW --> CANCELLED : Farmer or Staff / Cancel before review completion
+CANCELLED --> [*]
+@enduml
+
+@startuml 21-ai-model
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title AI Model
+
+[*] --> DRAFT : Authorized Staff / Register model version
+DRAFT --> ACTIVE : Authorized Staff / Activate deployment
+ACTIVE --> RETIRED : Authorized Staff / Retire model version
+RETIRED --> [*]
+@enduml
+
+@startuml 22-ai-policy-config
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title AI Policy Config
+
+[*] --> DRAFT : Authorized Staff / Create policy
+DRAFT --> ACTIVE : Authorized Staff / Activate policy
+ACTIVE --> INACTIVE : Authorized Staff / Deactivate policy
+INACTIVE --> ACTIVE : Authorized Staff / Reactivate policy
+@enduml
+
+@startuml 23-product
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title Product
+
+[*] --> ACTIVE : Staff / Create active product
+ACTIVE --> INACTIVE : Staff / Temporarily stop selling
+INACTIVE --> ACTIVE : Staff / Resume selling
+ACTIVE --> DISCONTINUED : Staff / Discontinue product
+INACTIVE --> DISCONTINUED : Staff / Discontinue product
+DISCONTINUED --> ACTIVE : Staff / Restore as active\n[permitted]
+DISCONTINUED --> INACTIVE : Staff / Restore as inactive\n[permitted]
+@enduml
+
+@startuml 24-price-list
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title Price List
+
+[*] --> DRAFT : Staff / Create price list
+DRAFT --> ACTIVE : Staff / Activate price list
+ACTIVE --> INACTIVE : Staff / Deactivate price list
+INACTIVE --> ACTIVE : Staff / Reactivate price list
+@enduml
+
+@startuml 25-article
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title Article
+
+[*] --> DRAFT : Staff / Create article
+DRAFT --> PUBLISHED : Staff / Publish article
+PUBLISHED --> DRAFT : Staff / Move to draft
+DRAFT --> ARCHIVED : Staff / Archive article
+PUBLISHED --> ARCHIVED : Staff / Archive article
+ARCHIVED --> DRAFT : Staff / Restore as draft
+ARCHIVED --> PUBLISHED : Staff / Publish again
+@enduml
+
+@startuml 26-contact-request
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title Contact Request
+
+[*] --> OPEN : User / Submit contact request
+OPEN --> IN_PROGRESS : Staff / Start processing
+OPEN --> RESOLVED : Staff / Resolve directly
+OPEN --> CLOSED : Staff / Close request
+IN_PROGRESS --> RESOLVED : Staff / Complete resolution
+IN_PROGRESS --> CLOSED : Staff / Close request
+RESOLVED --> CLOSED : Staff / Close after resolution
+CLOSED --> OPEN : Staff / Reopen if permitted
+@enduml
+
+@startuml 27-notification
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title Notification
+
+[*] --> UNREAD : System / Create notification
+UNREAD --> READ : User / Read notification
+UNREAD --> ARCHIVED : User / Archive notification
+READ --> ARCHIVED : User / Archive notification
+ARCHIVED --> [*]
+@enduml
+
+@startuml 28-notification-outbox
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title Notification Outbox
+
+[*] --> WAITING : System / Write event to outbox
+WAITING --> PROCESSING : Worker / Pick up event\n[available time reached]
+PROCESSING --> PROCESSED : Worker / Complete processing
+PROCESSING --> RETRY_WAIT : Worker / Record failure\nand increment attempt count
+RETRY_WAIT --> PROCESSING : Worker / Retry\n[next available time reached]
+PROCESSED --> [*]
+@enduml
+
+@startuml 29-payment-allocation
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title Payment Allocation
+
+[*] --> ACTIVE : System / Allocate funds\n[payment is PAID]
+ACTIVE --> ACTIVE : Owning use case / Consume or release prepayment\n[operation is valid]
+ACTIVE --> REVERSED : Owning use case / Reverse allocation\n[reversal conditions satisfied]
+REVERSED --> [*]
+@enduml
+
+@startuml 30-debt-transaction
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title Debt Transaction
+
+[*] --> POSTED : Owning use case / Post receivable transaction
+POSTED --> REVERSED : Owning use case / Reverse transaction\n[corresponding reversal posting recorded]
+REVERSED --> [*]
+@enduml

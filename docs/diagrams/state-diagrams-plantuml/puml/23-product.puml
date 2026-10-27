@@ -1,0 +1,36 @@
+@startuml 23-product
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title Product
+
+[*] --> ACTIVE : Staff / Create active product
+ACTIVE --> INACTIVE : Staff / Temporarily stop selling
+INACTIVE --> ACTIVE : Staff / Resume selling
+ACTIVE --> DISCONTINUED : Staff / Discontinue product
+INACTIVE --> DISCONTINUED : Staff / Discontinue product
+DISCONTINUED --> ACTIVE : Staff / Restore as active\n[permitted]
+DISCONTINUED --> INACTIVE : Staff / Restore as inactive\n[permitted]
+@enduml

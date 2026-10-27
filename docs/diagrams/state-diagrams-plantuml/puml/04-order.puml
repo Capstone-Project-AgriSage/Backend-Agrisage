@@ -1,0 +1,52 @@
+@startuml 04-order
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title Sales Order
+
+state "Order Fulfillment in Progress" as FULFILLMENT {
+    state CONFIRMED
+    state PREPARING
+    state READY_FOR_FULFILLMENT
+    state PARTIALLY_FULFILLED
+    CONFIRMED --> PREPARING : Staff / Start preparation
+    CONFIRMED --> READY_FOR_FULFILLMENT : Staff / Mark ready
+    PREPARING --> READY_FOR_FULFILLMENT : Staff / Finish preparation
+    CONFIRMED --> PARTIALLY_FULFILLED : System / Record partial fulfillment
+    PREPARING --> PARTIALLY_FULFILLED : System / Record partial fulfillment
+    READY_FOR_FULFILLMENT --> PARTIALLY_FULFILLED : System / Record partial fulfillment
+    PARTIALLY_FULFILLED --> PARTIALLY_FULFILLED : System / Record more fulfillment\n[remainder still open]
+}
+[*] --> PENDING_CONFIRMATION : Farmer or Staff / Create order
+PENDING_CONFIRMATION --> PENDING_CONFIRMATION : Farmer or Staff / Update pending order
+PENDING_CONFIRMATION --> CONFIRMED : Staff / Confirm order\nSystem / Reserve stock and credit if required
+PENDING_CONFIRMATION --> CANCELLED : Farmer or Staff / Cancel pending order
+FULFILLMENT --> COMPLETED : System / Close fulfillment\n[all quantities fulfilled, none cancelled]
+FULFILLMENT --> PARTIALLY_CANCELLED : System / Close fulfillment\n[some fulfilled, remaining quantities cancelled]
+FULFILLMENT --> CANCELLED : Staff / Cancel remaining quantities\n[nothing fulfilled and no open remainder]
+COMPLETED --> [*]
+PARTIALLY_CANCELLED --> [*]
+CANCELLED --> [*]
+@enduml

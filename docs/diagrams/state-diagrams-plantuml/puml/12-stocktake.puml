@@ -1,0 +1,38 @@
+@startuml 12-stocktake
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title Stocktake
+
+[*] --> DRAFT : Staff / Create stocktake
+DRAFT --> IN_PROGRESS : Staff / Start stocktake
+DRAFT --> CANCELLED : Staff / Cancel draft stocktake
+IN_PROGRESS --> IN_PROGRESS : Staff / Record physical count
+IN_PROGRESS --> IN_PROGRESS : Staff / Refresh stale snapshot and recount
+IN_PROGRESS --> COMPLETED : Staff / Complete stocktake\n[all items counted and validated]
+IN_PROGRESS --> CANCELLED : Staff / Cancel stocktake
+COMPLETED --> [*]
+CANCELLED --> [*]
+@enduml

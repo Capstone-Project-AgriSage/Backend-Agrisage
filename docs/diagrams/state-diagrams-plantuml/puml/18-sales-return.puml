@@ -1,0 +1,45 @@
+@startuml 18-sales-return
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title Sales Return
+
+[*] --> REQUESTED : Farmer or Staff / Submit return request
+REQUESTED --> REQUESTED : Staff / Update return items
+REQUESTED --> APPROVED : Staff / Approve request
+REQUESTED --> REJECTED : Staff / Reject request
+REQUESTED --> CANCELLED : Staff / Cancel request
+APPROVED --> RECEIVED : Staff / Receive returned goods
+APPROVED --> CANCELLED : Staff / Cancel before goods received
+RECEIVED --> RECEIVED : Staff / Inspect individual items
+RECEIVED --> INSPECTED : Staff / Complete all inspections\nSystem / Determine debt reduction and refund
+INSPECTED --> PARTIALLY_RESOLVED : System / Record partial resolution
+INSPECTED --> COMPLETED : Return use case / Complete all required resolution
+PARTIALLY_RESOLVED --> PARTIALLY_RESOLVED : System / Continue restocking or settlement
+PARTIALLY_RESOLVED --> COMPLETED : Return use case / Complete all required resolution
+REJECTED --> [*]
+CANCELLED --> [*]
+COMPLETED --> [*]
+@enduml

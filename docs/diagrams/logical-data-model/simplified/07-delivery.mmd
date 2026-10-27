@@ -1,0 +1,63 @@
+erDiagram
+    direction TB
+    deliveries {
+        Identifier id PK
+        Identifier order_id FK
+        String delivery_number
+        String status
+    }
+    delivery_attempt_items {
+        Identifier id PK
+        Identifier delivery_attempt_id FK
+        Identifier delivery_item_lot_allocation_id FK
+        Integer attempted_base_quantity
+        Integer delivered_base_quantity
+        Integer failed_base_quantity
+    }
+    delivery_attempts {
+        Identifier id PK
+        Identifier delivery_id FK
+        Integer attempt_number
+        String status
+    }
+    delivery_incidents {
+        Identifier id PK
+        Identifier delivery_id FK
+        String incident_type
+        Integer affected_base_quantity "optional"
+        String status
+    }
+    delivery_item_lot_allocations {
+        Identifier id PK
+        Identifier delivery_item_id FK
+        Identifier inventory_lot_id FK
+        Integer allocated_base_quantity
+        Integer delivered_base_quantity
+        String status
+    }
+    delivery_items {
+        Identifier id PK
+        Identifier delivery_id FK
+        Identifier order_item_id FK
+        Integer planned_base_quantity
+        Integer delivered_base_quantity
+        String status
+    }
+    inventory_lots {
+        Identifier id PK
+    }
+    order_items {
+        Identifier id PK
+    }
+    orders {
+        Identifier id PK
+    }
+    deliveries ||--o{ delivery_attempts : "delivery_id"
+    deliveries ||--o{ delivery_incidents : "delivery_id"
+    deliveries ||--o{ delivery_items : "delivery_id"
+    delivery_attempts ||--o{ delivery_attempt_items : "delivery_attempt_id"
+    delivery_item_lot_allocations ||--o{ delivery_attempt_items : "delivery_item_lot_allocation_id"
+    delivery_items ||--o{ delivery_item_lot_allocations : "delivery_item_id"
+    inventory_lots ||--o{ delivery_item_lot_allocations : "inventory_lot_id"
+    order_items ||--o{ delivery_items : "order_item_id"
+    orders ||--o{ deliveries : "order_id"

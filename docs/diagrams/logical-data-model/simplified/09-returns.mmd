@@ -1,0 +1,51 @@
+erDiagram
+    direction TB
+    delivery_item_lot_allocations {
+        Identifier id PK
+    }
+    order_items {
+        Identifier id PK
+    }
+    orders {
+        Identifier id PK
+    }
+    payments {
+        Identifier id PK
+    }
+    refunds {
+        Identifier id PK
+        Identifier order_id FK "optional"
+        Identifier original_payment_id FK "optional"
+        Identifier sales_return_id FK "optional"
+        String refund_number
+        Decimal amount
+        String status
+    }
+    sales_return_items {
+        Identifier id PK
+        Identifier delivery_item_lot_allocation_id FK "optional"
+        Identifier order_item_id FK
+        Identifier original_stock_movement_item_id FK "optional"
+        Identifier sales_return_id FK
+        Integer returned_base_quantity
+        Decimal return_value
+        String inventory_disposition
+    }
+    sales_returns {
+        Identifier id PK
+        Identifier order_id FK
+        String return_number
+        Decimal total_return_amount
+        String status
+    }
+    stock_movement_items {
+        Identifier id PK
+    }
+    delivery_item_lot_allocations |o--o{ sales_return_items : "delivery_item_lot_allocation_id"
+    order_items ||--o{ sales_return_items : "order_item_id"
+    orders |o--o{ refunds : "order_id"
+    orders ||--o{ sales_returns : "order_id"
+    payments |o--o{ refunds : "original_payment_id"
+    sales_returns |o--o{ refunds : "sales_return_id"
+    sales_returns ||--o{ sales_return_items : "sales_return_id"
+    stock_movement_items |o--o{ sales_return_items : "original_stock_movement_item_id"

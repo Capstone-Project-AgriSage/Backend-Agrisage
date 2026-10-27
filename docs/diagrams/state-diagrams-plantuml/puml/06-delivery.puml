@@ -1,0 +1,48 @@
+@startuml 06-delivery
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title Delivery
+
+state "Delivery Not Yet Closed" as OPEN_DELIVERY {
+    state DRAFT
+    state ASSIGNED
+    state OUT_FOR_DELIVERY
+    state PARTIALLY_DELIVERED
+    state RETRY_PENDING
+    DRAFT --> ASSIGNED : Staff / Assign delivery staff
+    ASSIGNED --> OUT_FOR_DELIVERY : Delivery Staff / Dispatch delivery
+    OUT_FOR_DELIVERY --> PARTIALLY_DELIVERED : System / Complete attempt\n[some delivered, remainder still open]
+    OUT_FOR_DELIVERY --> RETRY_PENDING : System / Complete attempt\n[attempt delivered nothing, remainder still open]
+    PARTIALLY_DELIVERED --> OUT_FOR_DELIVERY : Delivery Staff / Dispatch remaining goods
+    RETRY_PENDING --> OUT_FOR_DELIVERY : Delivery Staff / Retry delivery
+}
+[*] --> DRAFT : Staff / Create delivery
+OUT_FOR_DELIVERY --> DELIVERED : System / Complete attempt\n[nothing remains to deliver]
+OPEN_DELIVERY --> CANCELLED : Staff / Cancel remainder\n[nothing ever delivered, no attempt in progress]
+OPEN_DELIVERY --> DELIVERED : Staff / Cancel remainder\n[some goods already delivered, no attempt in progress]
+DELIVERED --> [*]
+CANCELLED --> [*]
+@enduml

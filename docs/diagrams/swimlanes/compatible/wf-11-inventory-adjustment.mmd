@@ -1,0 +1,27 @@
+%%{init: {"theme":"dark"}}%%
+flowchart LR
+  accTitle: WF-11 - Manual Inventory Adjustment
+  subgraph OWNER["Store Owner / Admin"]
+    direction TB
+    S((Start))
+    O1("Select existing lots; enter base-unit deltas, reason and note")
+    O2("Correct data or move affected reservations first")
+    O3("Review posted movement; link to delivery incident if applicable")
+    E((End))
+  end
+  subgraph BACKEND["Backend System"]
+    direction TB
+    B1("Validate permission, store, nonzero deltas and same sign; lock lots")
+    D1{"Increase or decrease?"}
+    B2("Validate entered/current average unit cost; zero-stock lot needs entered cost")
+    B3("Use lot average cost; ensure resulting stock is at least reserved stock")
+    D2{"All lines valid?"}
+    B4("One transaction: post ADJUSTMENT_IN or ADJUSTMENT_OUT with items")
+    B5("Update balances and cost value; record audit; commit")
+    B6("Reject request; no partial stock change")
+  end
+  S --> O1 --> B1 --> D1
+  D1 -->|Increase| B2 --> D2
+  D1 -->|Decrease| B3 --> D2
+  D2 -->|No| B6 --> O2 --> E
+  D2 -->|Yes| B4 --> B5 --> O3 --> E

@@ -1,0 +1,40 @@
+@startuml 13-inventory-reservation
+!pragma layout elk
+left to right direction
+hide empty description
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1
+skinparam ArrowFontName Arial
+skinparam ArrowFontSize 10
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam state {
+    BackgroundColor White
+    BorderColor #555555
+    BorderThickness 1
+    FontColor #111111
+    FontStyle plain
+    RoundCorner 14
+    StartColor Black
+    EndColor Black
+}
+
+title Inventory Reservation
+
+[*] --> ACTIVE : System / Reserve inventory for order
+ACTIVE --> ACTIVE : System / Release part\n[nothing consumed, remainder still reserved]
+ACTIVE --> PARTIALLY_CONSUMED : Fulfillment / Consume part\n[remaining quantity > 0]
+ACTIVE --> CONSUMED : Fulfillment / Consume all remaining quantity
+ACTIVE --> RELEASED : System / Release all\n[nothing ever consumed]
+ACTIVE --> CANCELLED : System / Cancel order\n[nothing ever consumed]
+PARTIALLY_CONSUMED --> PARTIALLY_CONSUMED : System / Consume or release more\n[remaining quantity > 0]
+PARTIALLY_CONSUMED --> CONSUMED : System / Consume or release remainder\n[remaining quantity = 0]
+CONSUMED --> [*]
+RELEASED --> [*]
+CANCELLED --> [*]
+@enduml

@@ -97,13 +97,15 @@ public sealed class PermissionConfigurationService(IAgriSageDbContext db, ICurre
     {
         var overrides = await (from o in db.StoreMemberPermissions.AsNoTracking()
             join p in db.Permissions.AsNoTracking() on o.PermissionId equals p.Id
-            where o.StoreMemberId == member.Id && p.IsActive orderby p.Code select new PermissionOverride(p.Code, o.IsGranted)).ToListAsync(token);
+            where o.StoreMemberId == member.Id && p.IsActive && o.IsGranted != null
+            orderby p.Code select new PermissionOverride(p.Code, o.IsGranted)).ToListAsync(token);
         var active = (await db.Permissions.AsNoTracking().Where(p => p.IsActive && p.IsDelegable).Select(p => p.Code).ToListAsync(token))
             .Where(c => !PermissionCatalog.Retired.Contains(c)).ToList();
         var effective = await permissions.ForUserAsync(member.UserId, token);
         return new(member.UserId, member.User.FullName, "SALES_STAFF", member.StoreId, member.Version, member.User.Role.Version,
             (await permissions.RoleDefaultsAsync(member.User.RoleId, token)).Order(StringComparer.Ordinal).ToList(), effective.Permissions,
-            overrides, active.Where(c => manager.Permissions.Contains(c)).Order(StringComparer.Ordinal).ToList());
+            overrides, active.Where(c => manager.Permissions.Contains(c)).Order(StringComparer.Ordinal).ToList())
+            { PermissionCeiling = await permissions.SaleCeilingAsync(token) };
     }
     public async Task<MemberPermissionsResponse> SetMemberAsync(Guid userId, SetMemberPermissionsRequest request, CancellationToken token)
     {

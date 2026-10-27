@@ -1,0 +1,36 @@
+%%{init: {"theme":"dark"}}%%
+swimlane-beta TB
+  accTitle: WF-09 - Supplier Receiving and Excel Import
+  subgraph SUPPLIER["Supplier"]
+    S((Start))
+    P1("Deliver goods and supplier invoice")
+    E((End))
+  end
+  subgraph SALES["Sales Staff"]
+    R1("Inspect delivered goods; select supplier")
+    D1{"Input method?"}
+    R2("Enter receipt lines manually")
+    R3("Fill AgriSage Excel template; upload for preview")
+    R4("Correct invalid lines or spreadsheet")
+    R5("Import validated file")
+    R6("Review DRAFT; confirm receipt")
+  end
+  subgraph BACKEND["Backend System"]
+    B1("Parse Excel; preview products, packaging, lot, expiry and costs")
+    D2{"Every Excel row valid?"}
+    B2("Validate manual lines; create or update DRAFT")
+    B3("Revalidate import; create one DRAFT; reject entire file on errors")
+    B4("Revalidate DRAFT and active supplier; lock affected lots")
+    D3{"Receipt can be confirmed?"}
+    B5("One transaction: resolve/create logical lots; post STOCK_IN and movement items")
+    B6("Increase base-unit stock; update lot Weighted Average Cost; confirm receipt; commit")
+    B7("Reject confirmation; no stock changes")
+  end
+  S --> P1 --> R1 --> D1
+  D1 -->|Manual| R2 --> B2 --> R6
+  D1 -->|Excel| R3 --> B1 --> D2
+  D2 -->|No| R4 --> D1
+  D2 -->|Yes| R5 --> B3 --> R6
+  R6 --> B4 --> D3
+  D3 -->|No| B7 --> R4
+  D3 -->|Yes| B5 --> B6 --> E

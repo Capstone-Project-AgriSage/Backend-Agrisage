@@ -1,0 +1,156 @@
+erDiagram
+    active_ingredients {
+        Identifier id PK
+    }
+    agent_reviews {
+        Identifier id PK
+        Identifier ai_disease_id_snapshot FK "nullable"
+        String_2000_ comment "nullable"
+        String_30_ decision
+        Identifier diagnosis_case_id FK
+        Identifier final_disease_id FK "nullable"
+        Boolean is_current
+        Identifier primary_ai_inference_id FK "nullable"
+        DateTime reviewed_at
+        Identifier reviewer_member_id FK
+        DateTime superseded_at "nullable"
+        Identifier superseded_by_review_id FK "nullable"
+    }
+    ai_inferences {
+        Identifier id PK
+        Identifier ai_model_id FK
+        Identifier ai_policy_config_id FK
+        Decimal_7_6_ confidence
+        Identifier diagnosis_case_id FK
+        Identifier diagnosis_image_id FK
+        Integer inference_duration_ms "nullable"
+        DateTime inferred_at
+        Boolean passed_policy
+        String_100_ predicted_class_label
+        Identifier predicted_disease_id FK "nullable"
+        JSON raw_output "nullable"
+        String_20_ status
+        JSON top_predictions "nullable"
+    }
+    ai_models {
+        Identifier id PK
+        String_100_ architecture "nullable"
+        JSON class_labels
+        Identifier created_by FK
+        DateTime deployed_at "nullable"
+        String_50_ framework
+        Integer input_height "nullable"
+        Integer input_width "nullable"
+        JSON metrics "nullable"
+        String_1000_ model_storage_url
+        String_150_ name
+        DateTime retired_at "nullable"
+        String_30_ status
+        String_50_ version
+    }
+    ai_policy_configs {
+        Identifier id PK
+        Identifier ai_model_id FK
+        Identifier created_by FK
+        DateTime effective_from
+        DateTime effective_to "nullable"
+        Decimal_5_4_ minimum_confidence
+        Decimal_5_4_ minimum_margin "nullable"
+        JSON parameters "nullable"
+        Boolean requires_human_review
+        String_20_ status
+        Integer top_k
+        String_50_ version
+    }
+    diagnosis_cases {
+        Identifier id PK
+        String_50_ case_number UQ
+        DateTime completed_at "nullable"
+        String_50_ crop_type
+        String_1000_ farmer_note "nullable"
+        Identifier farmer_profile_id FK
+        Identifier final_disease_id FK "nullable"
+        String_1000_ review_summary "nullable"
+        String_30_ status
+        DateTime submitted_at
+    }
+    diagnosis_images {
+        Identifier id PK
+        Identifier diagnosis_case_id FK
+        String_255_ file_name "nullable"
+        Integer64 file_size_bytes "nullable"
+        Integer height "nullable"
+        String_1500_ image_url
+        Boolean is_primary
+        String_100_ mime_type "nullable"
+        String_1000_ storage_key
+        DateTime uploaded_at
+        Integer width "nullable"
+    }
+    disease_treatments {
+        Identifier id PK
+        Identifier active_ingredient_id FK "nullable"
+        Identifier disease_id FK
+        String instructions
+        Boolean is_active
+        String precautions "nullable"
+        Integer priority
+        String_255_ title
+        String_30_ treatment_type
+    }
+    diseases {
+        Identifier id PK
+        String causes "nullable"
+        String_50_ code UQ
+        String_50_ crop_type
+        String description "nullable"
+        Boolean is_active
+        Boolean is_healthy_class
+        String_200_ name
+        String prevention "nullable"
+        String_255_ scientific_name "nullable"
+        String symptoms "nullable"
+    }
+    farmer_profiles {
+        Identifier id PK
+    }
+    recommendation_items {
+        Identifier id PK
+        Identifier agent_review_id FK
+        DateTime approved_at
+        Identifier approved_by FK
+        Identifier diagnosis_case_id FK
+        Identifier disease_treatment_id FK "nullable"
+        Boolean is_active
+        Integer rank_order
+        String_1000_ reason "nullable"
+        String_20_ recommendation_type
+        Identifier store_product_id FK "nullable"
+    }
+    store_members {
+        Identifier id PK
+    }
+    store_products {
+        Identifier id PK
+    }
+    diseases |o--o{ agent_reviews : "ai_disease_id_snapshot"
+    diagnosis_cases ||--o{ agent_reviews : "diagnosis_case_id"
+    diseases |o--o{ agent_reviews : "final_disease_id"
+    ai_inferences |o--o{ agent_reviews : "primary_ai_inference_id"
+    store_members ||--o{ agent_reviews : "reviewer_member_id"
+    agent_reviews |o--o{ agent_reviews : "superseded_by_review_id"
+    ai_models ||--o{ ai_inferences : "ai_model_id"
+    ai_policy_configs ||--o{ ai_inferences : "ai_policy_config_id"
+    diagnosis_cases ||--o{ ai_inferences : "diagnosis_case_id"
+    diagnosis_images ||--o{ ai_inferences : "diagnosis_image_id"
+    diseases |o--o{ ai_inferences : "predicted_disease_id"
+    ai_models ||--o{ ai_policy_configs : "ai_model_id"
+    farmer_profiles ||--o{ diagnosis_cases : "farmer_profile_id"
+    diseases |o--o{ diagnosis_cases : "final_disease_id"
+    diagnosis_cases ||--o{ diagnosis_images : "diagnosis_case_id"
+    active_ingredients |o--o{ disease_treatments : "active_ingredient_id"
+    diseases ||--o{ disease_treatments : "disease_id"
+    agent_reviews ||--o{ recommendation_items : "agent_review_id"
+    diagnosis_cases ||--o{ recommendation_items : "diagnosis_case_id"
+    disease_treatments |o--o{ recommendation_items : "disease_treatment_id"
+    store_products |o--o{ recommendation_items : "store_product_id"
