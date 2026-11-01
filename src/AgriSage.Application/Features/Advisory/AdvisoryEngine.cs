@@ -22,11 +22,12 @@ public sealed class AdvisoryEngine(IAgriSageDbContext context, IPriceResolver pr
     // An offered product and the link it comes from (the session log keeps the link).
     public sealed record Entry(AdvisoryProduct Product, Guid DiseaseProductId);
 
-    public sealed record Outcome(IReadOnlyList<Entry> Protection, IReadOnlyList<Entry> Nutrition, bool HasApprovedLinks)
+    // EmptyReason says why nothing is offered (AdvisoryText), or null when something is.
+    public sealed record Outcome(IReadOnlyList<Entry> Protection, IReadOnlyList<Entry> Nutrition, string? EmptyReason)
     {
         public IEnumerable<Entry> All => Protection.Concat(Nutrition);
 
-        public static Outcome Empty(bool hasApprovedLinks) => new([], [], hasApprovedLinks);
+        public static Outcome Empty(string reason) => new([], [], reason);
     }
 
     private sealed record StoreProductRow(Guid Id, Guid ProductId, string Name, string Sku, string? ImageUrl);
@@ -41,10 +42,15 @@ public sealed class AdvisoryEngine(IAgriSageDbContext context, IPriceResolver pr
             .ToListAsync(cancellationToken);
         if (links.Count == 0)
         {
-            return Outcome.Empty(hasApprovedLinks: false);
+            return Outcome.Empty(AdvisoryText.NoApprovedProduct);
         }
 
         var fitting = links.Where(l => l.FitsStage(stage)).ToList();
+        if (fitting.Count == 0)
+        {
+            return Outcome.Empty(AdvisoryText.NoProductForStage);
+        }
+
         var storeId = await ActiveStore.GetIdAsync(context, cancellationToken);
         var productIds = fitting.Select(l => l.ProductId).Distinct().ToList();
 
@@ -56,7 +62,7 @@ public sealed class AdvisoryEngine(IAgriSageDbContext context, IPriceResolver pr
             .ToDictionary(g => g.Key, g => g.OrderBy(sp => sp.Id).First());
         if (storeProducts.Count == 0)
         {
-            return Outcome.Empty(hasApprovedLinks: true);
+            return Outcome.Empty(AdvisoryText.NothingInStore);
         }
 
         var packagings = (await context.ProductPackagings.AsNoTracking()
@@ -111,7 +117,10 @@ public sealed class AdvisoryEngine(IAgriSageDbContext context, IPriceResolver pr
             entries.Add((new Entry(product, link.Id), link, plan?.TotalAmount));
         }
 
-        return new Outcome(Rank(entries, RecommendationGroup.Protection), Rank(entries, RecommendationGroup.Nutrition), HasApprovedLinks: true);
+        var protection = Rank(entries, RecommendationGroup.Protection);
+        var nutrition = Rank(entries, RecommendationGroup.Nutrition);
+
+        return new Outcome(protection, nutrition, protection.Count + nutrition.Count == 0 ? AdvisoryText.NothingInStore : null);
     }
 
     // V8: out of stock last, then priority (higher first), then estimated amount, then name; at most five per group.

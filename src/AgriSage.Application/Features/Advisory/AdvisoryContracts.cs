@@ -13,6 +13,8 @@ public static class AdvisoryText
     public const string NoApprovedProduct = "NO_APPROVED_PRODUCT";
 
     public const string NothingInStore = "NOTHING_IN_STORE";
+
+    public const string NoProductForStage = "NO_PRODUCT_FOR_STAGE";
 }
 
 // Values of AdvisoryProduct.StockStatus: a status only, never a quantity (V7).

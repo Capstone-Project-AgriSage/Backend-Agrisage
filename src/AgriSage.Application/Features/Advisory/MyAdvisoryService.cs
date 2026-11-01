@@ -95,7 +95,7 @@ public sealed class MyAdvisoryService(
             stage is null ? null : EnumText.Format(stage.Value),
             outcome.Protection.Select(e => e.Product).ToList(),
             outcome.Nutrition.Select(e => e.Product).ToList(),
-            outcome.All.Any() ? null : outcome.HasApprovedLinks ? AdvisoryText.NothingInStore : AdvisoryText.NoApprovedProduct,
+            outcome.All.Any() ? null : outcome.EmptyReason ?? AdvisoryText.NothingInStore,
             AdvisoryText.SafetyNote);
     }
 

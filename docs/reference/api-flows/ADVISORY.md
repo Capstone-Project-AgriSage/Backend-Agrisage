@@ -68,7 +68,7 @@ by Thông tư 28/2026/TT-BNNMT (effective 2026-08-15).
 | V10 | **Area is sent in square metres** (`areaSqm`, `> 0`, at most 1 000 000). The clients convert from hectare (10 000), công (1 000) or sào Bắc Bộ (360). |
 | V11 | **Sessions are a log, not a cart.** Each recommendation is recorded in `advisory_sessions` with its items for tracing and statistics. A call by the same Farmer for the same problem within 30 minutes updates the latest session (area, stage; items replaced) instead of creating a new one. |
 | V12 | **Advice needs a sign-in** (the Farmer's group decides the price). The public catalog stays anonymous. |
-| V13 | **AI integration (replaces AI_DIAGNOSIS.md D13).** For a `CONFIDENT`, non-Healthy result the suggested products are the `PROTECTION` links of the predicted problem that pass V7 (at most 5, V8 order); `reason` is the text of the link. `UNCERTAIN` and Healthy show none (unchanged). `disease_treatments.active_ingredient_id` remains as information ("Hoạt chất") and no longer selects products. Cases decided under 1.0 (`VERIFIED`) keep their stored recommendations. |
+| V13 | **AI integration (replaces AI_DIAGNOSIS.md D13).** For a `CONFIDENT`, non-Healthy result the suggested products are the `PROTECTION` links of the predicted problem that pass V7 and are not out of stock (at most 5, V8 order; the advisory screen shows out-of-stock products last, the diagnosis result leaves them out); `reason` is the text of the link. `UNCERTAIN` and Healthy show none (unchanged). `disease_treatments.active_ingredient_id` remains as information ("Hoạt chất") and no longer selects products. Cases decided under 1.0 (`VERIFIED`) keep their stored recommendations. |
 | V14 | **Safety text** is always returned with a result: read the label, wear protective clothing, respect the pre-harvest interval, ask the store when unsure. |
 
 ---
@@ -176,8 +176,9 @@ The migration also carries the permission rows (§8) as data (`HasData`), like `
 ```
 
 `plan` is `null` under V6. `careGuidance` holds the active `CULTURAL`, `PREVENTIVE` and `OTHER` treatments; `CHEMICAL`
-treatments are not shown here (their products are the links). `emptyReason` is `NO_APPROVED_PRODUCT` when both lists
-are empty for lack of an approved link, `NOTHING_IN_STORE` when approved links exist but none is sellable, else `null`.
+treatments are not shown here (their products are the links). `emptyReason` is `null` when something is offered; otherwise `NO_APPROVED_PRODUCT` (no approved link for the
+problem), `NO_PRODUCT_FOR_STAGE` (approved links exist but none fits the growth stage) or `NOTHING_IN_STORE` (links fit
+but no product can be sold in the store).
 
 Errors: `400` (area out of range, unknown stage), `404` (unknown or inactive problem, another Farmer's case),
 `422` (the Healthy class: nothing to advise).
@@ -192,7 +193,7 @@ once per line of `plan.lines`; no new cart route.
 | Route | Permission | Notes |
 |---|---|---|
 | `POST /api/diseases` | `DISEASES.CREATE` | `{code, name, problemType, scientificName?, description?, symptoms?, causes?, prevention?, searchKeywords?}`; `code` matches `^[A-Z][A-Z0-9_]{1,48}$`, `409` if taken; never a healthy class |
-| `PUT /api/diseases/{id}` | `DISEASES.UPDATE` | existing route; gains `searchKeywords`; `code`, `problemType` and the healthy flag never change |
+| `PUT /api/diseases/{id}` | `DISEASES.UPDATE` | existing route; gains `searchKeywords` (omitted keeps the stored value, an empty text clears it); `code`, `problemType` and the healthy flag never change |
 | `POST /api/diseases/{id}/activate`, `…/deactivate` | `DISEASES.UPDATE` | the five seeded classes cannot be deactivated (`422`) |
 | `GET /api/diseases/{id}/products` | `DISEASE_PRODUCTS.READ` | every status |
 | `POST /api/diseases/{id}/products` | `DISEASE_PRODUCTS.CREATE` | `{productId, recommendationGroup, registrationSource?, reason?, doseText, doseSource?, dosePerHaBase?, applications?, preHarvestDays?, growthStages?, priority?}` → `201`, status `DRAFT`; `409` if the product is already linked |

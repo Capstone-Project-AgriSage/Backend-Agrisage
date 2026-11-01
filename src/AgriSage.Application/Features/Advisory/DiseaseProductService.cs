@@ -20,7 +20,7 @@ public sealed class DiseaseProductService(
     {
         await EnsureDiseaseAsync(diseaseId, cancellationToken);
 
-        var rows = await Query().Where(r => r.Link.DiseaseId == diseaseId).ToListAsync(cancellationToken);
+        var rows = await Query(diseaseId: diseaseId).ToListAsync(cancellationToken);
 
         return rows
             .OrderBy(r => r.Link.Status == DiseaseProductStatus.Inactive ? 1 : 0)
@@ -117,15 +117,29 @@ public sealed class DiseaseProductService(
 
     private sealed record Row(DiseaseProduct Link, string Sku, string ProductName, string? BaseUnit);
 
-    private IQueryable<Row> Query() =>
-        context.DiseaseProducts.AsNoTracking().Select(l => new Row(
+    // The filters are applied before the projection: a query cannot be filtered after it has been shaped into a Row.
+    private IQueryable<Row> Query(Guid? diseaseId = null, Guid? id = null)
+    {
+        var links = context.DiseaseProducts.AsNoTracking().AsQueryable();
+        if (diseaseId is { } disease)
+        {
+            links = links.Where(l => l.DiseaseId == disease);
+        }
+
+        if (id is { } linkId)
+        {
+            links = links.Where(l => l.Id == linkId);
+        }
+
+        return links.Select(l => new Row(
             l,
             l.Product.Sku,
             l.Product.Name,
             l.Product.Packagings.Where(p => p.IsBaseUnit).Select(p => p.Unit.Name).FirstOrDefault()));
+    }
 
     private async Task<DiseaseProductResponse> GetAsync(Guid id, CancellationToken cancellationToken) =>
-        ToResponse(await Query().FirstAsync(r => r.Link.Id == id, cancellationToken));
+        ToResponse(await Query(id: id).FirstAsync(cancellationToken));
 
     private async Task<DiseaseProduct> FindAsync(Guid id, CancellationToken cancellationToken) =>
         await context.DiseaseProducts.FirstOrDefaultAsync(l => l.Id == id, cancellationToken)
