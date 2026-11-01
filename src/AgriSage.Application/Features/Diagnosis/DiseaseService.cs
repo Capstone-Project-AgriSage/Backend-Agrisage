@@ -10,7 +10,7 @@ namespace AgriSage.Application.Features.Diagnosis;
 
 // Disease content and treatment guidance shown to Farmers after a verified diagnosis (AI_DIAGNOSIS.md section 10).
 // The five diseases are seeded; their code and healthy flag never change. Treatments are deactivated, never removed.
-public sealed class DiseaseService(IAgriSageDbContext context) : IDiseaseService
+public sealed class DiseaseService(IAgriSageDbContext context, AuditTrail? audit = null) : IDiseaseService
 {
     public async Task<IReadOnlyList<DiseaseResponse>> ListAsync(bool? isActive, CancellationToken cancellationToken)
     {
@@ -29,6 +29,59 @@ public sealed class DiseaseService(IAgriSageDbContext context) : IDiseaseService
         return diseases.Select(d => ToResponse(d, treatments.Where(t => t.DiseaseId == d.Id), ingredients)).ToList();
     }
 
+    public async Task<DiseaseResponse> CreateAsync(DiseaseCreateRequest request, CancellationToken cancellationToken)
+    {
+        var code = request.Code.Trim();
+        if (await context.Diseases.IgnoreQueryFilters().AnyAsync(d => d.Code == code, cancellationToken))
+        {
+            throw new ConflictException($"A problem with code '{code}' already exists.");
+        }
+
+        var disease = new Disease(
+            code,
+            request.Name.Trim(),
+            isHealthyClass: false,
+            scientificName: Texts.Clean(request.ScientificName),
+            description: Texts.Clean(request.Description),
+            symptoms: Texts.Clean(request.Symptoms),
+            causes: Texts.Clean(request.Causes),
+            prevention: Texts.Clean(request.Prevention),
+            problemType: EnumText.TryParse<ProblemType>(request.ProblemType, out var type) ? type : ProblemType.Disease,
+            searchKeywords: request.SearchKeywords);
+        context.Diseases.Add(disease);
+        audit?.Record(
+            "DISEASE_CREATED", "DISEASE", disease.Id, await ActiveStore.GetIdAsync(context, cancellationToken),
+            newValues: new { disease.Code, disease.Name, ProblemType = EnumText.Format(disease.ProblemType) });
+        await context.SaveChangesAsync(cancellationToken);
+
+        return ToResponse(disease, [], new Dictionary<Guid, string>());
+    }
+
+    public async Task<DiseaseResponse> SetActiveAsync(Guid id, bool active, CancellationToken cancellationToken)
+    {
+        var disease = await context.Diseases.FirstOrDefaultAsync(d => d.Id == id, cancellationToken)
+            ?? throw new NotFoundException("Disease", id);
+
+        if (active)
+        {
+            disease.Activate();
+        }
+        else
+        {
+            disease.Deactivate();
+        }
+
+        audit?.Record(
+            active ? "DISEASE_ACTIVATED" : "DISEASE_DEACTIVATED", "DISEASE", disease.Id,
+            await ActiveStore.GetIdAsync(context, cancellationToken), newValues: new { disease.Code, disease.IsActive });
+        await context.SaveChangesAsync(cancellationToken);
+
+        var treatments = await context.DiseaseTreatments.AsNoTracking()
+            .Where(t => t.DiseaseId == id).ToListAsync(cancellationToken);
+
+        return ToResponse(disease, treatments, await IngredientNamesAsync(treatments, cancellationToken));
+    }
+
     public async Task<DiseaseResponse> UpdateAsync(Guid id, DiseaseUpdateRequest request, CancellationToken cancellationToken)
     {
         var disease = await context.Diseases.FirstOrDefaultAsync(d => d.Id == id, cancellationToken)
@@ -41,6 +94,13 @@ public sealed class DiseaseService(IAgriSageDbContext context) : IDiseaseService
             Texts.Clean(request.Symptoms),
             Texts.Clean(request.Causes),
             Texts.Clean(request.Prevention));
+
+        // Omitted keywords keep the stored value (older clients never send them); an empty text clears them.
+        if (request.SearchKeywords is not null)
+        {
+            disease.UpdateKeywords(request.SearchKeywords);
+        }
+
         await context.SaveChangesAsync(cancellationToken);
 
         var treatments = await context.DiseaseTreatments.AsNoTracking()
@@ -148,7 +208,8 @@ public sealed class DiseaseService(IAgriSageDbContext context) : IDiseaseService
         Disease d, IEnumerable<DiseaseTreatment> treatments, IReadOnlyDictionary<Guid, string> ingredients) => new(
         d.Id, d.Code, d.Name, d.ScientificName, d.CropType, d.Description, d.Symptoms, d.Causes, d.Prevention,
         d.IsHealthyClass, d.IsActive,
-        treatments.OrderByDescending(t => t.Priority).ThenBy(t => t.Title).Select(t => ToItem(t, ingredients)).ToList());
+        treatments.OrderByDescending(t => t.Priority).ThenBy(t => t.Title).Select(t => ToItem(t, ingredients)).ToList(),
+        EnumText.Format(d.ProblemType), d.SearchKeywords);
 
     private static TreatmentItem ToItem(DiseaseTreatment t, IReadOnlyDictionary<Guid, string> ingredients) => new(
         t.Id, t.DiseaseId, EnumText.Format(t.TreatmentType), t.Title, t.Instructions, t.ActiveIngredientId,

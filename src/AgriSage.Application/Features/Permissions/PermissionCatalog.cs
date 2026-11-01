@@ -224,6 +224,15 @@ public static class PermissionCatalog
         new(new Guid("98a54aff-24d4-fb26-0d83-219cdee0727c"), "DISEASE_TREATMENTS.ACTIVATE", "DISEASE_TREATMENTS", "Kích hoạt", false, ["ADMIN", "STORE_OWNER"]),
         new(new Guid("9ca7a59c-d319-6bf6-ed5e-3be6fe837f89"), "DISEASE_TREATMENTS.DEACTIVATE", "DISEASE_TREATMENTS", "Ngừng hoạt động", false, ["ADMIN", "STORE_OWNER"]),
         new(new Guid("7c802e5d-521a-9096-18ba-9c92e0624d2b"), "STAFF.SET_AI_REVIEW", "STAFF", "Set Ai Review", false, ["ADMIN", "STORE_OWNER"]),
+        // Advisory (docs/reference/api-flows/ADVISORY.md section 8).
+        new(new Guid("6685ff65-dfae-4548-b4ae-45cf3b5516e1"), "MY_ADVISORY.READ", "MY_ADVISORY", "Xem", false, ["FARMER"]),
+        new(new Guid("3ef7a81d-d4b6-4765-95a7-25fe71f50077"), "DISEASES.CREATE", "DISEASES", "Tạo", false, ["ADMIN", "STORE_OWNER"]),
+        new(new Guid("744b80a0-66dc-43ee-82c3-94cc495b379d"), "DISEASE_PRODUCTS.READ", "DISEASE_PRODUCTS", "Xem", false, ["ADMIN", "SALES_STAFF", "STORE_OWNER"]),
+        new(new Guid("ee3bc3cf-0d99-45bd-912c-ea87589bc125"), "DISEASE_PRODUCTS.CREATE", "DISEASE_PRODUCTS", "Tạo", false, ["ADMIN", "STORE_OWNER"]),
+        new(new Guid("0b105d26-9577-4d4a-b543-da6462da3239"), "DISEASE_PRODUCTS.UPDATE", "DISEASE_PRODUCTS", "Sửa", false, ["ADMIN", "STORE_OWNER"]),
+        new(new Guid("0ffa96d2-14aa-4e8a-afdc-fac7e4a0b7dc"), "DISEASE_PRODUCTS.APPROVE", "DISEASE_PRODUCTS", "Duyệt", false, ["ADMIN", "STORE_OWNER"]),
+        new(new Guid("72f2c147-3d41-48cb-b468-8fe1bf840734"), "DISEASE_PRODUCTS.DEACTIVATE", "DISEASE_PRODUCTS", "Ngừng hoạt động", false, ["ADMIN", "STORE_OWNER"]),
+        new(new Guid("68125cc1-2493-4215-9eae-0db63c3093df"), "ADVISORY_SESSIONS.READ", "ADVISORY_SESSIONS", "Xem", false, ["ADMIN", "SALES_STAFF", "STORE_OWNER"]),
     ]);
     public static IReadOnlyDictionary<string, Definition> ByCode { get; } = Entries.ToDictionary(p => p.Code, StringComparer.Ordinal);
 

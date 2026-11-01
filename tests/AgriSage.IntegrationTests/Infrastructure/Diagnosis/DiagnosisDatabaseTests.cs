@@ -2,15 +2,20 @@ using System.Text.Json;
 using AgriSage.Application.Common;
 using AgriSage.Application.Common.Exceptions;
 using AgriSage.Application.Common.Interfaces;
+using AgriSage.Application.Features.Advisory;
 using AgriSage.Application.Features.Customers;
 using AgriSage.Application.Features.Diagnosis;
 using AgriSage.Application.Features.Notifications;
+using AgriSage.Application.Features.Pricing;
 using AgriSage.Domain.Common.Exceptions;
+using AgriSage.Domain.Features.Advisory.Entities;
+using AgriSage.Domain.Features.Advisory.Enums;
 using AgriSage.Domain.Features.Customers.Entities;
 using AgriSage.Domain.Features.Diagnosis.Entities;
 using AgriSage.Domain.Features.Diagnosis.Enums;
 using AgriSage.Domain.Features.Identity.Entities;
 using AgriSage.Domain.Features.Identity.Enums;
+using AgriSage.Domain.Features.Inventory.Entities;
 using AgriSage.Domain.Features.Products.Entities;
 using AgriSage.Domain.Features.Products.Enums;
 using AgriSage.Domain.Features.Stores.Entities;
@@ -120,7 +125,7 @@ public sealed class DiagnosisDatabaseTests
             await using var db = Session.NewContext();
             var clock = new Clock();
             var audit = new AuditTrail(db, Session.CurrentUser, clock);
-            var results = new DiagnosisResultBuilder(db);
+            var results = new DiagnosisResultBuilder(db, new AdvisoryEngine(db, new PriceResolver(db), clock));
             var runner = new DiagnosisAiRunner(
                 db, Ai, clock, new RowLockService(db), results, audit, Options, NullLogger<DiagnosisAiRunner>.Instance);
             var urls = new DiagnosisImageUrls(Files, clock, NullLogger<DiagnosisImageUrls>.Instance);
@@ -138,7 +143,9 @@ public sealed class DiagnosisDatabaseTests
             var clock = new Clock();
             var urls = new DiagnosisImageUrls(Files, clock, NullLogger<DiagnosisImageUrls>.Instance);
 
-            return await call(new DiagnosisCaseService(db, new DiagnosisResultBuilder(db), urls));
+            var results = new DiagnosisResultBuilder(db, new AdvisoryEngine(db, new PriceResolver(db), clock));
+
+            return await call(new DiagnosisCaseService(db, results, urls));
         }
 
         public async Task<T> Models<T>(Func<IAiModelService, Task<T>> call)
@@ -159,13 +166,17 @@ public sealed class DiagnosisDatabaseTests
         Guid ChemicalId,
         Guid CulturalId,
         Guid Suggested,
+        Guid LinkedWithoutIngredient,
         Guid NotSellable,
         Guid InactiveProduct,
         Guid OtherStore,
         Guid DeletedLink,
-        Guid NoIngredient)
+        Guid IngredientOnly,
+        Guid DraftLink,
+        Guid OutOfStock)
     {
-        public Guid[] All => [Suggested, NotSellable, InactiveProduct, OtherStore, DeletedLink, NoIngredient];
+        public Guid[] All =>
+            [Suggested, LinkedWithoutIngredient, NotSellable, InactiveProduct, OtherStore, DeletedLink, IngredientOnly, DraftLink, OutOfStock];
     }
 
     private static byte[] Photo() => [0xFF, 0xD8, 0xFF, 0xE0, 0, 1, 2, 3, 4, 5, 6, 7, 8];
@@ -260,8 +271,9 @@ public sealed class DiagnosisDatabaseTests
             store.Id, modelId, policyId, diseases, tag);
     }
 
-    // A chemical treatment of Leaf Blast with a new active ingredient and products around it: one the Farmer can buy, and
-    // five that must never be suggested.
+    // A chemical treatment of Leaf Blast and products around it: two the Farmer can buy (approved links, in stock), and
+    // seven that must never be suggested: not sellable, inactive, in another store, a deleted link, an ingredient match
+    // without a link, a draft link, and one without stock.
     private static async Task<Catalog> LeafBlastCatalogAsync(Env env)
     {
         await using var db = env.Session.NewContext();
@@ -277,7 +289,11 @@ public sealed class DiagnosisDatabaseTests
             env.Diseases["LEAF_BLAST"], TreatmentType.Cultural, $"Giảm đạm {env.Tag}", "Bón cân đối.", priority: 999);
         db.AddRange(chemical, cultural);
 
-        StoreProduct Sold(string name, Guid storeId, ProductStatus status = ProductStatus.Active, bool withIngredient = true)
+        var links = new Dictionary<Guid, DiseaseProduct>();
+
+        StoreProduct Sold(
+            string name, Guid storeId, ProductStatus status = ProductStatus.Active, bool withIngredient = true,
+            bool? approvedLink = true, bool stock = true, int priority = 1000)
         {
             var product = new Product(category.Id, $"P-{env.Tag}-{name}", $"{name} {env.Tag}", status: status);
             var storeProduct = new StoreProduct(storeId, product.Id);
@@ -287,10 +303,32 @@ public sealed class DiagnosisDatabaseTests
                 db.Add(new ProductActiveIngredient(product.Id, ingredient.Id, "75WP"));
             }
 
+            if (approvedLink is { } approved)
+            {
+                var link = new DiseaseProduct(
+                    env.Diseases["LEAF_BLAST"], product.Id, RecommendationGroup.Protection, "Theo nhãn",
+                    registrationSource: "TT 75/2025/TT-BNNMT, Phụ lục I", priority: priority);
+                if (approved)
+                {
+                    link.Approve(env.StaffUserId, DateTimeOffset.UtcNow);
+                }
+
+                db.Add(link);
+                links[storeProduct.Id] = link;
+            }
+
+            if (stock && storeId == env.StoreId)
+            {
+                var lot = new InventoryLot(storeProduct.Id, $"L{Guid.NewGuid():N}"[..10], null, DateOnly.FromDateTime(DateTime.UtcNow).AddDays(300));
+                lot.ReceiveStock(100, 1000m);
+                db.Add(lot);
+            }
+
             return storeProduct;
         }
 
         var suggested = Sold("Beam", env.StoreId);
+        var linkedWithoutIngredient = Sold("NoIngredient", env.StoreId, withIngredient: false, priority: 900);
         var notSellable = Sold("NotSellable", env.StoreId);
         notSellable.MarkNotSellable();
         var inactiveProduct = Sold("Inactive", env.StoreId, ProductStatus.Inactive);
@@ -298,19 +336,21 @@ public sealed class DiagnosisDatabaseTests
         db.Add(otherStore);
         var elsewhere = Sold("Elsewhere", otherStore.Id);
         var deletedLink = Sold("DeletedLink", env.StoreId);
-        var noIngredient = Sold("NoIngredient", env.StoreId, withIngredient: false);
+        var ingredientOnly = Sold("IngredientOnly", env.StoreId, approvedLink: null);
+        var draftLink = Sold("Draft", env.StoreId, approvedLink: false);
+        var outOfStock = Sold("OutOfStock", env.StoreId, stock: false);
         await db.SaveChangesAsync(Token);
 
-        var link = await db.ProductActiveIngredients.SingleAsync(l => l.ProductId == deletedLink.ProductId, Token);
-        db.Remove(link); // soft delete
+        db.Remove(links[deletedLink.Id]); // soft delete
         await db.SaveChangesAsync(Token);
 
         return new Catalog(
-            chemical.Id, cultural.Id, suggested.Id, notSellable.Id, inactiveProduct.Id, elsewhere.Id, deletedLink.Id, noIngredient.Id);
+            chemical.Id, cultural.Id, suggested.Id, linkedWithoutIngredient.Id, notSellable.Id, inactiveProduct.Id, elsewhere.Id,
+            deletedLink.Id, ingredientOnly.Id, draftLink.Id, outOfStock.Id);
     }
 
     [RealDbFact]
-    public async Task A_confident_result_is_shown_at_once_with_treatments_and_products_matched_by_active_ingredient()
+    public async Task A_confident_result_is_shown_at_once_with_treatments_and_the_approved_linked_products()
     {
         await using var session = await RealDb.Session.StartAsync();
         var env = await PrepareAsync(session);
@@ -336,11 +376,11 @@ public sealed class DiagnosisDatabaseTests
         Assert.Equal($"Tricyclazole {env.Tag}", chemical.ActiveIngredientName);
         Assert.Contains(result.Treatments, t => t.Id == catalog.CulturalId);
 
-        // Only the product the Farmer can buy in this store, and its reason names the ingredient.
+        // Only the products with an approved link that the Farmer can buy in this store and that are in stock. An
+        // ingredient match without a link is not enough; a product without the ingredient but with a link is offered.
         var mine = result.Products.Where(p => catalog.All.Contains(p.StoreProductId)).ToList();
-        var product = Assert.Single(mine);
-        Assert.Equal(catalog.Suggested, product.StoreProductId);
-        Assert.Equal($"Chứa hoạt chất Tricyclazole {env.Tag}", product.Reason);
+        Assert.Equal([catalog.Suggested, catalog.LinkedWithoutIngredient], mine.Select(p => p.StoreProductId).ToList());
+        Assert.All(mine, p => Assert.StartsWith("Đăng ký phòng trừ:", p.Reason));
         Assert.True(result.Products.Count <= 5);
 
         // 2. The store sees the evidence and exactly what the Farmer saw.
@@ -363,6 +403,7 @@ public sealed class DiagnosisDatabaseTests
         await using var db = session.NewContext();
         var audit = await db.AuditLogs.SingleAsync(a => a.EntityId == created.Id && a.Action == "DIAGNOSIS_AI_RESULT", Token);
         Assert.Contains(catalog.Suggested.ToString(), audit.NewValues);
+        Assert.DoesNotContain(catalog.IngredientOnly.ToString(), audit.NewValues);
         Assert.Contains("CONFIDENT", audit.NewValues);
 
         var collector = new CommittedNotificationService(db, new NotificationWriter(db));

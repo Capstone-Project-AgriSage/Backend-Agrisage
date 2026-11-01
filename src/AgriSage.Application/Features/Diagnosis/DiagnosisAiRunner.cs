@@ -184,10 +184,13 @@ public sealed class DiagnosisAiRunner(
         Guid caseId, string classLabel, Guid? diseaseId, bool passed, CancellationToken cancellationToken)
     {
         var certainty = passed ? DiagnosisCertainty.Confident : DiagnosisCertainty.Uncertain;
-        var healthy = diseaseId is { } id && await context.Diseases.AsNoTracking()
-            .Where(d => d.Id == id).Select(d => d.IsHealthyClass).FirstOrDefaultAsync(cancellationToken);
-        var suggested = diseaseId is { } disease && DiagnosisResultPolicy.OffersProducts(certainty, healthy)
-            ? (await results.SuggestAsync(disease, cancellationToken)).Select(p => p.StoreProductId).ToList()
+        var disease = diseaseId is { } id
+            ? await context.Diseases.AsNoTracking().FirstOrDefaultAsync(d => d.Id == id, cancellationToken)
+            : null;
+        var farmerProfileId = await context.DiagnosisCases.AsNoTracking()
+            .Where(c => c.Id == caseId).Select(c => (Guid?)c.FarmerProfileId).FirstOrDefaultAsync(cancellationToken);
+        var suggested = disease is not null && DiagnosisResultPolicy.OffersProducts(certainty, disease.IsHealthyClass)
+            ? (await results.SuggestAsync(disease, farmerProfileId, cancellationToken)).Select(p => p.StoreProductId).ToList()
             : [];
         var storeId = await ActiveStore.GetIdAsync(context, cancellationToken);
 

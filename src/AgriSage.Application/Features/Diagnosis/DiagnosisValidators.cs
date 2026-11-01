@@ -1,5 +1,7 @@
 using System.Text.Json;
+using AgriSage.Application.Common;
 using AgriSage.Application.Common.Validators;
+using AgriSage.Domain.Features.Diagnosis.Enums;
 using FluentValidation;
 
 namespace AgriSage.Application.Features.Diagnosis;
@@ -86,6 +88,25 @@ public sealed class DiseaseUpdateRequestValidator : AbstractValidator<DiseaseUpd
         RuleFor(r => r.Symptoms).MaximumLength(4000);
         RuleFor(r => r.Causes).MaximumLength(4000);
         RuleFor(r => r.Prevention).MaximumLength(4000);
+        RuleFor(r => r.SearchKeywords).MaximumLength(1000);
+    }
+}
+
+public sealed class DiseaseCreateRequestValidator : AbstractValidator<DiseaseCreateRequest>
+{
+    public DiseaseCreateRequestValidator()
+    {
+        RuleFor(r => r.Code).NotEmpty().Matches("^[A-Z][A-Z0-9_]{1,48}$")
+            .WithMessage("Code must be 2 to 49 characters: capital letters, digits and underscores, starting with a letter.");
+        RuleFor(r => r.Name).NotEmpty().MaximumLength(200);
+        RuleFor(r => r.ProblemType).NotEmpty().Must(type => EnumText.TryParse<ProblemType>(type, out _))
+            .WithMessage("ProblemType must be DISEASE, PEST, WEED, NUTRITION or GROWTH.");
+        RuleFor(r => r.ScientificName).MaximumLength(255);
+        RuleFor(r => r.Description).MaximumLength(4000);
+        RuleFor(r => r.Symptoms).MaximumLength(4000);
+        RuleFor(r => r.Causes).MaximumLength(4000);
+        RuleFor(r => r.Prevention).MaximumLength(4000);
+        RuleFor(r => r.SearchKeywords).MaximumLength(1000);
     }
 }
 

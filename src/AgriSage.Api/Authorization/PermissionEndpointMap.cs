@@ -309,6 +309,18 @@ public static class PermissionEndpointMap
         ["DiseaseTreatments.Update"] = "DISEASE_TREATMENTS.UPDATE",
         ["DiseaseTreatments.Activate"] = "DISEASE_TREATMENTS.ACTIVATE",
         ["DiseaseTreatments.Delete"] = "DISEASE_TREATMENTS.DEACTIVATE",
+        // Advisory (docs/reference/api-flows/ADVISORY.md section 8).
+        ["MeAdvisory.Problems"] = "MY_ADVISORY.READ",
+        ["MeAdvisory.Recommend"] = "MY_ADVISORY.READ",
+        ["Diseases.Create"] = "DISEASES.CREATE",
+        ["Diseases.Activate"] = "DISEASES.UPDATE",
+        ["Diseases.Deactivate"] = "DISEASES.UPDATE",
+        ["DiseaseProducts.List"] = "DISEASE_PRODUCTS.READ",
+        ["DiseaseProducts.Create"] = "DISEASE_PRODUCTS.CREATE",
+        ["DiseaseProducts.Update"] = "DISEASE_PRODUCTS.UPDATE",
+        ["DiseaseProducts.Approve"] = "DISEASE_PRODUCTS.APPROVE",
+        ["DiseaseProducts.Delete"] = "DISEASE_PRODUCTS.DEACTIVATE",
+        ["AdvisorySessions.List"] = "ADVISORY_SESSIONS.READ",
     };
     public static string? CodeFor(ControllerActionDescriptor action) => Codes.GetValueOrDefault(action.ControllerName + "." + action.ActionName);
     public static bool IsException(ControllerActionDescriptor action) => IdentityAndPublicControllers.Contains(action.ControllerName)

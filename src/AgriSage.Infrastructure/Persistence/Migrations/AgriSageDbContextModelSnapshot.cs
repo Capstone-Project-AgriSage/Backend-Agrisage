@@ -22,6 +22,290 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("AgriSage.Domain.Features.Advisory.Entities.AdvisorySession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<decimal?>("AreaSqm")
+                        .HasPrecision(12, 1)
+                        .HasColumnType("numeric(12,1)")
+                        .HasColumnName("area_sqm");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("DeletedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<Guid?>("DiagnosisCaseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("diagnosis_case_id");
+
+                    b.Property<Guid>("DiseaseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("disease_id");
+
+                    b.Property<Guid>("FarmerProfileId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farmer_profile_id");
+
+                    b.Property<string>("GrowthStage")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("growth_stage");
+
+                    b.Property<string>("QueryText")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("query_text");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("source");
+
+                    b.Property<Guid>("StoreId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("store_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_advisory_sessions");
+
+                    b.HasIndex("DiagnosisCaseId")
+                        .HasDatabaseName("ix_advisory_sessions_diagnosis_case_id");
+
+                    b.HasIndex("DiseaseId")
+                        .HasDatabaseName("ix_advisory_sessions_disease_id");
+
+                    b.HasIndex("StoreId", "CreatedAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_advisory_sessions_store_id_created_at");
+
+                    b.HasIndex("FarmerProfileId", "DiseaseId", "CreatedAt")
+                        .IsDescending(false, false, true)
+                        .HasDatabaseName("ix_advisory_sessions_farmer_profile_id_disease_id_created_at");
+
+                    b.ToTable("advisory_sessions", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_advisory_sessions_area_sqm", "area_sqm IS NULL OR area_sqm > 0");
+
+                            t.HasCheckConstraint("ck_advisory_sessions_growth_stage", "growth_stage IN ('SEEDLING', 'TILLERING', 'BOOTING', 'HEADING', 'RIPENING')");
+
+                            t.HasCheckConstraint("ck_advisory_sessions_source", "source IN ('TEXT', 'DIAGNOSIS_CASE')");
+                        });
+                });
+
+            modelBuilder.Entity("AgriSage.Domain.Features.Advisory.Entities.AdvisorySessionItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<Guid>("AdvisorySessionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("advisory_session_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("DeletedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<Guid>("DiseaseProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("disease_product_id");
+
+                    b.Property<decimal?>("EstimatedAmount")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("estimated_amount");
+
+                    b.Property<int>("RankOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("rank_order");
+
+                    b.Property<Guid>("StoreProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("store_product_id");
+
+                    b.Property<long?>("SuggestedBaseQuantity")
+                        .HasColumnType("bigint")
+                        .HasColumnName("suggested_base_quantity");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_advisory_session_items");
+
+                    b.HasIndex("AdvisorySessionId")
+                        .HasDatabaseName("ix_advisory_session_items_advisory_session_id");
+
+                    b.HasIndex("DiseaseProductId")
+                        .HasDatabaseName("ix_advisory_session_items_disease_product_id");
+
+                    b.HasIndex("StoreProductId")
+                        .HasDatabaseName("ix_advisory_session_items_store_product_id");
+
+                    b.ToTable("advisory_session_items", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_advisory_session_items_suggested_base_quantity", "suggested_base_quantity IS NULL OR suggested_base_quantity > 0");
+                        });
+                });
+
+            modelBuilder.Entity("AgriSage.Domain.Features.Advisory.Entities.DiseaseProduct", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<int>("Applications")
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("applications");
+
+                    b.Property<DateTimeOffset?>("ApprovedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("approved_at");
+
+                    b.Property<Guid?>("ApprovedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("approved_by");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("DeletedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<Guid>("DiseaseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("disease_id");
+
+                    b.Property<decimal?>("DosePerHaBase")
+                        .HasPrecision(12, 3)
+                        .HasColumnType("numeric(12,3)")
+                        .HasColumnName("dose_per_ha_base");
+
+                    b.Property<string>("DoseSource")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("dose_source");
+
+                    b.Property<string>("DoseText")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("dose_text");
+
+                    b.Property<string>("GrowthStages")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("growth_stages");
+
+                    b.Property<int?>("PreHarvestDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("pre_harvest_days");
+
+                    b.Property<int>("Priority")
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("priority");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_id");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("reason");
+
+                    b.Property<string>("RecommendationGroup")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("recommendation_group");
+
+                    b.Property<string>("RegistrationSource")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("registration_source");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("DRAFT")
+                        .HasColumnName("status");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_disease_products");
+
+                    b.HasIndex("ProductId")
+                        .HasDatabaseName("ix_disease_products_product_id");
+
+                    b.HasIndex("DiseaseId", "ProductId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_disease_products_disease_id_product_id")
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.HasIndex("DiseaseId", "Status")
+                        .HasDatabaseName("ix_disease_products_disease_id_status");
+
+                    b.ToTable("disease_products", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_disease_products_applications", "applications BETWEEN 1 AND 10");
+
+                            t.HasCheckConstraint("ck_disease_products_approval", "status <> 'APPROVED' OR (approved_by IS NOT NULL AND approved_at IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_disease_products_dose_per_ha_base", "dose_per_ha_base IS NULL OR dose_per_ha_base > 0");
+
+                            t.HasCheckConstraint("ck_disease_products_pre_harvest_days", "pre_harvest_days IS NULL OR pre_harvest_days >= 0");
+
+                            t.HasCheckConstraint("ck_disease_products_reason", "recommendation_group <> 'NUTRITION' OR reason IS NOT NULL");
+
+                            t.HasCheckConstraint("ck_disease_products_recommendation_group", "recommendation_group IN ('PROTECTION', 'NUTRITION')");
+
+                            t.HasCheckConstraint("ck_disease_products_registration_source", "recommendation_group <> 'PROTECTION' OR registration_source IS NOT NULL");
+
+                            t.HasCheckConstraint("ck_disease_products_status", "status IN ('DRAFT', 'APPROVED', 'INACTIVE')");
+                        });
+                });
+
             modelBuilder.Entity("AgriSage.Domain.Features.Audit.Entities.AuditLog", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2520,10 +2804,22 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("prevention");
 
+                    b.Property<string>("ProblemType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasDefaultValue("DISEASE")
+                        .HasColumnName("problem_type");
+
                     b.Property<string>("ScientificName")
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)")
                         .HasColumnName("scientific_name");
+
+                    b.Property<string>("SearchKeywords")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("search_keywords");
 
                     b.Property<string>("Symptoms")
                         .HasColumnType("text")
@@ -2540,7 +2836,10 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("ux_diseases_code");
 
-                    b.ToTable("diseases", (string)null);
+                    b.ToTable("diseases", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_diseases_problem_type", "problem_type IN ('DISEASE', 'PEST', 'WEED', 'NUTRITION', 'GROWTH')");
+                        });
                 });
 
             modelBuilder.Entity("AgriSage.Domain.Features.Diagnosis.Entities.DiseaseTreatment", b =>
@@ -5089,6 +5388,78 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                             IsDelegable = false,
                             Module = "STAFF",
                             Name = "Set Ai Review"
+                        },
+                        new
+                        {
+                            Id = new Guid("6685ff65-dfae-4548-b4ae-45cf3b5516e1"),
+                            Code = "MY_ADVISORY.READ",
+                            IsActive = true,
+                            IsDelegable = false,
+                            Module = "MY_ADVISORY",
+                            Name = "Xem"
+                        },
+                        new
+                        {
+                            Id = new Guid("3ef7a81d-d4b6-4765-95a7-25fe71f50077"),
+                            Code = "DISEASES.CREATE",
+                            IsActive = true,
+                            IsDelegable = false,
+                            Module = "DISEASES",
+                            Name = "Tạo"
+                        },
+                        new
+                        {
+                            Id = new Guid("744b80a0-66dc-43ee-82c3-94cc495b379d"),
+                            Code = "DISEASE_PRODUCTS.READ",
+                            IsActive = true,
+                            IsDelegable = false,
+                            Module = "DISEASE_PRODUCTS",
+                            Name = "Xem"
+                        },
+                        new
+                        {
+                            Id = new Guid("ee3bc3cf-0d99-45bd-912c-ea87589bc125"),
+                            Code = "DISEASE_PRODUCTS.CREATE",
+                            IsActive = true,
+                            IsDelegable = false,
+                            Module = "DISEASE_PRODUCTS",
+                            Name = "Tạo"
+                        },
+                        new
+                        {
+                            Id = new Guid("0b105d26-9577-4d4a-b543-da6462da3239"),
+                            Code = "DISEASE_PRODUCTS.UPDATE",
+                            IsActive = true,
+                            IsDelegable = false,
+                            Module = "DISEASE_PRODUCTS",
+                            Name = "Sửa"
+                        },
+                        new
+                        {
+                            Id = new Guid("0ffa96d2-14aa-4e8a-afdc-fac7e4a0b7dc"),
+                            Code = "DISEASE_PRODUCTS.APPROVE",
+                            IsActive = true,
+                            IsDelegable = false,
+                            Module = "DISEASE_PRODUCTS",
+                            Name = "Duyệt"
+                        },
+                        new
+                        {
+                            Id = new Guid("72f2c147-3d41-48cb-b468-8fe1bf840734"),
+                            Code = "DISEASE_PRODUCTS.DEACTIVATE",
+                            IsActive = true,
+                            IsDelegable = false,
+                            Module = "DISEASE_PRODUCTS",
+                            Name = "Ngừng hoạt động"
+                        },
+                        new
+                        {
+                            Id = new Guid("68125cc1-2493-4215-9eae-0db63c3093df"),
+                            Code = "ADVISORY_SESSIONS.READ",
+                            IsActive = true,
+                            IsDelegable = false,
+                            Module = "ADVISORY_SESSIONS",
+                            Name = "Xem"
                         });
                 });
 
@@ -8757,6 +9128,105 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_suppliers_store_id_name");
 
                     b.ToTable("suppliers", (string)null);
+                });
+
+            modelBuilder.Entity("AgriSage.Domain.Features.Advisory.Entities.AdvisorySession", b =>
+                {
+                    b.HasOne("AgriSage.Domain.Features.Identity.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("DeletedBy")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_advisory_sessions_deleted_by");
+
+                    b.HasOne("AgriSage.Domain.Features.Diagnosis.Entities.DiagnosisCase", null)
+                        .WithMany()
+                        .HasForeignKey("DiagnosisCaseId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_advisory_sessions_diagnosis_case_id");
+
+                    b.HasOne("AgriSage.Domain.Features.Diagnosis.Entities.Disease", null)
+                        .WithMany()
+                        .HasForeignKey("DiseaseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_advisory_sessions_disease_id");
+
+                    b.HasOne("AgriSage.Domain.Features.Customers.Entities.FarmerProfile", null)
+                        .WithMany()
+                        .HasForeignKey("FarmerProfileId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_advisory_sessions_farmer_profile_id");
+
+                    b.HasOne("AgriSage.Domain.Features.Stores.Entities.Store", null)
+                        .WithMany()
+                        .HasForeignKey("StoreId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_advisory_sessions_store_id");
+                });
+
+            modelBuilder.Entity("AgriSage.Domain.Features.Advisory.Entities.AdvisorySessionItem", b =>
+                {
+                    b.HasOne("AgriSage.Domain.Features.Advisory.Entities.AdvisorySession", null)
+                        .WithMany()
+                        .HasForeignKey("AdvisorySessionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_advisory_session_items_advisory_session_id");
+
+                    b.HasOne("AgriSage.Domain.Features.Identity.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("DeletedBy")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_advisory_session_items_deleted_by");
+
+                    b.HasOne("AgriSage.Domain.Features.Advisory.Entities.DiseaseProduct", null)
+                        .WithMany()
+                        .HasForeignKey("DiseaseProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_advisory_session_items_disease_product_id");
+
+                    b.HasOne("AgriSage.Domain.Features.Products.Entities.StoreProduct", null)
+                        .WithMany()
+                        .HasForeignKey("StoreProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_advisory_session_items_store_product_id");
+                });
+
+            modelBuilder.Entity("AgriSage.Domain.Features.Advisory.Entities.DiseaseProduct", b =>
+                {
+                    b.HasOne("AgriSage.Domain.Features.Identity.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("ApprovedBy")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_disease_products_approved_by");
+
+                    b.HasOne("AgriSage.Domain.Features.Identity.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("DeletedBy")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_disease_products_deleted_by");
+
+                    b.HasOne("AgriSage.Domain.Features.Diagnosis.Entities.Disease", "Disease")
+                        .WithMany()
+                        .HasForeignKey("DiseaseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_disease_products_disease_id");
+
+                    b.HasOne("AgriSage.Domain.Features.Products.Entities.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_disease_products_product_id");
+
+                    b.Navigation("Disease");
+
+                    b.Navigation("Product");
                 });
 
             modelBuilder.Entity("AgriSage.Domain.Features.Audit.Entities.AuditLog", b =>

@@ -1,4 +1,5 @@
 using AgriSage.Domain.Features.Diagnosis.Entities;
+using AgriSage.Domain.Features.Diagnosis.Enums;
 using AgriSage.Infrastructure.Persistence.Configurations.Common;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -22,6 +23,8 @@ internal sealed class DiseaseConfiguration : EntityConfiguration<Disease>
         builder.Property(disease => disease.Prevention).IsText();
         builder.Property(disease => disease.IsHealthyClass).HasDbDefault(false);
         builder.Property(disease => disease.IsActive).HasDbDefault(true);
+        builder.Property(disease => disease.ProblemType).HasMaxLength(30).HasDbDefault(ProblemType.Disease);
+        builder.Property(disease => disease.SearchKeywords).HasMaxLength(1000);
 
         builder.HasIndex(disease => disease.Code).IsUnique();
     }
