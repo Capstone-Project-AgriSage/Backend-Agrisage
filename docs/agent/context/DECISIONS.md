@@ -22,7 +22,7 @@ These are stable decisions currently frozen for backend implementation.
 | Online payment | payOS |
 | Automated payOS refund | Out of MVP |
 | AI service | Python FastAPI + PyTorch |
-| AI authority | No Human Review since 2026-10-21 (lead's decision; AI_DIAGNOSIS.md 2.0): the Farmer sees the AI result at once, CONFIDENT or UNCERTAIN; products only for CONFIDENT, matched by active ingredient. The team improves the model by training instead of a manual gate |
+| AI authority | No Human Review since 2026-10-21 (lead's decision; AI_DIAGNOSIS.md 2.0): the Farmer sees the AI result at once, CONFIDENT or UNCERTAIN; products only for CONFIDENT, taken from approved links (ADVISORY.md). Choosing the photo-diagnosis model is postponed (2026-11-01) |
 | Promotions | Removed |
 | Store scope | One active store, real Store table retained |
 | Reporting tables | None initially; query transaction tables |
@@ -42,7 +42,8 @@ These are stable decisions currently frozen for backend implementation.
 | Return value rounding | `round2(qty × unit_price ÷ conversion, AwayFromZero)` — the only exception to money-is-never-rounded |
 | Return settlement | Debt adjustment + refund = total return value; Refund is a child of Sales Return; FAILED refund changes status only |
 | Diagnosis review | Removed 2026-10-21. Review tables and `can_review_ai` kept for cases decided before; a FAILED case is retried by its Farmer; store staff only read cases |
-| Recommendation eligibility | Computed suggestions for a CONFIDENT, non-Healthy AI result only (sellable store products whose product has an active ingredient of an active treatment of the disease, at most 5); UNCERTAIN → no CHEMICAL treatment, no product; Healthy → guidance only |
+| Recommendation eligibility | Suggestions for a CONFIDENT, non-Healthy AI result only, from approved `disease_products` links (not from an active-ingredient match, since 2026-11-02); UNCERTAIN → no CHEMICAL treatment, no product; Healthy → guidance only |
+| Advisory focus | 2026-11-02, after Review 2: the project goes deep on input consultation (problem to products). Two ways in: the Farmer types a problem, or comes from an AI diagnosis. Rule-based recommendation from reviewed links with registration source, dose, quantity for the area, price and stock; the model never names a product ([api-flows/ADVISORY.md](../../reference/api-flows/ADVISORY.md)). Rice only, about fifteen problems. Training our own AI model stops; the model for photos is chosen later |
 | Content/Notification lifecycle | Only documented invariants (published_at / resolved_at / read_at); no transition graph |
 | Audit Log | Append-only `BaseEntity`, immutable in Domain; separate `Audit` feature folder |
 | Attempt item DB CHECK | DB: `delivered + failed <= attempted` (each ≥ 0); `= attempted` is enforced by the Domain when the attempt completes |

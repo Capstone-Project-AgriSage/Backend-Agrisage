@@ -13,7 +13,7 @@ Keep this file high-signal; it is a map, not the project encyclopedia.
 - Web: React. Mobile: Flutter.
 - AI: Python + FastAPI + PyTorch.
 - Payment: payOS.
-- Current phase: **Business APIs, split by flow** — L1 counter sale, L2 online order & delivery, L3 credit & debt, L4 inventory & returns, in parallel; details in `docs/agent/context/CURRENT_STATE.md`.
+- Current phase: **Input consultation (advisory)** — problem or diagnosis to products, quantity, cart; see `docs/reference/api-flows/ADVISORY.md`. The business flows L1–L4 are done and only get fixes.
 - DB baseline: **67 tables**.
 - One active operational Store; never hard-code Store ID.
 
@@ -67,7 +67,7 @@ Products, Pricing,
 Suppliers, GoodsReceipts, Inventory,
 Orders, Payments, Deliveries,
 Credit, Debt, Returns,
-Diagnosis, Articles, Notifications, Reports
+Diagnosis, Advisory, Articles, Notifications, Reports
 ```
 
 A feature is a business area, not one table.
@@ -144,7 +144,7 @@ For DB work, open only exact relevant sections of the full design.
 - Payment↔Debt allocation uses `payment_allocations`.
 - payOS webhook processing is idempotent.
 - No AI Human Review (since 2026-10-21): the Farmer sees the AI result, CONFIDENT or UNCERTAIN, never a probability.
-- AI product suggestions only for a CONFIDENT, non-Healthy result, matched by active ingredient.
+- Product suggestions only from approved `disease_products` links (registration source, dose, price, stock); never from an ingredient match or a model; for AI, only for a CONFIDENT, non-Healthy result.
 - Production AI classes: Leaf Blast, Bacterial Leaf Blight, Brown Spot, Sheath Blight, Healthy.
 - Promotions are out of scope.
 

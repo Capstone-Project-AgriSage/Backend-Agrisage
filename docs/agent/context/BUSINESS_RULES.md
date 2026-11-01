@@ -39,7 +39,7 @@ Use this summary for navigation. For exact schema implications, open the relevan
 34. Product review requires purchase + successful fulfillment; max one review per Order Item/Farmer.
 35. Production AI scope: Rice — Leaf Blast, Bacterial Leaf Blight, Brown Spot, Sheath Blight, Healthy.
 36. No Human Review (since 2026-10-21, AI_DIAGNOSIS.md 2.0): the Farmer sees the result of the latest successful AI inference at once, marked CONFIDENT (policy passed) or UNCERTAIN (not passed), never as a probability.
-37. Product suggestions only for a CONFIDENT, non-Healthy AI result: store products the catalog sells whose product has an active ingredient of an active treatment of that disease (at most 5, computed at read time). An UNCERTAIN result shows no CHEMICAL treatment and no product.
+37. Product suggestions for a CONFIDENT, non-Healthy AI result come only from reviewed links: the `APPROVED` `PROTECTION` rows of `disease_products` for the predicted disease, limited to store products the catalog sells and that have a price and stock (at most 5, computed at read time). An active-ingredient match alone never offers a product. An UNCERTAIN result shows no CHEMICAL treatment and no product.
 38. Reports include Sales Revenue, COGS and Gross Profit; COGS uses actual fulfilled lot cost.
 39. No VAT/e-invoice integration in MVP; supplier invoice reference/file is allowed.
 40. Every DELETE API is soft delete or semantic cancel/void/reverse; no business hard delete.
@@ -64,6 +64,11 @@ Use this summary for navigation. For exact schema implications, open the relevan
 59. A Diagnosis Case that FAILED (or stayed SUBMITTED after a crash) can be retried by its Farmer; a retry appends a new inference, earlier ones stay. Cases reviewed before 2026-10-21 (VERIFIED / INCONCLUSIVE) keep their review and stay readable; no new review is created.
 60. `recommendation_items` are no longer written (they need a review); suggestions are computed, and the suggested store product ids are recorded in a `DIAGNOSIS_AI_RESULT` audit entry for each successful AI run. A Healthy result gets treatment guidance only, no product. `requires_human_review` is stored and ignored.
 61. Audit Logs are append-only: never updated or deleted.
+62. A product is offered for a problem (disease, pest, weed, nutrition, growth) only through an explicit link in `disease_products` that a person approved. `DRAFT` and `INACTIVE` links are never shown to a Farmer; changing the content of an approved link returns it to `DRAFT`; a crop-protection link names its registration (document and page), a fertilizer link gives its reason.
+63. Free text and photos only select a problem. No model or text search names a product; products come from the links.
+64. Advice quantity is computed in base units from the area, the dose per hectare and the number of applications, rounded up, priced with the Farmer's price list. The response gives a stock status only, never a stock quantity. The Healthy class gets no advice.
+65. Every recommendation is logged in `advisory_sessions` (with its items); the log is for tracing and statistics and is not a cart. Adding to the cart uses the normal cart; a recommendation reserves no stock.
+66. The five seeded AI classes are never deactivated and keep their code and healthy flag; a new problem is never a healthy class.
 
 ## Financial / Inventory Invariants
 

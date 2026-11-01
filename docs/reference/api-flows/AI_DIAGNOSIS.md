@@ -1,5 +1,6 @@
 # AI diagnosis — rice leaf disease, AI result shown to the Farmer, suggestions
 
+Version 2.1 — 2026-11-02: suggested products now come from reviewed problem-to-product links ([ADVISORY.md](ADVISORY.md), D13 replaced), no longer from an active-ingredient match.
 Version 2.0 — 2026-10-21. **Human Review is removed** (lead's decision, 2026-10-21): the Farmer sees the AI result as
 soon as the photo is analysed; no staff member confirms it. Version 1.0 (2026-10-10) required a `can_review_ai`
 reviewer before any result or recommendation; its routes for reviewing are gone (§8, §9).
@@ -13,7 +14,7 @@ Agent Review sections no longer apply); the `AI-Service` repository (`README.md`
 A Farmer photographs a rice leaf. The Python AI Service returns calibrated class probabilities. **This backend** applies
 the active policy (minimum confidence / margin) and stores the result. The Farmer then sees the predicted disease, how
 sure the AI is (`CONFIDENT` or `UNCERTAIN`, never a probability), the disease's guidance and, only when the AI is
-confident, products of the store whose active ingredient treats that disease. Store staff can read every case to
+confident, the products of the store that are linked, and approved, for that disease ([ADVISORY.md](ADVISORY.md)). Store staff can read every case to
 follow up with the Farmer; they no longer decide anything.
 
 Why: the model is right on about 0.57 of photos from a source it never saw (AI-Service `research/report.md` §4.2b), and
@@ -27,7 +28,7 @@ limited by D3 and D13.
 | # | Step (screen) | API | Effect |
 |---|---|---|---|
 | 1 | Admin registers the exported model and a policy, activates both | `POST /api/ai-models`, `POST /api/ai-models/{id}/policies`, `…/activate` | one ACTIVE model, one ACTIVE policy |
-| 2 | Owner enters disease content, treatments with their active ingredients, and links ingredients to products | `PUT /api/diseases/{id}`, `POST /api/diseases/{id}/treatments`, `PUT /api/products/{id}/ingredients` | content and suggestions available |
+| 2 | Owner enters disease content and treatments, links products to the disease and a reviewer approves the links ([ADVISORY.md](ADVISORY.md) §6) | `PUT /api/diseases/{id}`, `POST /api/diseases/{id}/treatments`, `POST /api/diseases/{id}/products`, `POST /api/disease-products/{id}/approve` | content and suggestions available |
 | 3 | Farmer photographs a leaf (mobile or Farmer web) | `POST /api/me/diagnosis-cases` | case `AI_COMPLETED` with a `result` (or `FAILED`) |
 | 4 | Farmer reads the result: disease, certainty, guidance, products (confident only) and adds a product to the cart | `GET /api/me/diagnosis-cases/{id}`, cart routes | — |
 | 5 | AI Service is down: case `FAILED`; the Farmer retries once it is back | `POST /api/me/diagnosis-cases/{id}/retry` | a new inference, case `AI_COMPLETED` |
@@ -70,7 +71,7 @@ a migration) and are hidden from the permission screens (§11).
 | D10 | **Model identity is checked.** An answer whose `model_version` differs from the ACTIVE model's `version`, or that has `stub = true` outside Development, is recorded as a FAILED inference (`raw_output.error = MODEL_VERSION_MISMATCH` / `STUB_REFUSED`), never as a result. |
 | D11 | **DELETE is semantic.** Cases are cancelled, treatments deactivated. No route removes an inference. |
 | D12 | **Case numbers** are `DG-yyyyMMdd-NNNN` (append `DG` to `DocumentNumbers`). |
-| D13 | **Suggested products are matched by active ingredient and computed at read time.** Ingredients = the active ingredients (active) of the predicted disease's active treatments. Products = store products of the active store that the public catalog sells (`CatalogRules.Sellable`: store product active and sellable, product ACTIVE, not deleted) and whose product has one of those ingredients (`product_active_ingredients`). Order: best matching treatment priority, then more matched ingredients, then name; at most 5; `reason` = "Chứa hoạt chất …". Nothing is stored in `recommendation_items` (it needs a review); each successful AI run writes a `DIAGNOSIS_AI_RESULT` audit entry with the certainty and the suggested store product ids, so what was suggested can be traced. |
+| D13 | **Suggested products come from reviewed links and are computed at read time (2.1, replaces the active-ingredient match of 2.0).** Products = the `APPROVED` `PROTECTION` rows of `disease_products` for the predicted disease whose store product passes `CatalogRules.Sellable` and whose stock and price pass [ADVISORY.md](ADVISORY.md) V7; order V8; at most 5; `reason` is the text of the link (e.g. "Đăng ký trị đạo ôn trên lúa"). A product with the same active ingredient but no approved link is **not** offered. `disease_treatments.active_ingredient_id` stays as information. Nothing is stored in `recommendation_items`; each successful AI run still writes a `DIAGNOSIS_AI_RESULT` audit entry with the certainty and the suggested store product ids. |
 | D14 | **The Farmer retries a failed analysis.** `retry` is allowed on a `FAILED` case, or a `SUBMITTED` case older than two minutes (D4 crash). It reruns the AI on the primary image with the active model; an unreachable AI Service gives `503` and records nothing. The store has no rerun any more. |
 | D15 | **Cases decided under 1.0 stay readable.** `VERIFIED` shows the reviewer's final disease and the stored recommendations of the current review (`certainty = VERIFIED`); `INCONCLUSIVE` keeps its comment and retake hint; an old `UNDER_REVIEW` case reads like `AI_COMPLETED`. No status is added or removed (the status check constraint stays). |
 
@@ -303,9 +304,9 @@ reads them.
 
 `treatmentType`: `CULTURAL`, `CHEMICAL`, `PREVENTIVE`, `OTHER`. `activeIngredientId` must be an **active** ingredient.
 Reference data is entered through these routes; it is not seeded (`SEED_REFERENCE_DATA.md`). In 2.0 this content is
-what every Farmer reads directly, and a treatment's active ingredient drives the product suggestions (D13): enter only
-content checked by someone who knows rice diseases. Products get their ingredients through
-`PUT /api/products/{id}/ingredients`.
+what every Farmer reads directly, and a treatment's active ingredient is information only (D13 2.1; products come from the reviewed links, ADVISORY.md): enter only
+content checked by someone who knows rice diseases. Products still get their ingredients through
+`PUT /api/products/{id}/ingredients` (shown to the Farmer as information).
 
 ---
 
@@ -364,7 +365,7 @@ Controller and action names that key the map: `MeDiagnosisCases.{Create,List,Get
 ## 14. Open points for the lead
 
 1. Retention period for diagnosis photos.
-2. Disease content, ingredients and product links in agrisage-dev must be entered and checked by someone who knows
-   rice diseases before a demo (D13 suggests pesticides with no human in between).
+2. Disease content and the product links in agrisage-dev must be entered, and the links approved, by someone who
+   knows rice diseases before a demo (the approval is the human check, ADVISORY.md V1).
 3. Correct the AI master document (`AgriSage_AI_Disease_Diagnosis_Master_v2.0.md`, Agent Review and AC-03/AC-05) and
    the use-case diagrams to the 2.0 flow.

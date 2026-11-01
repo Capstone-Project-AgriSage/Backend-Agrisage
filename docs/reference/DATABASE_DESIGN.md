@@ -7,7 +7,7 @@ notification deduplication. InitialCreate remains the historical 67-table baseli
 > **Database:** PostgreSQL (Supabase)  
 > **ORM:** Entity Framework Core + Npgsql  
 > **Design approach:** Detailed Database Design First → EF Core Code First → Migrations → Supabase  
-> **Current baseline:** 67 tables (`promotions` removed; `delivery_attempt_items` added)  
+> **Current baseline:** 67 tables (`promotions` removed; `delivery_attempt_items` added); later migrations add tables, e.g. the three advisory tables of section XXIV-A (2026-11-02)  
 > **Review status:** Relationship + FK + Constraint + Index review applied.  
 > **Candidate status:** Ready for final approval before EF Core entities / Initial Migration.  
 > **This document currently details tables 1–31.**  
@@ -4487,6 +4487,17 @@ is_healthy_class = true
 
 for the Rice production model.
 
+
+**Since 2026-11-02 (advisory, `api-flows/ADVISORY.md`):** `diseases` is the catalog of *problems* the store advises
+on, not only the AI classes. Two columns are added by the advisory migration:
+
+```text
+problem_type     varchar(30)   NOT NULL DEFAULT 'DISEASE'   -- DISEASE | PEST | WEED | NUTRITION | GROWTH
+search_keywords  varchar(1000) NULL                          -- folk names, symptoms; searched without accents
+```
+
+The five seeded rows keep their code and healthy flag and are never deactivated; the AI resolves a class by `code`.
+
 ---
 
 ## 56. `disease_treatments`
@@ -5279,6 +5290,78 @@ system automation
 ```
 
 `correlation_id` links multiple audit records created by one business transaction/request.
+
+---
+
+# XXIV-A. ADVISORY (added 2026-11-02; contract: `api-flows/ADVISORY.md`)
+
+Three tables, one migration. All are soft-deletable like the other business tables; business foreign keys are
+`Restrict`. Nothing here moves stock or debt.
+
+## disease_products
+
+Reviewed link between a problem and a product.
+
+```text
+disease_products
+----------------
+id                    uuid PK
+disease_id            uuid NOT NULL FK diseases.id
+product_id            uuid NOT NULL FK products.id
+recommendation_group  varchar(20)  NOT NULL        PROTECTION | NUTRITION
+registration_source   varchar(200) NULL            required for PROTECTION (document and page)
+reason                varchar(300) NULL            required for NUTRITION
+dose_text             varchar(500) NOT NULL
+dose_source           varchar(200) NULL
+dose_per_ha_base      numeric(12,3) NULL           base units of the product per hectare, > 0
+applications          smallint     NOT NULL DEFAULT 1   1..10
+pre_harvest_days      integer      NULL            >= 0
+growth_stages         varchar(100) NULL            SEEDLING,TILLERING,BOOTING,HEADING,RIPENING (comma separated)
+priority              integer      NOT NULL DEFAULT 0
+status                varchar(20)  NOT NULL DEFAULT 'DRAFT'   DRAFT | APPROVED | INACTIVE
+approved_by           uuid NULL FK users.id
+approved_at           timestamptz NULL
+created_at, updated_at, deleted_at, deleted_by, version
+```
+
+Constraints: `UNIQUE (disease_id, product_id) WHERE deleted_at IS NULL`; check `status <> 'APPROVED' OR (approved_by IS NOT
+NULL AND approved_at IS NOT NULL)`; checks for the group-dependent fields above. Index `(disease_id, status)`.
+
+## advisory_sessions
+
+One recommendation given to a Farmer (log for tracing and statistics).
+
+```text
+advisory_sessions
+-----------------
+id                 uuid PK
+store_id           uuid NOT NULL FK stores.id
+farmer_profile_id  uuid NOT NULL FK farmer_profiles.id
+disease_id         uuid NOT NULL FK diseases.id
+source             varchar(20) NOT NULL            TEXT | DIAGNOSIS_CASE
+diagnosis_case_id  uuid NULL FK diagnosis_cases.id
+query_text         varchar(200) NULL
+area_sqm           numeric(12,1) NULL              > 0
+growth_stage       varchar(20) NULL
+created_at, updated_at, deleted_at, deleted_by
+```
+
+Indexes: `(store_id, created_at DESC)`, `(farmer_profile_id, disease_id, created_at DESC)`.
+
+## advisory_session_items
+
+```text
+advisory_session_items
+----------------------
+id                      uuid PK
+advisory_session_id     uuid NOT NULL FK advisory_sessions.id
+store_product_id        uuid NOT NULL FK store_products.id
+disease_product_id      uuid NOT NULL FK disease_products.id
+rank_order              integer NOT NULL
+suggested_base_quantity bigint NULL
+estimated_amount        numeric(14,2) NULL
+created_at, updated_at, deleted_at, deleted_by
+```
 
 ---
 
@@ -6374,6 +6457,7 @@ only (there is no failed_at column).
 > SUCCESS inference as CONFIDENT (`passed_policy`) or UNCERTAIN; suggestions are computed at read time (§63 flow).
 > `agent_reviews` and `recommendation_items` are no longer written and keep the cases decided before that date;
 > `store_members.can_review_ai` and `ai_policy_configs.requires_human_review` have no effect. No schema change.
+> Suggested products come from the reviewed `disease_products` links (section XXIV-A), no longer from an ingredient match.
 
 ```text
 SUBMITTED → PROCESSING   (at least one active image)

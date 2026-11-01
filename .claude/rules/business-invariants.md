@@ -23,7 +23,6 @@
 - Product review requires successful purchase/fulfillment.
 - AI diagnosis has no Human Review (since 2026-10-21): the Farmer sees the latest successful inference as CONFIDENT
   (policy passed) or UNCERTAIN, never a probability.
-- Product suggestions only for a CONFIDENT, non-Healthy result (active-ingredient match, sellable products, at most 5);
-  UNCERTAIN shows no CHEMICAL treatment and no product.
+- Product suggestions only from approved `disease_products` links (document and page for pesticides, reason for fertilizers); never from an ingredient match or a model. For AI diagnosis: only for a CONFIDENT, non-Healthy result, at most 5, sellable and priced; UNCERTAIN shows no CHEMICAL treatment and no product.
 - Cases reviewed before 2026-10-21 stay readable; no new review or recommendation item is written.
 - Promotions are out of scope.
