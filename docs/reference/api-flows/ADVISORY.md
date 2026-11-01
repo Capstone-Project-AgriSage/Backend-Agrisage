@@ -83,7 +83,7 @@ problem_type     varchar(30)   NOT NULL DEFAULT 'DISEASE'
 search_keywords  varchar(1000) NULL
 ```
 
-`disease_products` (soft-deletable like the other tables; `created_at`, `updated_at`, `deleted_at`, `deleted_by`, `version`):
+`disease_products` (soft-deletable like the other tables: `created_at`, `updated_at`, `deleted_at`, `deleted_by`; no `version` column, which only the four concurrency tables have):
 
 ```text
 id                    uuid PK

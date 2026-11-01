@@ -5321,7 +5321,7 @@ priority              integer      NOT NULL DEFAULT 0
 status                varchar(20)  NOT NULL DEFAULT 'DRAFT'   DRAFT | APPROVED | INACTIVE
 approved_by           uuid NULL FK users.id
 approved_at           timestamptz NULL
-created_at, updated_at, deleted_at, deleted_by, version
+created_at, updated_at, deleted_at, deleted_by
 ```
 
 Constraints: `UNIQUE (disease_id, product_id) WHERE deleted_at IS NULL`; check `status <> 'APPROVED' OR (approved_by IS NOT
