@@ -8,6 +8,18 @@ public static class PermissionEndpointMap
     private static readonly HashSet<string> IdentityAndPublicControllers = ["Auth", "AuthSecurity", "Catalog", "MeNotifications"];
     private static readonly Dictionary<string, string> Codes = new(StringComparer.Ordinal)
     {
+        ["Replenishment.Suggestions"] = "REPLENISHMENT.READ",
+        ["Replenishment.Stockout"] = "REPLENISHMENT.READ",
+        ["Replenishment.Forecast"] = "REPLENISHMENT.READ",
+        ["Replenishment.Seasonal"] = "REPLENISHMENT.READ",
+        ["SeasonalRules.List"] = "SEASONAL_RULES.READ",
+        ["SeasonalRules.Get"] = "SEASONAL_RULES.READ",
+        ["SeasonalRules.Create"] = "SEASONAL_RULES.MANAGE",
+        ["SeasonalRules.Update"] = "SEASONAL_RULES.MANAGE",
+        ["SeasonalRules.Deactivate"] = "SEASONAL_RULES.MANAGE",
+        ["InventoryPlanningReports.Velocity"] = "REPORTS.READ",
+        ["InventoryPlanningReports.ExpiryRisk"] = "REPORTS.READ",
+        ["InventoryPlanningReports.Export"] = "REPORTS.READ",
         ["Suppliers.List"] = "SUPPLIERS.READ",
         ["Suppliers.Get"] = "SUPPLIERS.READ",
         ["Suppliers.Create"] = "SUPPLIERS.CREATE",
@@ -96,6 +108,7 @@ public static class PermissionEndpointMap
         ["Categories.Activate"] = "CATEGORIES.ACTIVATE",
         ["Categories.Deactivate"] = "CATEGORIES.DEACTIVATE",
         ["Categories.Delete"] = "CATEGORIES.DELETE",
+        ["Categories.Reorder"] = "CATEGORIES.UPDATE",
         ["Products.List"] = "PRODUCTS.READ",
         ["Products.Get"] = "PRODUCTS.READ",
         ["Products.Create"] = "PRODUCTS.CREATE",

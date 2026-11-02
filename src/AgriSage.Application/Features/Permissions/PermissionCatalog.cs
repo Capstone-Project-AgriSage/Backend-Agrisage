@@ -9,6 +9,9 @@ public static class PermissionCatalog
     }
     public static IReadOnlyList<Definition> Entries { get; } = Array.AsReadOnly<Definition>(
     [
+        new(new Guid("cb30e359-0710-4c8a-b2ab-7ea248e5d441"), "REPLENISHMENT.READ", "INVENTORY", "Xem kế hoạch nhập hàng", true, ["ADMIN", "STORE_OWNER"]),
+        new(new Guid("cb30e359-0710-4c8a-b2ab-7ea248e5d442"), "SEASONAL_RULES.READ", "INVENTORY", "Xem quy tắc mùa vụ", true, ["ADMIN", "STORE_OWNER"]),
+        new(new Guid("cb30e359-0710-4c8a-b2ab-7ea248e5d443"), "SEASONAL_RULES.MANAGE", "INVENTORY", "Quản lý quy tắc mùa vụ", true, ["ADMIN", "STORE_OWNER"]),
         new(new Guid("47034f4b-8d3f-d668-6b16-41c7a8a9f1ce"), "AUDIT.READ", "AUDIT", "Xem", false, ["ADMIN", "STORE_OWNER"]),
         new(new Guid("f02cca7a-535e-1c66-cf85-d55480285eef"), "BANK_PAYMENTS.CONFIRM", "BANK_PAYMENTS", "Xác nhận", true, ["ADMIN", "STORE_OWNER"]),
         new(new Guid("93a4693e-bf02-0652-69b3-27a3ae43aec5"), "BANK_PAYMENTS.RECORD", "BANK_PAYMENTS", "Record", true, ["ADMIN", "SALES_STAFF", "STORE_OWNER"]),

@@ -688,6 +688,11 @@ product_id              uuid NOT NULL FK products.id
 
 store_sku               varchar(50) NULL
 min_stock_level_base    bigint NULL
+replenishment_enabled  boolean NOT NULL DEFAULT true
+target_stock_level_base bigint NULL
+lead_time_days         integer NOT NULL DEFAULT 7
+safety_stock_base      bigint NOT NULL DEFAULT 0
+target_coverage_days   integer NOT NULL DEFAULT 14
 
 is_sellable             boolean NOT NULL DEFAULT true
 is_active               boolean NOT NULL DEFAULT true
@@ -705,6 +710,18 @@ UNIQUE(store_id, product_id)
 ```
 
 ---
+
+Inventory replenishment extension (2026-11-02): store-product targets/minimum/safety are nonnegative
+base quantities, target >= minimum when both exist; lead time 0–365, coverage 1–90.
+`inventory_seasonal_rules`: uuid PK, store_id FK stores, name varchar(150), crop_type varchar(50),
+region varchar(150) NULL, starts_on/ends_on date, prepare_days integer (0–90), demand_factor
+numeric(6,3) (0.1–5), is_active boolean default true, version bigint default 0 (concurrency),
+standard audit and soft-delete columns. Check ends_on >= starts_on; index (store_id,is_active,starts_on).
+`inventory_seasonal_rule_items`: uuid PK, seasonal_rule_id FK inventory_seasonal_rules,
+store_product_id FK store_products, target_stock_level_base bigint NULL CHECK >=0, standard audit
+and soft-delete columns. Unique (seasonal_rule_id,store_product_id) WHERE deleted_at IS NULL.
+All FKs use Restrict/NoAction. Rules may overlap; computation uses max target/factor, not sum.
+The new migration is additive, preserving historical inventory/financial ledgers and existing settings.
 
 ## 17. `product_reviews`
 

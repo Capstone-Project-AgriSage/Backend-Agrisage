@@ -1,5 +1,51 @@
 # Flow L4 — Inventory, Stocktake, Returns and Refunds (owner: Teammate 4)
 
+## Replenishment extension — approved implementation scope (2026-11-02)
+
+The inventory extension keeps one operational store and never posts stock from a recommendation.
+Existing `alerts` adds OUT_OF_STOCK, search and category filters; stock-summary adds `hasSellableStock`
+without changing `hasStock` (physical stock). LOW_STOCK remains sellable stock < configured minimum.
+Store-product PUT accepts an optional nested `replenishment` object; omission preserves configuration.
+The object contains enabled, targetStockLevelBase?, leadTimeDays, safetyStockBase, targetCoverageDays.
+An explicit null target clears the fixed target. Defaults: enabled=true, lead=7, safety=0, coverage=14.
+An unconfigured target is not invented when sales history is insufficient.
+
+New GET `/api/inventory/replenishment/{suggestions|stockout|forecast|seasonal}` accepts search,
+categoryId, storeProductId, priority, reason, dataStatus, historyDays (14–365, default 90),
+horizonDays (1–90, default 30), page/pageSize and sortBy (priority|name|stockout|quantity), descending.
+Response retains PagedResult fields, adding summary, generatedAt, fromDate, toDate and horizonDays.
+Summary covers all filtered matches before paging, never a sum of quantities across different units.
+Forecast uses completed Vietnam days, posted SALE less RETURN_IN and reversals of those movements;
+adjustments, drafts and cancelled orders are excluded. At least 14 observed days and 3 sale days are
+required for a forecast. Zero rate or insufficient history returns null stockout/forecast, not a fake date.
+Exception: zero sellable stock is already known to be unavailable; daysOfStock=0 and stockout date=today
+even when history is insufficient. This is a current stock fact, not a demand forecast.
+Forecast is a simple historical average, not a claim of recovered unmet demand; missing availability
+history is disclosed. Reservations are subtracted once in sellable stock. Draft receipts are not inbound.
+Fixed target or average demand over lead+coverage plus safety determines the target; seasonal targets
+use max, never additive double counting. Packaging rounds suggested purchasing quantities up.
+Overlapping active rules for the same product take the highest target/factor, not the sum.
+
+Seasonal rules: GET/POST `/api/inventory/seasonal-rules`, GET/PUT `/{id}`, POST `/{id}/deactivate`.
+Rule writes contain name, cropType, region?, startsOn, endsOn, prepareDays (0–90), demandFactor
+(0.1–5), and items [{storeProductId, targetStockLevelBase?}]. PUT also accepts isActive and version.
+Dates are explicit per season/year; there is no automatic annual repetition. The inventory rules are
+independent of the proposed credit crop-season APIs. The seasonal list supports search, isActive,
+fromDate, toDate and paging; detail contains all items. Writes are audited, optimistic concurrency
+prevents silently overwriting another operator. Only the current store's products are accepted.
+
+Additional read reports: GET `/api/reports/inventory-turnover` (historyDays, search, category, paging),
+GET `/api/inventory/expiry-risk` (withinDays, search, category, paging), and
+GET `/api/reports/inventory-movement/export` (existing movement-report filters; xlsx attachment).
+Expiry risk allocates expected sales FEFO across eligible free quantities; reserved quantities are not
+predicted as free stock. Expired stock is at risk; held stock is disclosed separately. Insufficient history
+means unknown risk for future expiry, never zero. Turnover describes sales velocity/coverage, not a
+financial turnover ratio without average historical inventory.
+
+Permissions: replenishment reads use REPLENISHMENT.READ (owner/admin, delegable to Sales), seasonal
+rules read/write use SEASONAL_RULES.READ/MANAGE (owner/admin, delegable); reports/export require
+REPORTS.READ; ordinary stock alerts retain INVENTORY.READ. No public/Farmer/Delivery access.
+
 Version 2.0 — 2026-10-03. Conventions, shared shapes, interfaces and ownership rules: [README.md](README.md).
 Sources: `DATABASE_DESIGN.md` §21–29, §52–54, §7.1, §7.5, §VIII, §XXI–XXII, §35.8–35.11, §35.17–35.19;
 `BUSINESS_RULES.md` rules 10, 30–33, 52–58.

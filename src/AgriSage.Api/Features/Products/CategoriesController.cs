@@ -61,6 +61,15 @@ public sealed class CategoriesController(ICategoryService service) : ControllerB
         return NoContent();
     }
 
+    [HttpPost("{id:guid}/reorder")]
+    [Authorize(Roles = ApiRoles.Manage)]
+    public async Task<IActionResult> Reorder(Guid id, ReorderCategoryRequest request, CancellationToken cancellationToken)
+    {
+        await service.ReorderAsync(id, request.Position, cancellationToken);
+
+        return NoContent();
+    }
+
     // Soft delete; refused while the category has sub-categories or products.
     [HttpDelete("{id:guid}")]
     [Authorize(Roles = ApiRoles.Manage)]

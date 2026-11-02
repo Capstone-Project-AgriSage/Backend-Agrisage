@@ -20,6 +20,7 @@ public class PersistenceModelTests
         "price_lists", "price_list_items", "customer_group_price_lists",
         "suppliers", "goods_receipts", "goods_receipt_items",
         "inventory_lots", "inventory_lot_balances", "stock_movements", "stock_movement_items",
+        "inventory_seasonal_rules", "inventory_seasonal_rule_items",
         "stocktakes", "stocktake_items", "inventory_reservations", "inventory_reservation_items",
         "carts", "cart_items", "orders", "order_items", "payments", "payment_allocations",
         "deliveries", "delivery_items", "delivery_item_lot_allocations", "delivery_attempts",
@@ -56,11 +57,11 @@ public class PersistenceModelTests
         Table(table).GetCheckConstraints().Single(check => check.Name == $"ck_{table}_{name}");
 
     [Fact]
-    public void Model_maps_exactly_the_78_documented_tables()
+    public void Model_maps_exactly_the_80_documented_tables()
     {
         var tables = Model.GetEntityTypes().Select(entityType => entityType.GetTableName()).ToList();
 
-        Assert.Equal(78, DocumentedTables.Length);
+        Assert.Equal(80, DocumentedTables.Length);
         Assert.Equal(DocumentedTables.Order(), tables.Order());
         Assert.DoesNotContain(Model.GetEntityTypes(), entityType => entityType.IsOwned());
     }
@@ -229,7 +230,7 @@ public class PersistenceModelTests
             .Select(property => $"{property.DeclaringType.GetTableName()}.{property.GetColumnName()}");
 
         Assert.Equal(
-            ["debt_accounts.version", "farmer_credit_profiles.version", "inventory_lot_balances.version", "orders.version", "roles.version", "store_members.version", "users.security_version"],
+            ["debt_accounts.version", "farmer_credit_profiles.version", "inventory_lot_balances.version", "inventory_seasonal_rules.version", "orders.version", "roles.version", "store_members.version", "users.security_version"],
             tokens.Order());
         Assert.All(Model.GetEntityTypes().Where(entityType => entityType.ClrType.IsAssignableTo(typeof(IHasConcurrencyVersion))),
             entityType => Assert.Equal(ValueGenerated.Never, entityType.FindProperty("Version")!.ValueGenerated));

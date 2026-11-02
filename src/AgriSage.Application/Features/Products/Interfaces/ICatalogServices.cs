@@ -18,6 +18,8 @@ public interface ICategoryService
 
     Task SetActiveAsync(Guid id, bool active, CancellationToken cancellationToken);
 
+    Task ReorderAsync(Guid id, int position, CancellationToken cancellationToken);
+
     // Soft delete; refused while the category has sub-categories or products.
     Task DeleteAsync(Guid id, CancellationToken cancellationToken);
 }
