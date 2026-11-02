@@ -482,7 +482,7 @@ waiting for the other flow.
 | # | Decision |
 |---|---|
 | F-D1 | Work is split by flow (L1–L4, §5 mapping). Routes and DTOs of the old contracts are kept unchanged; decisions D1–D10, B-D1–B-D6 and C-D1–C-D9 keep their ids and stay valid |
-| F-D2 | Debt term depends on the customer type: a customer group has a default credit tier (`customer_groups.default_credit_tier_id`, migration `CustomerGroupDefaultCreditTier`, design §35.20). Credit profile tier = request → current group's tier → default group's tier → 422; a group change moves the profile to the new group's tier (limit unchanged, history written). No crop seasons |
+| F-D2 | Debt term depends on the customer type: a customer group has a default credit tier (`customer_groups.default_credit_tier_id`, migration `CustomerGroupDefaultCreditTier`, design §35.20). Credit profile tier = request → current group's tier → default group's tier → 422; a group change moves the profile to the new group's tier (limit unchanged, history written). ~~No crop seasons~~ — reopened 2026-11-03 (debt by crop season approved by the mentor, lead agreed; design pending F3.7/F3.9, see FLOW_3) |
 | F-D3 | `POST /api/counter-sales` (F1.7) is the only composite endpoint: PICKUP + FULL_PAYMENT + CASH in one transaction; staff must send the lots (FEFO suggests, staff confirm) |
 | F-D4 | Every refund endpoint (return refunds and cancelled-order refunds) belongs to L4 (F4.5); L1 only requests cancelled-order refunds through `IOrderPaymentCancellation` |
 | F-D5 | Reports are `GET /api/reports/...` with role Manage, owned by the flow whose data they read |

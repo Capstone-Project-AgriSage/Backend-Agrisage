@@ -1,6 +1,39 @@
 # Flow L3 — Customer Groups, Credit Sale and Debt Collection (owner: Teammate 3)
 
-Version 2.0 — 2026-10-03. Conventions, shared shapes, interfaces and ownership rules: [README.md](README.md).
+Version 2.1 — 2026-11-03 (debt policy, owner-only actions; see the two sections below). Version 2.0 — 2026-10-03.
+Conventions, shared shapes, interfaces and ownership rules: [README.md](README.md).
+
+### Debt policy (approved by the mentor, 2026-11-03)
+
+- **The system never blocks or limits a customer's credit on its own. Every credit suspension or block is done by the
+  store owner, with a reason.** ("Hệ thống không bao giờ tự khóa hay tự hạn chế tín dụng của khách. Mọi việc khóa
+  hoặc ngưng tín dụng đều do Chủ thực hiện và có ghi lý do.")
+- No late fee, penalty or interest (rule 24). Overdue only drives reminders and the owner's follow-up.
+- Debt is repaid by crop season; extensions are allowed; forgiving debt ("xóa nợ") is a real forgiveness, recorded with
+  a reason, never a deleted row. The crop-season design is pending (F3.7, F3.8+): until it ships, the due date is the
+  credit-tier term (F-D2 below).
+- Overdue debt still counts against the credit limit (the limit is set by the owner). An order above the available
+  credit is refused as `INSUFFICIENT_CREDIT` with `availableCredit`, never as an overdue or locked customer.
+
+### Owner-only actions (F3.21, 2026-11-03)
+
+Nine actions change money owed or the customer's credit standing. Only ADMIN or the STORE_OWNER of the active store
+may take them, and they **cannot be delegated**: a permission granted to Sale staff (override, role default or
+inheritance) is refused with `403` and nothing is written. The check is on the server, on every path, including the
+customer form (`PUT /api/customers/{id}` switching `allowCreditPurchase`).
+
+| Action | Route | Permission |
+|---|---|---|
+| Reduce a debt | `POST /api/debt-entries/{id}/adjust` | `DEBT.ADJUST` |
+| Forgive a debt | `POST /api/debt-entries/{id}/cancel` | `DEBT.CANCEL` |
+| Manual debt entry | `POST /api/customers/{farmerProfileId}/debt/manual-entries` | `DEBT.MANUAL` |
+| Change a due date | `POST /api/debt-entries/{id}/change-due-date` (**Operate → Manage, 2026-11-03**) | `DEBT.DUE_DATE` |
+| Confirm / reject a bank transfer | `POST /api/payments/{id}/confirm`, `/reject` | `BANK_PAYMENTS.CONFIRM`, `.REJECT` |
+| Suspend / block / reactivate credit | `POST /api/customers/{farmerProfileId}/credit/suspend`, `/block`, `/activate` | `CREDIT.SUSPEND`, `.BLOCK`, `.ACTIVATE` |
+
+Sale staff still record bank transfers (PENDING, no debt reduction), dispute or keep a debt entry, collect cash and
+sell on credit within the limit. Until F3.21 part 2, the permission screen may still list these nine codes as
+grantable; such grants have no effect.
 
 ### Additive credit/debt contract (2026-10-04 user request)
 
@@ -10,7 +43,9 @@ Version 2.0 — 2026-10-03. Conventions, shared shapes, interfaces and ownership
   confirming/reserving. Drafts remain editable and consume no credit; only confirmed commitments reserve.
 - Existing credit administration routes remain authoritative. Term selection uses `creditTierId`;
   AllowCreditPurchase is derived from profile/customer/account ACTIVE status.
-- `Credit:BlockCreditWhenOverdue` is an optional server policy (default false), using Vietnam dates.
+- Overdue debt (Vietnam dates) is reported in `hasOverdueDebt` / `overdueAmount` but never refuses credit by itself
+  (debt policy above). The former `Credit:BlockCreditWhenOverdue` switch and the `OVERDUE_DEBT` reason were removed
+  on 2026-11-03.
 - All exposure/ledger changes lock FarmerProfile first (also used by customer administration), then
   read profile/account/reservations. Shared steps never save. One debt per successful stock movement,
   protected by a filtered unique index, retains partial delivery/pickup support.
@@ -233,7 +268,7 @@ release the same amount of the order's unused credit reservation (design §XVI-D
 | GET | `/api/debt-entries/{id}` | Operate | — | `200 DebtEntryResponse` |
 | POST | `/api/debt-entries/{id}/dispute` | Operate | `{ reason }` | `200 DebtEntryResponse` |
 | POST | `/api/debt-entries/{id}/keep` | Operate | `{ reason }` | `200 DebtEntryResponse` |
-| POST | `/api/debt-entries/{id}/change-due-date` | Operate | `{ newDueDate, reason }` | `200 DebtEntryResponse` |
+| POST | `/api/debt-entries/{id}/change-due-date` | Manage (owner-only, not delegable; was Operate until 2026-11-03) | `{ newDueDate, reason }` | `200 DebtEntryResponse` |
 | POST | `/api/debt-entries/{id}/adjust` | Manage | `{ amount, reason }` | `200 DebtEntryResponse` |
 | POST | `/api/debt-entries/{id}/cancel` | Manage | `{ reason }` | `200 DebtEntryResponse` |
 | GET | `/api/me/debt` | FARMER | — | `200 DebtAccountResponse` |
@@ -371,8 +406,8 @@ the limit total is 0).
 | B-D2 | A Farmer without a group assignment belongs to the store's default group; no assignment row is created at registration |
 | B-D3 | A group without an applicable price list uses the walk-in default list; one order snapshots one price list |
 | B-D4 | A credit profile requires a credit tier; the payment term of a credit order = tier `defaultPaymentTermDays`, snapshotted at confirmation |
-| B-D5 | Roles: groups, price-list links, group tier, credit tiers, credit status changes (activate/suspend/block), debt ADJUST/CANCEL/manual entries = Manage; customer group assignment, credit profile creation and limit changes (rule 22), DISPUTE/KEEP/CHANGE_DUE_DATE = Operate; Farmers only `/api/me/...` |
+| B-D5 | Roles: groups, price-list links, group tier, credit tiers, credit status changes (activate/suspend/block), debt ADJUST/CANCEL/manual entries, CHANGE_DUE_DATE (since 2026-11-03) = Manage; customer group assignment, credit profile creation and limit changes (rule 22), DISPUTE/KEEP = Operate; Farmers only `/api/me/...`. The nine owner-only actions (section above) cannot be delegated to Sale staff (F3.21) |
 | B-D6 | Debt repayment money enters only through payments (L1 cash, L2 payOS); L3 never creates payments, only allocates them |
 | C-D1 | payOS debt repayments are allocated oldest due date first (no entry selection online) |
-| F-D2 | Debt term depends on the customer type: group → default credit tier → term days. No crop seasons |
+| F-D2 | Debt term depends on the customer type: group → default credit tier → term days. ~~No crop seasons~~ — reopened 2026-11-03: debt by crop season is approved by the mentor (lead agreed); seasons reuse the inventory seasonal rules (`inventory_seasonal_rules`) with a debt-side table, design pending F3.7/F3.9. Until then the tier term applies |
 | F-D5 | Reports are Manage-only and owned by the flow whose data they read |
