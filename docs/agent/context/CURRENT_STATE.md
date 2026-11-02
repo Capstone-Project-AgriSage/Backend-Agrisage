@@ -262,6 +262,12 @@ setup documentation
   37, 41, 59, 60, `DECISIONS.md`, `DATABASE_DESIGN.md` §35.12 / §61–63 notes. The Farmer sees the AI result at once
   (CONFIDENT / UNCERTAIN), products only for CONFIDENT by active-ingredient match, Farmer retry for FAILED, store routes
   read only. No schema change, no migration. Code follows in a separate PR.
+- Decided 2026-11-02 (lead, after Review 2) — input consultation (advisory): `api-flows/ADVISORY.md` 1.0, business rules
+  37 and 62–66, `DECISIONS.md` ("Advisory focus"), `DATABASE_DESIGN.md` section XXIV-A. Problem (typed or diagnosed)
+  to products with registration source, dose, quantity for the area, price and stock; links reviewed and approved by
+  a person; replaces the active-ingredient match. One migration (tables `disease_products`, `advisory_sessions`,
+  `advisory_session_items`, two `diseases` columns, permissions). Code follows in separate PRs: backend, then
+  Management-Webs, Farmer-Mobile, Farmer-Web. Photo model choice postponed.
 
 ## Not Yet Implied by Foundation Completion
 

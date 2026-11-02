@@ -114,7 +114,7 @@ Farmer Diagnosis Case
 → upload image(s)
 → AI inference using exact Model + Policy
 → result shown to the Farmer at once (no Human Review since 2026-10-21)
-→ CONFIDENT: disease, treatments, products matched by active ingredient (at most 5)
+→ CONFIDENT: disease, treatments, approved linked products (at most 5, with price and stock)
 → UNCERTAIN: top guess, non-chemical guidance, no product, retake / ask the store
 → FAILED: the Farmer retries
 ```
@@ -125,3 +125,18 @@ Products are suggested only for a CONFIDENT, non-Healthy result (`api-flows/AI_D
 
 If a workflow changes inventory + order + payment/credit/debt together,
 one Application use case owns one transaction boundary.
+
+## Advisory: problem to products to cart (2026-11-02)
+
+```text
+Farmer types a problem ("dao on", "vàng lá")   or   comes from a CONFIDENT diagnosis
+→ GET  /api/me/advisory/problems          (accent-insensitive search)
+→ POST /api/me/advisory/recommendations   (problem, area in m², growth stage)
+→ approved disease_products links → sellable store products → price list of the Farmer → stock status
+→ protection products (registration source, dose, pre-harvest days) + fertilizers (reason)
+→ quantity and packagings for the area → POST /api/me/cart/items per line
+→ normal checkout, payment, delivery
+→ advisory_sessions logged; staff see sessions and boughtWithin7Days
+```
+
+Links are created by staff (DRAFT) and approved by a reviewer (APPROVED); a model or free text never names a product.

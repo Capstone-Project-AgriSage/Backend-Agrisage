@@ -17,6 +17,10 @@ AI rice-leaf diagnosis (AI Service call, policy, result shown to the Farmer, pro
 read-only store APIs) is specified in [AI_DIAGNOSIS.md](AI_DIAGNOSIS.md) (user-requested extension, 2026-10-10;
 version 2.0 of 2026-10-21 removes Human Review).
 
+Input consultation — from a problem the Farmer types or a diagnosis to products, quantity for the field area,
+price, stock and the cart — is specified in [ADVISORY.md](ADVISORY.md) (user-requested extension, 2026-11-02, after
+Review 2).
+
 | Flow | File | Owner | Demo in one sentence |
 |---|---|---|---|
 | L1 | [FLOW_1_COUNTER_SALE.md](FLOW_1_COUNTER_SALE.md) | Lead | A customer at the counter gets a price, pays cash, the order is confirmed with FEFO lots and handed over |
