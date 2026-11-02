@@ -54,6 +54,8 @@ internal sealed class CreditTestDatabase : IAsyncDisposable
     public Guid PackagingId { get; private set; }
     public Guid LotId { get; private set; }
     public IServiceScope Scope() => _services!.CreateScope();
+    // Connection string of this test's isolated schema, for tests that host the API over the same data.
+    public string ConnectionString { get; private set; } = "";
 
     public static async Task<CreditTestDatabase> StartAsync(CancellationToken token)
     {
@@ -72,6 +74,7 @@ internal sealed class CreditTestDatabase : IAsyncDisposable
             await cmd.ExecuteNonQueryAsync(token);
         }
         var connection = new NpgsqlConnectionStringBuilder(_adminConnection) { SearchPath = _schema, Pooling = false }.ConnectionString;
+        ConnectionString = connection;
         var s = new ServiceCollection();
         s.AddApplication(); s.AddSingleton<ICurrentUserService>(User); s.AddSingleton<IDateTimeProvider>(Clock);
         s.AddSingleton<IDatabaseErrorClassifier, NpgsqlErrorClassifier>();

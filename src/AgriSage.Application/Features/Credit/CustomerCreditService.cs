@@ -171,7 +171,9 @@ public sealed class CustomerCreditService(IAgriSageDbContext context, IRowLockSe
 
     private async Task<CreditSummaryResponse> MutateAsync(Guid farmerId, Func<Guid, CancellationToken, Task> change, bool manage, string permission, CancellationToken token)
     {
-        await writes.ActorAsync(permission, token, manage);
+        // Suspend and block are owner-only: refuse before any lock or transaction (the same guard runs again in SetCreditStatusAsync).
+        if (permission is "CREDIT.SUSPEND" or "CREDIT.BLOCK") await writes.OwnerActorAsync(permission, token);
+        else await writes.ActorAsync(permission, token, manage);
         var store = await ActiveStore.GetIdAsync(context, token);
         await using var tx = await context.BeginTransactionAsync(token);
         await locks.LockStoreAsync(store, token);
