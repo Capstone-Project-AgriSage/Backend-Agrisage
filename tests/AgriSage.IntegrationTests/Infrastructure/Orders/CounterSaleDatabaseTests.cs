@@ -55,7 +55,7 @@ public class CounterSaleDatabaseTests
             var queries = new OrderQueries(context);
             Sales = new CounterSaleService(
                 context,
-                new OrderBuilder(context, new PriceResolver(context), user, clock, audit, new AgriSage.Application.Features.Credit.CreditEligibilityService(context, clock, Microsoft.Extensions.Options.Options.Create(new AgriSage.Application.Features.Credit.CreditPolicy()))),
+                new OrderBuilder(context, new PriceResolver(context), user, clock, audit, new AgriSage.Application.Features.Credit.CreditEligibilityService(context, clock)),
                 new PaymentAllocator(clock, new StubCreditReservationAdjuster(), new StubDebtRepaymentPosting()),
                 new OrderConfirmer(context, locks, new StubOrderSettlementGuard(), user, clock, audit),
                 new FulfillmentPostingService(context, locks, new StubFulfillmentFinancialPosting(Ledger), new OrderPaymentCancellation(context, locks, new FakePaymentGateway(), clock, audit)),

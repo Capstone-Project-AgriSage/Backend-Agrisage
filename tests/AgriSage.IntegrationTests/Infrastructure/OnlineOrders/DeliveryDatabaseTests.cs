@@ -64,7 +64,7 @@ public class DeliveryDatabaseTests
 
         private DeliveryQueries Queries => new(Context);
 
-        public OrderService Orders => new(Context, new OrderBuilder(Context, new PriceResolver(Context), Data.User, _clock, Audit, new AgriSage.Application.Features.Credit.CreditEligibilityService(Context, _clock, Microsoft.Extensions.Options.Options.Create(new AgriSage.Application.Features.Credit.CreditPolicy()))),
+        public OrderService Orders => new(Context, new OrderBuilder(Context, new PriceResolver(Context), Data.User, _clock, Audit, new AgriSage.Application.Features.Credit.CreditEligibilityService(Context, _clock)),
             OrderQueries, Data.User, _clock, _errors, Audit);
 
         public OrderConfirmationService Confirmation => new(Context, Locks,

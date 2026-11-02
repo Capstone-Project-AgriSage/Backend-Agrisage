@@ -60,7 +60,7 @@ public class AdvisoryDatabaseTests
                 var locks = new RowLockService(Data.Context);
                 var builder = new OrderBuilder(Data.Context, new PriceResolver(Data.Context), Data.User, _clock, Audit,
                     new AgriSage.Application.Features.Credit.CreditEligibilityService(
-                        Data.Context, _clock, Microsoft.Extensions.Options.Options.Create(new AgriSage.Application.Features.Credit.CreditPolicy())));
+                        Data.Context, _clock));
                 var queries = new OrderQueries(Data.Context);
 
                 return new MeOrderService(Data.Context, new CurrentFarmer(Data.Context, Data.User), builder, queries,

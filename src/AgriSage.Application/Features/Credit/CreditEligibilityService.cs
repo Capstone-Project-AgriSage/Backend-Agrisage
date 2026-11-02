@@ -7,14 +7,8 @@ using AgriSage.Domain.Features.Debt.Enums;
 using AgriSage.Domain.Features.Identity.Enums;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 
 namespace AgriSage.Application.Features.Credit;
-
-public sealed class CreditPolicy
-{
-    public bool BlockCreditWhenOverdue { get; set; }
-}
 
 public sealed record CreditEligibilityRequest(decimal OrderAmount);
 public sealed record CreditEligibilityResponse(Guid CustomerId, decimal CreditLimit, decimal CurrentOutstandingDebt,
@@ -32,8 +26,9 @@ public sealed class CreditEligibilityRequestValidator : AbstractValidator<Credit
 }
 
 // Advisory reads do not reserve credit. Confirmation repeats this check under the customer row lock.
-public sealed class CreditEligibilityService(IAgriSageDbContext db, IDateTimeProvider clock,
-    IOptions<CreditPolicy> policy) : ICreditEligibilityService
+// Overdue debt is reported (HasOverdueDebt, OverdueAmount) but never refuses credit by itself: the approved debt policy (CS-10)
+// forbids the system from blocking or limiting credit on its own; only the store owner suspends or blocks, with a reason.
+public sealed class CreditEligibilityService(IAgriSageDbContext db, IDateTimeProvider clock) : ICreditEligibilityService
 {
     public async Task<CreditEligibilityResponse> CheckAsync(Guid customerId, decimal orderAmount, CancellationToken token)
     {
@@ -59,7 +54,6 @@ public sealed class CreditEligibilityService(IAgriSageDbContext db, IDateTimePro
             : profile?.Status != FarmerCreditProfileStatus.Active || account?.Status != DebtAccountStatus.Active ? "CREDIT_DISABLED"
             : limit <= 0 ? "NO_CREDIT_LIMIT"
             : profile.CreditTierId == null ? "NO_CREDIT_TERM"
-            : policy.Value.BlockCreditWhenOverdue && overdue > 0 ? "OVERDUE_DEBT"
             : orderAmount > available ? "INSUFFICIENT_CREDIT" : "ELIGIBLE";
         return new(customerId, limit, debt, reserved, Math.Max(0, available), orderAmount,
             Math.Max(0, available - orderAmount), overdue > 0, overdue, reason == "ELIGIBLE", reason,
