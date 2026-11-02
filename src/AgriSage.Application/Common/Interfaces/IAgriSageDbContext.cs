@@ -1,4 +1,5 @@
 using AgriSage.Domain.Features.Audit.Entities;
+using AgriSage.Domain.Features.Advisory.Entities;
 using AgriSage.Domain.Features.Content.Entities;
 using AgriSage.Domain.Features.Credit.Entities;
 using AgriSage.Domain.Features.Customers.Entities;
@@ -157,6 +158,13 @@ public interface IAgriSageDbContext
     DbSet<Disease> Diseases { get; }
 
     DbSet<DiseaseTreatment> DiseaseTreatments { get; }
+
+    // Advisory (api-flows/ADVISORY.md)
+    DbSet<DiseaseProduct> DiseaseProducts { get; }
+
+    DbSet<AdvisorySession> AdvisorySessions { get; }
+
+    DbSet<AdvisorySessionItem> AdvisorySessionItems { get; }
 
     DbSet<AiModel> AiModels { get; }
 

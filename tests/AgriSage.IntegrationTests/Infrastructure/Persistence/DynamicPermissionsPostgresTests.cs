@@ -1,3 +1,4 @@
+using AgriSage.Application.Features.Permissions;
 using AgriSage.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -22,7 +23,8 @@ public sealed class DynamicPermissionsPostgresTests
         await using var command = new NpgsqlCommand(script, connection, transaction) { CommandTimeout = 90 };
         await command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         await using var count = new NpgsqlCommand("SELECT count(*) FROM permissions", connection, transaction);
-        Assert.Equal(190L, await count.ExecuteScalarAsync(TestContext.Current.CancellationToken));
+        // Every migration is in the script, so the table holds the whole catalog (a fixed number went stale with each new code).
+        Assert.Equal((long)PermissionCatalog.Entries.Count, await count.ExecuteScalarAsync(TestContext.Current.CancellationToken));
         await using var seed = new NpgsqlCommand("INSERT INTO roles(id,code,name,is_active,created_at,updated_at) VALUES(gen_random_uuid(),'STORE_OWNER','Owner',true,now(),now())", connection, transaction);
         await seed.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         var defaultsSql = new AgriSage.Infrastructure.Persistence.Migrations.DynamicPermissions().UpOperations.OfType<Microsoft.EntityFrameworkCore.Migrations.Operations.SqlOperation>().Single().Sql;

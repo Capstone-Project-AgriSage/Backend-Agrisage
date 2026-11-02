@@ -6,6 +6,7 @@ using AgriSage.Domain.Features.Customers.Entities;
 using AgriSage.Domain.Features.Debt.Entities;
 using AgriSage.Domain.Features.Deliveries.Entities;
 using AgriSage.Domain.Features.Diagnosis.Entities;
+using AgriSage.Domain.Features.Advisory.Entities;
 using AgriSage.Domain.Features.GoodsReceipts.Entities;
 using AgriSage.Domain.Features.Identity.Entities;
 using AgriSage.Domain.Features.Inventory.Entities;
@@ -154,6 +155,12 @@ public sealed class AgriSageDbContext : DbContext, IAgriSageDbContext
     public DbSet<Disease> Diseases => Set<Disease>();
 
     public DbSet<DiseaseTreatment> DiseaseTreatments => Set<DiseaseTreatment>();
+
+    public DbSet<DiseaseProduct> DiseaseProducts => Set<DiseaseProduct>();
+
+    public DbSet<AdvisorySession> AdvisorySessions => Set<AdvisorySession>();
+
+    public DbSet<AdvisorySessionItem> AdvisorySessionItems => Set<AdvisorySessionItem>();
 
     public DbSet<AiModel> AiModels => Set<AiModel>();
 

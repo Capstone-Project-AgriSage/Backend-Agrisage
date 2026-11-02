@@ -149,7 +149,7 @@ public sealed class MyDiagnosisCaseService(
             ?? throw new NotFoundException("Diagnosis case", id);
 
         var images = await imageUrls.ForAsync(diagnosisCase.Images, cancellationToken);
-        var result = await results.ForCaseAsync(id, diagnosisCase.Status, diagnosisCase.FinalDisease, cancellationToken);
+        var result = await results.ForCaseAsync(id, farmer.FarmerProfileId, diagnosisCase.Status, diagnosisCase.FinalDisease, cancellationToken);
         DiagnosisInconclusiveResponse? inconclusive = null;
 
         // Decided INCONCLUSIVE by a reviewer before 2.0: the comment and a retake hint stay readable (D15).

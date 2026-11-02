@@ -139,7 +139,8 @@ public sealed class DiagnosisCaseService(
         var images = await imageUrls.ForAsync(diagnosisCase.Images, cancellationToken);
         var farmer = diagnosisCase.FarmerProfile;
         var reviewResponses = reviews.Select(ToResponse).ToList();
-        var farmerResult = await results.ForCaseAsync(id, diagnosisCase.Status, diagnosisCase.FinalDisease, cancellationToken);
+        var farmerResult = await results.ForCaseAsync(
+            id, diagnosisCase.FarmerProfileId, diagnosisCase.Status, diagnosisCase.FinalDisease, cancellationToken);
 
         return new DiagnosisCaseResponse(
             diagnosisCase.Id,

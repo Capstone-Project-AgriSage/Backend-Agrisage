@@ -270,7 +270,20 @@ public sealed record DiseaseUpdateRequest(
     string? Description = null,
     string? Symptoms = null,
     string? Causes = null,
-    string? Prevention = null);
+    string? Prevention = null,
+    string? SearchKeywords = null);
+
+// A new problem the store advises on (api-flows/ADVISORY.md section 6). ProblemType: DISEASE, PEST, WEED, NUTRITION or GROWTH.
+public sealed record DiseaseCreateRequest(
+    string Code,
+    string Name,
+    string ProblemType,
+    string? ScientificName = null,
+    string? Description = null,
+    string? Symptoms = null,
+    string? Causes = null,
+    string? Prevention = null,
+    string? SearchKeywords = null);
 
 // TreatmentType: CULTURAL, CHEMICAL, PREVENTIVE or OTHER.
 public sealed record TreatmentRequest(
@@ -305,13 +318,19 @@ public sealed record DiseaseResponse(
     string? Prevention,
     bool IsHealthyClass,
     bool IsActive,
-    IReadOnlyList<TreatmentItem> Treatments);
+    IReadOnlyList<TreatmentItem> Treatments,
+    string ProblemType = "DISEASE",
+    string? SearchKeywords = null);
 
 public interface IDiseaseService
 {
     Task<IReadOnlyList<DiseaseResponse>> ListAsync(bool? isActive, CancellationToken cancellationToken);
 
+    Task<DiseaseResponse> CreateAsync(DiseaseCreateRequest request, CancellationToken cancellationToken);
+
     Task<DiseaseResponse> UpdateAsync(Guid id, DiseaseUpdateRequest request, CancellationToken cancellationToken);
+
+    Task<DiseaseResponse> SetActiveAsync(Guid id, bool active, CancellationToken cancellationToken);
 
     Task<TreatmentItem> CreateTreatmentAsync(Guid diseaseId, TreatmentRequest request, CancellationToken cancellationToken);
 

@@ -1,4 +1,6 @@
 using AgriSage.Domain.Common;
+using AgriSage.Domain.Common.Exceptions;
+using AgriSage.Domain.Features.Diagnosis.Enums;
 
 namespace AgriSage.Domain.Features.Diagnosis.Entities;
 
@@ -21,12 +23,16 @@ public sealed class Disease : SoftDeletableEntity
         string? description = null,
         string? symptoms = null,
         string? causes = null,
-        string? prevention = null)
+        string? prevention = null,
+        ProblemType problemType = ProblemType.Disease,
+        string? searchKeywords = null)
     {
         Code = Guard.NotNullOrWhiteSpace(code);
         CropType = Guard.NotNullOrWhiteSpace(cropType);
         IsHealthyClass = isHealthyClass;
+        ProblemType = problemType;
         UpdateContent(name, scientificName, description, symptoms, causes, prevention);
+        SearchKeywords = Clean(searchKeywords);
         IsActive = true;
     }
 
@@ -48,7 +54,23 @@ public sealed class Disease : SoftDeletableEntity
 
     public bool IsHealthyClass { get; private set; }
 
+    // What kind of problem this is (the table also holds the five AI classes); fixed once created.
+    public ProblemType ProblemType { get; private set; }
+
+    // Folk names and symptom words that Farmers type, separated by commas; searched without accents.
+    public string? SearchKeywords { get; private set; }
+
     public bool IsActive { get; private set; }
+
+    // The five classes the AI model predicts; they are seeded and never deactivated (api-flows/ADVISORY.md V4).
+    public static IReadOnlySet<string> SeededCodes { get; } = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "LEAF_BLAST", "BACTERIAL_LEAF_BLIGHT", "BROWN_SPOT", "SHEATH_BLIGHT", "HEALTHY"
+    };
+
+    public bool IsSeeded => SeededCodes.Contains(Code);
+
+    public void UpdateKeywords(string? searchKeywords) => SearchKeywords = Clean(searchKeywords);
 
     public void UpdateContent(
         string name,
@@ -68,5 +90,15 @@ public sealed class Disease : SoftDeletableEntity
 
     public void Activate() => IsActive = true;
 
-    public void Deactivate() => IsActive = false;
+    public void Deactivate()
+    {
+        if (IsSeeded)
+        {
+            throw new DomainException("The five classes the AI predicts cannot be deactivated.");
+        }
+
+        IsActive = false;
+    }
+
+    private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

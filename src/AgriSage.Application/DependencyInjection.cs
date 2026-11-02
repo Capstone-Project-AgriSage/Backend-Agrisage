@@ -9,6 +9,7 @@ using AgriSage.Application.Features.Customers;
 using AgriSage.Application.Features.Debt;
 using AgriSage.Application.Features.Deliveries;
 using AgriSage.Application.Features.Diagnosis;
+using AgriSage.Application.Features.Advisory;
 using AgriSage.Application.Features.Files;
 using AgriSage.Application.Features.GoodsReceipts;
 using AgriSage.Application.Features.GoodsReceipts.Import;
@@ -151,6 +152,12 @@ public static class DependencyInjection
         services.AddScoped<IDiagnosisCaseService, DiagnosisCaseService>();
         services.AddScoped<IAiModelService, AiModelService>();
         services.AddScoped<IDiseaseService, DiseaseService>();
+
+        // Advisory: problem to products, quantity for the field and the cart (api-flows/ADVISORY.md).
+        services.AddScoped<AdvisoryEngine>();
+        services.AddScoped<IMyAdvisoryService, MyAdvisoryService>();
+        services.AddScoped<IDiseaseProductService, DiseaseProductService>();
+        services.AddScoped<IAdvisorySessionService, AdvisorySessionService>();
 
         // Further feature application services are registered here by later tasks.
         services.AddScoped<RealtimeAudience>();

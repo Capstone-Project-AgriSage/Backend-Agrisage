@@ -15,7 +15,9 @@ public sealed class DynamicPermissionsMigrationTests
         Assert.DoesNotContain(ops, o => o is DropTableOperation or DropColumnOperation or AlterColumnOperation or DeleteDataOperation or UpdateDataOperation);
         Assert.All(ops.OfType<CreateTableOperation>().SelectMany(t => t.ForeignKeys), fk => Assert.Equal(ReferentialAction.Restrict, fk.OnDelete));
         // The catalog as this migration shipped it: permissions added by later migrations are not part of it.
-        var shipped = PermissionCatalog.Entries.Where(p => !AiDiagnosisPermissionsMigrationTests.NewCodes.Contains(p.Code)).ToList();
+        var shipped = PermissionCatalog.Entries
+            .Where(p => !AiDiagnosisPermissionsMigrationTests.NewCodes.Contains(p.Code) && !AdvisoryMigrationTests.NewCodes.Contains(p.Code))
+            .ToList();
         var seed = Assert.Single(ops.OfType<InsertDataOperation>());
         Assert.Equal(shipped.Count, seed.Values.GetLength(0));
         var sql = Assert.Single(ops.OfType<SqlOperation>()).Sql;

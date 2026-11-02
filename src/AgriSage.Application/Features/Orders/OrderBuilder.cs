@@ -3,7 +3,7 @@ using AgriSage.Application.Common.Exceptions;
 using AgriSage.Application.Common.Interfaces;
 using AgriSage.Application.Features.Pricing;
 using AgriSage.Application.Features.Credit;
-using AgriSage.Domain.Features.Inventory.Enums;
+using AgriSage.Application.Features.Inventory;
 using AgriSage.Domain.Features.Customers.Entities;
 using AgriSage.Domain.Features.Orders;
 using AgriSage.Domain.Features.Orders.Entities;
@@ -99,9 +99,8 @@ public sealed class OrderBuilder(
             var today = BusinessCalendar.Today(now);
             foreach (var demand in order.Items.GroupBy(i => i.StoreProductId))
             {
-                var available = await context.InventoryLots.AsNoTracking().Where(l => l.StoreProductId == demand.Key
-                    && l.Status == InventoryLotStatus.Active && (l.ExpiryDate == null || l.ExpiryDate >= today))
-                    .SumAsync(l => (long?)(l.Balance.QuantityOnHand - l.Balance.QuantityReserved), cancellationToken) ?? 0;
+                var available = (await SellableStock.AvailableBaseAsync(context, [demand.Key], today, cancellationToken))
+                    .GetValueOrDefault(demand.Key);
                 if (demand.Sum(i => i.BaseQuantity) > available)
                     throw new BusinessRuleException("Not enough sellable stock for the credit order.");
             }

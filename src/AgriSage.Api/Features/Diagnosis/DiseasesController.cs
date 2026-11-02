@@ -16,11 +16,33 @@ public sealed class DiseasesController(IDiseaseService service) : ControllerBase
         [FromQuery] bool? isActive, CancellationToken cancellationToken) =>
         Ok(await service.ListAsync(isActive, cancellationToken));
 
+    // A new problem the store advises on (api-flows/ADVISORY.md section 6); never a healthy class.
+    [HttpPost("api/diseases")]
+    [Authorize(Roles = ApiRoles.Manage)]
+    [ProducesResponseType<DiseaseResponse>(StatusCodes.Status201Created)]
+    public async Task<IActionResult> Create(DiseaseCreateRequest request, CancellationToken cancellationToken)
+    {
+        var response = await service.CreateAsync(request, cancellationToken);
+
+        return StatusCode(StatusCodes.Status201Created, response);
+    }
+
     [HttpPut("api/diseases/{id:guid}")]
     [Authorize(Roles = ApiRoles.Manage)]
     public async Task<ActionResult<DiseaseResponse>> Update(
         Guid id, DiseaseUpdateRequest request, CancellationToken cancellationToken) =>
         await service.UpdateAsync(id, request, cancellationToken);
+
+    [HttpPost("api/diseases/{id:guid}/activate")]
+    [Authorize(Roles = ApiRoles.Manage)]
+    public async Task<ActionResult<DiseaseResponse>> Activate(Guid id, CancellationToken cancellationToken) =>
+        await service.SetActiveAsync(id, true, cancellationToken);
+
+    // The five classes the AI predicts cannot be deactivated (422).
+    [HttpPost("api/diseases/{id:guid}/deactivate")]
+    [Authorize(Roles = ApiRoles.Manage)]
+    public async Task<ActionResult<DiseaseResponse>> Deactivate(Guid id, CancellationToken cancellationToken) =>
+        await service.SetActiveAsync(id, false, cancellationToken);
 
     [HttpPost("api/diseases/{id:guid}/treatments")]
     [Authorize(Roles = ApiRoles.Manage)]

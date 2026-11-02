@@ -18,6 +18,18 @@ internal static class Guard
         return value;
     }
 
+    public static Guid NotEmpty(
+        Guid value,
+        [CallerArgumentExpression(nameof(value))] string? name = null)
+    {
+        if (value == Guid.Empty)
+        {
+            throw new DomainException($"{name} is required.");
+        }
+
+        return value;
+    }
+
     public static decimal NotNegative(
         decimal value,
         [CallerArgumentExpression(nameof(value))] string? name = null)
