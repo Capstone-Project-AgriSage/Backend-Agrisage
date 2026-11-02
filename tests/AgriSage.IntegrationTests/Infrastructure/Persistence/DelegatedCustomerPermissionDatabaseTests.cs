@@ -83,7 +83,11 @@ public sealed class DelegatedCustomerPermissionDatabaseTests
             new("CUSTOMER_GROUPS.CREATE", true), new("CUSTOMER_GROUPS.UPDATE", true), new("CUSTOMER_GROUPS.DEACTIVATE", true),
             new("CUSTOMER_GROUPS.ACTIVATE", true), new("CUSTOMER_GROUPS.DELETE", true),
             new("CREDIT_TIERS.CREATE", true), new("CREDIT_TIERS.UPDATE", true), new("CREDIT_TIERS.DEACTIVATE", true),
-            new("CREDIT_TIERS.ACTIVATE", true), new("CUSTOMERS.STATUS", true), new("CREDIT.SUSPEND", true), new("CREDIT.ACTIVATE", true));
+            new("CREDIT_TIERS.ACTIVATE", true), new("CUSTOMERS.STATUS", true));
+        // F3.21 part 2: credit status codes are not delegable, so the permission screen refuses to grant them.
+        await Assert.ThrowsAsync<ForbiddenException>(() => env.Configure(new PermissionOverride("CREDIT.SUSPEND", true)));
+        await Assert.ThrowsAsync<ForbiddenException>(() => env.Configure(new PermissionOverride("CREDIT.ACTIVATE", true)));
+        env.As(env.Sale);
         var group = await env.Groups.CreateAsync(new(Tag(), "Delegated group"), Token);
         Assert.Equal("Changed group", (await env.Groups.UpdateAsync(group.Id, new("Changed group"), Token)).Name);
         Assert.False((await env.Groups.SetActiveAsync(group.Id, false, Token)).IsActive);
@@ -96,15 +100,14 @@ public sealed class DelegatedCustomerPermissionDatabaseTests
         Assert.Equal("INACTIVE", (await env.Customers.SetStatusAsync(env.Farmer.Id, new("INACTIVE"), Token)).Status);
         Assert.Equal("ACTIVE", (await env.Customers.SetStatusAsync(env.Farmer.Id, new("ACTIVE"), Token)).Status);
         await env.Credit.CreateAsync(env.Farmer.Id, new(tier.Id, 1000), Token);
-        // F3.21: credit status changes are owner-only, so the granted CREDIT.SUSPEND / CREDIT.ACTIVATE no longer open them and
-        // the profile stays active.
+        // F3.21: credit status changes are owner-only, so Sale staff cannot suspend or reactivate and the profile stays active.
         await Assert.ThrowsAsync<ForbiddenException>(() => env.Credit.StatusAsync(env.Farmer.Id, "SUSPENDED", new("Suspend credit"), Token));
         await Assert.ThrowsAsync<ForbiddenException>(() => env.Credit.StatusAsync(env.Farmer.Id, "ACTIVE", new("Reactivate credit"), Token));
         db.ChangeTracker.Clear();
         Assert.Equal(FarmerCreditProfileStatus.Active, await db.FarmerCreditProfiles.AsNoTracking()
             .Where(p => p.FarmerProfileId == env.Farmer.Id).Select(p => p.Status).SingleAsync(Token));
         await Assert.ThrowsAsync<ForbiddenException>(() => env.Credit.StatusAsync(env.Farmer.Id, "BLOCKED", new("Not granted"), Token));
-        await env.Configure(new("CUSTOMER_GROUPS.CREATE", false), new("CREDIT.ACTIVATE", false));
+        await env.Configure(new PermissionOverride("CUSTOMER_GROUPS.CREATE", false));
         await Assert.ThrowsAsync<ForbiddenException>(() => env.Groups.CreateAsync(new(Tag(), "Revoked"), Token));
         await Assert.ThrowsAsync<ForbiddenException>(() => env.Credit.StatusAsync(env.Farmer.Id, "ACTIVE", new("Revoked"), Token));
     }
@@ -119,7 +122,8 @@ public sealed class DelegatedCustomerPermissionDatabaseTests
         await env.Credit.CreateAsync(env.Farmer.Id, new(tier.Id, 1000), Token);
         var group = await env.Groups.CreateAsync(new(Tag(), "Group with other tier"), Token);
         await env.Groups.SetCreditTierAsync(group.Id, new(otherTier.Id), Token);
-        await env.Configure(new("CREDIT.UPDATE", false), new("CREDIT.CREATE", false), new("CREDIT.SUSPEND", false));
+        // CREDIT.SUSPEND is owner-only and not delegable since F3.21: Sale staff never holds it, nothing to revoke.
+        await env.Configure(new("CREDIT.UPDATE", false), new("CREDIT.CREATE", false));
         var userId = env.Farmer.UserId;
         var name = await db.Users.Where(u => u.Id == userId).Select(u => u.FullName).SingleAsync(Token);
         var email = await db.Users.Where(u => u.Id == userId).Select(u => u.Email).SingleAsync(Token);
@@ -142,8 +146,8 @@ public sealed class DelegatedCustomerPermissionDatabaseTests
     }
 
     [RealDbFact]
-    // F3.21: manual debt, adjust, cancel and bank-transfer confirm/reject are owner-only. Sale staff holding every grant is refused
-    // and nothing is written; recording a pending transfer stays a staff action; the owner keeps the full ledger behaviour.
+    // F3.21: manual debt, adjust, cancel and bank-transfer confirm/reject are owner-only and cannot be delegated. Sale staff is
+    // refused and nothing is written; recording a pending transfer stays a staff action; the owner keeps the full ledger behaviour.
     public async Task Debt_and_bank_review_are_owner_only_even_when_granted_and_keep_financial_ledgers()
     {
         await using var session = await RealDb.Session.StartAsync(); await using var db = session.NewContext();
@@ -152,8 +156,10 @@ public sealed class DelegatedCustomerPermissionDatabaseTests
         env.As(env.Owner);
         var entry = await env.Debt.ManualAsync(env.Farmer.Id, new(300, due, "Opening debt"), Token);
         var cancelled = await env.Debt.ManualAsync(env.Farmer.Id, new(10, due, "Another debt"), Token);
-        await env.Configure(new("DEBT.MANUAL", true), new("DEBT.ADJUST", true), new("DEBT.CANCEL", true),
-            new("BANK_PAYMENTS.REJECT", true), new("BANK_PAYMENTS.CONFIRM", true));
+        // F3.21 part 2: none of these can be granted to Sale staff any more.
+        foreach (var code in new[] { "DEBT.MANUAL", "DEBT.ADJUST", "DEBT.CANCEL", "BANK_PAYMENTS.REJECT", "BANK_PAYMENTS.CONFIRM" })
+            await Assert.ThrowsAsync<ForbiddenException>(() => env.Configure(new PermissionOverride(code, true)));
+        env.As(env.Sale);
         var payment = await env.Bank.RecordAsync(new(env.Farmer.Id, 100), Token);
         var confirmed = await env.Bank.RecordAsync(new(env.Farmer.Id, 100), Token);
         db.ChangeTracker.Clear();
