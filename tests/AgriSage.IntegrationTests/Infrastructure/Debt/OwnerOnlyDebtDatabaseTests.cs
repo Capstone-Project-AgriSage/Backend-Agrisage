@@ -32,6 +32,7 @@ public sealed class OwnerOnlyDebtDatabaseTests
     internal const string ByOverride = "override";     // store_member_permissions.is_granted = true
     private const string ByRole = "role";             // role_permissions of the Sale role
     private const string ByInheritance = "inherit";   // role default + an override row with is_granted = null
+    internal const string NoGrant = "none";            // an active Sale member without any of these grants
 
     internal static async Task<(Guid UserId, Guid MemberId)> AddStaffAsync(CreditTestDatabase e, string style)
     {
@@ -39,7 +40,7 @@ public sealed class OwnerOnlyDebtDatabaseTests
         var sale = new Role(RoleCode.SalesStaff, "Sale"); var user = new User(sale.Id, "Staff", "hash", "staff@example.test", null);
         var member = new StoreMember(e.StoreId, user.Id);
         db.AddRange(sale, user, member); await db.SaveChangesAsync(Token);
-        foreach (var code in Codes)
+        foreach (var code in style == NoGrant ? [] : Codes)
         {
             var id = PermissionCatalog.ByCode[code].Id;
             if (style == ByOverride) db.StoreMemberPermissions.Add(new(member.Id, id, true));

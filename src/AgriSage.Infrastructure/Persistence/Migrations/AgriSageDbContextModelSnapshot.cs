@@ -3504,7 +3504,7 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                             Id = new Guid("f02cca7a-535e-1c66-cf85-d55480285eef"),
                             Code = "BANK_PAYMENTS.CONFIRM",
                             IsActive = true,
-                            IsDelegable = true,
+                            IsDelegable = false,
                             Module = "BANK_PAYMENTS",
                             Name = "Xác nhận"
                         },
@@ -3522,7 +3522,7 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                             Id = new Guid("cd122a99-61bd-683f-491a-19e1ca097e7a"),
                             Code = "BANK_PAYMENTS.REJECT",
                             IsActive = true,
-                            IsDelegable = true,
+                            IsDelegable = false,
                             Module = "BANK_PAYMENTS",
                             Name = "Từ chối"
                         },
@@ -3702,7 +3702,7 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                             Id = new Guid("9f33832a-1a89-e65d-a419-85d20ff9e062"),
                             Code = "CREDIT.ACTIVATE",
                             IsActive = true,
-                            IsDelegable = true,
+                            IsDelegable = false,
                             Module = "CREDIT",
                             Name = "Kích hoạt"
                         },
@@ -3711,7 +3711,7 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                             Id = new Guid("dd6533ae-c6e0-5307-f655-1587987ab231"),
                             Code = "CREDIT.BLOCK",
                             IsActive = true,
-                            IsDelegable = true,
+                            IsDelegable = false,
                             Module = "CREDIT",
                             Name = "Khóa tín dụng"
                         },
@@ -3747,7 +3747,7 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                             Id = new Guid("8250ff60-b1f6-a423-8d4b-e24f18692936"),
                             Code = "CREDIT.SUSPEND",
                             IsActive = true,
-                            IsDelegable = true,
+                            IsDelegable = false,
                             Module = "CREDIT",
                             Name = "Tạm dừng"
                         },
@@ -3864,7 +3864,7 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                             Id = new Guid("46a90a7a-3994-f3b2-6611-4c439280e587"),
                             Code = "DEBT.ADJUST",
                             IsActive = true,
-                            IsDelegable = true,
+                            IsDelegable = false,
                             Module = "DEBT",
                             Name = "Điều chỉnh"
                         },
@@ -3873,7 +3873,7 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                             Id = new Guid("ab3d58f3-b46e-4bea-da41-d14f270f38d0"),
                             Code = "DEBT.CANCEL",
                             IsActive = true,
-                            IsDelegable = true,
+                            IsDelegable = false,
                             Module = "DEBT",
                             Name = "Hủy"
                         },
@@ -3891,7 +3891,7 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                             Id = new Guid("627dae2e-7814-b747-4a18-a4a42938de57"),
                             Code = "DEBT.DUE_DATE",
                             IsActive = true,
-                            IsDelegable = true,
+                            IsDelegable = false,
                             Module = "DEBT",
                             Name = "Due Date"
                         },
@@ -3909,7 +3909,7 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                             Id = new Guid("c77147d9-b74d-612f-1cf1-527c23673ddd"),
                             Code = "DEBT.MANUAL",
                             IsActive = true,
-                            IsDelegable = true,
+                            IsDelegable = false,
                             Module = "DEBT",
                             Name = "Manual"
                         },
