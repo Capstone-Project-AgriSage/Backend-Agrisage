@@ -6,6 +6,7 @@ using AgriSage.Application.Features.Debt;
 using AgriSage.Application.Features.Orders;
 using AgriSage.Application.Features.Payments;
 using AgriSage.Application.Features.Permissions;
+using AgriSage.Domain.Features.Credit.Enums;
 using AgriSage.Domain.Features.Customers.Entities;
 using AgriSage.Domain.Features.Identity.Entities;
 using AgriSage.Domain.Features.Identity.Enums;
@@ -74,7 +75,7 @@ public sealed class DelegatedCustomerPermissionDatabaseTests
     }
 
     [RealDbFact]
-    public async Task Sale_grants_enable_group_tier_customer_and_credit_status_actions_and_revocation_is_live()
+    public async Task Sale_grants_enable_group_tier_and_customer_actions_but_not_credit_status_and_revocation_is_live()
     {
         await using var session = await RealDb.Session.StartAsync(); await using var db = session.NewContext();
         var env = await Setup(session, db);
@@ -95,8 +96,13 @@ public sealed class DelegatedCustomerPermissionDatabaseTests
         Assert.Equal("INACTIVE", (await env.Customers.SetStatusAsync(env.Farmer.Id, new("INACTIVE"), Token)).Status);
         Assert.Equal("ACTIVE", (await env.Customers.SetStatusAsync(env.Farmer.Id, new("ACTIVE"), Token)).Status);
         await env.Credit.CreateAsync(env.Farmer.Id, new(tier.Id, 1000), Token);
-        Assert.Equal("SUSPENDED", (await env.Credit.StatusAsync(env.Farmer.Id, "SUSPENDED", new("Suspend credit"), Token)).Status);
-        Assert.Equal("ACTIVE", (await env.Credit.StatusAsync(env.Farmer.Id, "ACTIVE", new("Reactivate credit"), Token)).Status);
+        // F3.21: credit status changes are owner-only, so the granted CREDIT.SUSPEND / CREDIT.ACTIVATE no longer open them and
+        // the profile stays active.
+        await Assert.ThrowsAsync<ForbiddenException>(() => env.Credit.StatusAsync(env.Farmer.Id, "SUSPENDED", new("Suspend credit"), Token));
+        await Assert.ThrowsAsync<ForbiddenException>(() => env.Credit.StatusAsync(env.Farmer.Id, "ACTIVE", new("Reactivate credit"), Token));
+        db.ChangeTracker.Clear();
+        Assert.Equal(FarmerCreditProfileStatus.Active, await db.FarmerCreditProfiles.AsNoTracking()
+            .Where(p => p.FarmerProfileId == env.Farmer.Id).Select(p => p.Status).SingleAsync(Token));
         await Assert.ThrowsAsync<ForbiddenException>(() => env.Credit.StatusAsync(env.Farmer.Id, "BLOCKED", new("Not granted"), Token));
         await env.Configure(new("CUSTOMER_GROUPS.CREATE", false), new("CREDIT.ACTIVATE", false));
         await Assert.ThrowsAsync<ForbiddenException>(() => env.Groups.CreateAsync(new(Tag(), "Revoked"), Token));
@@ -136,21 +142,38 @@ public sealed class DelegatedCustomerPermissionDatabaseTests
     }
 
     [RealDbFact]
-    public async Task Debt_and_bank_review_require_each_exact_grant_and_keep_financial_ledgers()
+    // F3.21: manual debt, adjust, cancel and bank-transfer confirm/reject are owner-only. Sale staff holding every grant is refused
+    // and nothing is written; recording a pending transfer stays a staff action; the owner keeps the full ledger behaviour.
+    public async Task Debt_and_bank_review_are_owner_only_even_when_granted_and_keep_financial_ledgers()
     {
         await using var session = await RealDb.Session.StartAsync(); await using var db = session.NewContext();
         var env = await Setup(session, db);
-        await env.Configure(new("DEBT.MANUAL", true), new("DEBT.ADJUST", true), new("DEBT.CANCEL", true), new("BANK_PAYMENTS.REJECT", true));
-        var entry = await env.Debt.ManualAsync(env.Farmer.Id, new(300, BusinessCalendar.Today(DateTimeOffset.UtcNow).AddDays(30), "Opening debt"), Token);
-        Assert.Equal(250, (await env.Debt.ActionAsync(entry.Id, "ADJUST", "Correction", 50, null, Token)).OutstandingAmount);
+        var due = BusinessCalendar.Today(DateTimeOffset.UtcNow).AddDays(30);
+        env.As(env.Owner);
+        var entry = await env.Debt.ManualAsync(env.Farmer.Id, new(300, due, "Opening debt"), Token);
+        var cancelled = await env.Debt.ManualAsync(env.Farmer.Id, new(10, due, "Another debt"), Token);
+        await env.Configure(new("DEBT.MANUAL", true), new("DEBT.ADJUST", true), new("DEBT.CANCEL", true),
+            new("BANK_PAYMENTS.REJECT", true), new("BANK_PAYMENTS.CONFIRM", true));
         var payment = await env.Bank.RecordAsync(new(env.Farmer.Id, 100), Token);
-        await Assert.ThrowsAsync<ForbiddenException>(() => env.Bank.ConfirmAsync(payment.Id, Token));
-        Assert.Equal("FAILED", (await env.Bank.RejectAsync(payment.Id, new("Declined bank receipt"), Token)).Status);
-        await env.Configure(new PermissionOverride("BANK_PAYMENTS.CONFIRM", true));
         var confirmed = await env.Bank.RecordAsync(new(env.Farmer.Id, 100), Token);
+        db.ChangeTracker.Clear();
+        // Only this test's entries: the shared database may be written by other tests at the same time.
+        Task<int> LedgerAsync() => db.DebtTransactions.AsNoTracking().CountAsync(t => t.DebtEntryId == entry.Id || t.DebtEntryId == cancelled.Id, Token);
+        var ledgerBefore = await LedgerAsync();
+        await Assert.ThrowsAsync<ForbiddenException>(() => env.Debt.ManualAsync(env.Farmer.Id, new(50, due, "Staff debt"), Token));
+        await Assert.ThrowsAsync<ForbiddenException>(() => env.Debt.ActionAsync(entry.Id, "ADJUST", "Correction", 50, null, Token));
+        await Assert.ThrowsAsync<ForbiddenException>(() => env.Debt.ActionAsync(cancelled.Id, "CANCEL", "Cancel erroneous debt", null, null, Token));
+        await Assert.ThrowsAsync<ForbiddenException>(() => env.Bank.RejectAsync(payment.Id, new("Declined bank receipt"), Token));
+        await Assert.ThrowsAsync<ForbiddenException>(() => env.Bank.ConfirmAsync(confirmed.Id, Token));
+        db.ChangeTracker.Clear();
+        Assert.Equal(ledgerBefore, await LedgerAsync());
+        Assert.Equal(300, (await env.Debt.EntryAsync(entry.Id, Token)).OutstandingAmount);
+
+        env.As(env.Owner);
+        Assert.Equal(250, (await env.Debt.ActionAsync(entry.Id, "ADJUST", "Correction", 50, null, Token)).OutstandingAmount);
+        Assert.Equal("FAILED", (await env.Bank.RejectAsync(payment.Id, new("Declined bank receipt"), Token)).Status);
         Assert.Equal("PAID", (await env.Bank.ConfirmAsync(confirmed.Id, Token)).Status);
         Assert.Equal(150, (await env.Debt.EntryAsync(entry.Id, Token)).OutstandingAmount);
-        var cancelled = await env.Debt.ManualAsync(env.Farmer.Id, new(10, BusinessCalendar.Today(DateTimeOffset.UtcNow).AddDays(30), "Another debt"), Token);
         Assert.Equal("CANCELLED", (await env.Debt.ActionAsync(cancelled.Id, "CANCEL", "Cancel erroneous debt", null, null, Token)).Status);
         Assert.True(await db.DebtTransactions.AsNoTracking().CountAsync(t => t.DebtEntryId == entry.Id, Token) >= 3);
     }
