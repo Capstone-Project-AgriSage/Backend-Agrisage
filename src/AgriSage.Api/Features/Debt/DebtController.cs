@@ -35,6 +35,7 @@ public sealed class DebtController(IDebtService service) : ControllerBase
     [HttpPost("api/debt-entries/{id:guid}/keep")]
     public Task<DebtEntryResponse> Keep(Guid id, DebtReasonRequest request, CancellationToken token) => service.ActionAsync(id, "KEEP", request.Reason, null, null, token);
     [HttpPost("api/debt-entries/{id:guid}/change-due-date")]
+    [Authorize(Roles = ApiRoles.Manage)]
     public Task<DebtEntryResponse> DueDate(Guid id, DebtDueDateRequest request, CancellationToken token) => service.ActionAsync(id, "CHANGE_DUE_DATE", request.Reason, null, request.NewDueDate, token);
     [HttpPost("api/debt-entries/{id:guid}/adjust")]
     [Authorize(Roles = ApiRoles.Manage)]

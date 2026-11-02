@@ -198,10 +198,9 @@ public sealed class CustomerWrites(IAgriSageDbContext context, ICurrentUserServi
             FarmerCreditProfileStatus.Blocked => "CREDIT.BLOCK",
             _ => throw new BusinessRuleException("Invalid credit status.")
         };
-        // Suspending or blocking credit is owner-only (CS-10), also when it arrives through the customer form. Reactivation keeps
-        // the delegable gate until CREDIT.ACTIVATE is decided.
-        if (status == FarmerCreditProfileStatus.Active) await ActorAsync(permission, token, manage: true);
-        else await OwnerActorAsync(permission, token);
+        // Every credit status change is owner-only (CS-10, F3.21), also when it arrives through the customer form: suspend, block
+        // and reactivation alike, so delegated staff cannot undo what the owner decided.
+        await OwnerActorAsync(permission, token);
         RequireReason(reason);
         var before = new { Status = EnumText.Format(profile.Status) };
         profile.ChangeStatus(status);

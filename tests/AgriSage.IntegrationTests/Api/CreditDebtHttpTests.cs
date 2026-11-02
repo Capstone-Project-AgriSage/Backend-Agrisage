@@ -51,6 +51,10 @@ public sealed class CreditDebtHttpTests(StaffHttpTests.StaffApiFactory factory) 
     [InlineData("/api/debt-entries/{id}/adjust")]
     [InlineData("/api/debt-entries/{id}/cancel")]
     [InlineData("/api/customers/{id}/debt/manual-entries")]
+    // Owner-only since F3.21, but DEBT.DUE_DATE still lists SALES_STAFF in its catalog defaults, so the delegated-permission
+    // handler lets Sale staff past the role filter and an empty body fails validation (400) before the service guard (403).
+    [InlineData("/api/debt-entries/{id}/change-due-date",
+        Skip = "Chờ việc 5 (F3.21 phần 2): bỏ quyền mặc định DEBT.DUE_DATE của SALES_STAFF và Delegable = false.")]
     public async Task Sales_cannot_review_bank_receipts_or_adjust_debt(string route)
     {
         using var c = Client("SALES_STAFF");

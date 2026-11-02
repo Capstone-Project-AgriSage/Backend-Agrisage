@@ -25,6 +25,7 @@ public sealed class OwnerOnlyDebtDatabaseTests
     private static readonly string[] Codes =
     [
         "DEBT.ADJUST", "DEBT.CANCEL", "DEBT.MANUAL", "BANK_PAYMENTS.CONFIRM", "BANK_PAYMENTS.REJECT", "CREDIT.SUSPEND", "CREDIT.BLOCK",
+        "CREDIT.ACTIVATE", "DEBT.DUE_DATE",
     ];
 
     // How the permission reaches the Sale staff member.
@@ -81,6 +82,19 @@ public sealed class OwnerOnlyDebtDatabaseTests
         var ownerId = e.User.UserId; var ownerRole = e.User.Role;
         e.User.UserId = staff.UserId; e.User.Role = "SALES_STAFF";
 
+        async Task UpdateCustomerAsync(IServiceProvider p, bool allowCredit)
+        {
+            // The fixture does not register the password hasher that CustomerService needs; supply it here.
+            var customers = ActivatorUtilities.CreateInstance<AgriSage.Application.Features.Customers.CustomerService>(
+                p, new AgriSage.Infrastructure.Authentication.PasswordHashService());
+            var current = await customers.GetAsync(e.FarmerId, Token);
+            await customers.UpdateAsync(e.FarmerId, new AgriSage.Application.Features.Customers.UpdateCustomerRequest
+            {
+                FullName = current.FullName, PhoneNumber = current.PhoneNumber, Email = current.Email,
+                AllowCreditPurchase = allowCredit, CreditChangeReason = "reason",
+            }, Token);
+        }
+
         async Task Refused(Func<IServiceProvider, Task> act, string what)
         {
             using var s = e.Scope();
@@ -94,20 +108,18 @@ public sealed class OwnerOnlyDebtDatabaseTests
         await Refused(p => p.GetRequiredService<IBankDebtPaymentService>().RejectAsync(paymentId, new("reason"), Token), "bank reject");
         await Refused(p => p.GetRequiredService<ICustomerCreditService>().StatusAsync(e.FarmerId, "SUSPENDED", new("reason"), Token), "credit suspend");
         await Refused(p => p.GetRequiredService<ICustomerCreditService>().StatusAsync(e.FarmerId, "BLOCKED", new("reason"), Token), "credit block");
+        await Refused(p => p.GetRequiredService<IDebtService>().ActionAsync(entryId, "CHANGE_DUE_DATE", "reason", null, new DateOnly(2099, 12, 1), Token), "change due date");
 
         // Indirect path: the customer form suspends credit when AllowCreditPurchase is switched off.
-        await Refused(async p =>
-        {
-            // The fixture does not register the password hasher that CustomerService needs; supply it here.
-            var customers = ActivatorUtilities.CreateInstance<AgriSage.Application.Features.Customers.CustomerService>(
-                p, new AgriSage.Infrastructure.Authentication.PasswordHashService());
-            var current = await customers.GetAsync(e.FarmerId, Token);
-            await customers.UpdateAsync(e.FarmerId, new AgriSage.Application.Features.Customers.UpdateCustomerRequest
-            {
-                FullName = current.FullName, PhoneNumber = current.PhoneNumber, Email = current.Email,
-                AllowCreditPurchase = false, CreditChangeReason = "reason",
-            }, Token);
-        }, "credit suspend through the customer form");
+        await Refused(p => UpdateCustomerAsync(p, allowCredit: false), "credit suspend through the customer form");
+
+        // Reactivation is owner-only too: the owner suspends, then staff cannot switch credit back on by either path.
+        e.User.UserId = ownerId; e.User.Role = ownerRole;
+        using (var s = e.Scope()) await s.ServiceProvider.GetRequiredService<ICustomerCreditService>().StatusAsync(e.FarmerId, "SUSPENDED", new("Late payer"), Token);
+        before = await SnapshotAsync(e, paymentId);
+        e.User.UserId = staff.UserId; e.User.Role = "SALES_STAFF";
+        await Refused(p => p.GetRequiredService<ICustomerCreditService>().StatusAsync(e.FarmerId, "ACTIVE", new("reason"), Token), "credit activate");
+        await Refused(p => UpdateCustomerAsync(p, allowCredit: true), "credit activate through the customer form");
 
         // The action the staff member is still allowed to take keeps working (a pending transfer is only recorded).
         using (var s = e.Scope()) await s.ServiceProvider.GetRequiredService<IBankDebtPaymentService>().RecordAsync(new(e.FarmerId, 100_000, Reference: "staff"), Token);
@@ -125,14 +137,14 @@ public sealed class OwnerOnlyDebtDatabaseTests
 
     // The customer form only changes credit status on a real transition. Re-sending AllowCreditPurchase = false for a customer
     // whose credit is already suspended is not a suspension, so staff can still edit the customer; switching it back on through
-    // the form still needs the reactivation permission that applies today (CREDIT.ACTIVATE), it does not go around it.
+    // the form is a reactivation, which is owner-only even for staff holding CREDIT.ACTIVATE.
     [CreditDbFact]
     public async Task Customer_form_only_guards_a_real_credit_status_change()
     {
         await using var e = await CreditTestDatabase.StartAsync(Token);
         using (var s = e.Scope())
             await s.ServiceProvider.GetRequiredService<ICustomerCreditService>().StatusAsync(e.FarmerId, "SUSPENDED", new("Late payer"), Token);
-        var staff = await AddStaffAsync(e, ByOverride); // holds the seven owner-only codes, not CREDIT.ACTIVATE
+        var staff = await AddStaffAsync(e, ByOverride); // holds every owner-only code, CREDIT.ACTIVATE included
         var ownerId = e.User.UserId; e.User.UserId = staff.UserId; e.User.Role = "SALES_STAFF";
 
         async Task Update(bool allowCredit, string name)
@@ -178,9 +190,14 @@ public sealed class OwnerOnlyDebtDatabaseTests
         await bank.RejectAsync(rejected.Id, new("Wrong reference"), Token);
         await debt.ManualAsync(e.FarmerId, new(200_000, new DateOnly(2026, 12, 1), "Old balance"), Token);
         await debt.ActionAsync(entryId, "ADJUST", "Price correction", 100_000, null, Token);
-        await s.ServiceProvider.GetRequiredService<ICustomerCreditService>().StatusAsync(e.FarmerId, "SUSPENDED", new("Late payer"), Token);
-
+        await debt.ActionAsync(entryId, "CHANGE_DUE_DATE", "Harvest delayed", null, new DateOnly(2099, 12, 1), Token);
+        var credit = s.ServiceProvider.GetRequiredService<ICustomerCreditService>();
+        await credit.StatusAsync(e.FarmerId, "SUSPENDED", new("Late payer"), Token);
         Assert.Equal(FarmerCreditProfileStatus.Suspended, (await db.FarmerCreditProfiles.AsNoTracking().SingleAsync(Token)).Status);
+        await credit.StatusAsync(e.FarmerId, "ACTIVE", new("Paid up"), Token);
+
+        Assert.Equal(FarmerCreditProfileStatus.Active, (await db.FarmerCreditProfiles.AsNoTracking().SingleAsync(Token)).Status);
+        Assert.Equal(new DateOnly(2099, 12, 1), (await db.DebtEntries.AsNoTracking().SingleAsync(x => x.Id == entryId, Token)).DueDate);
         Assert.Equal(PaymentStatus.Paid, (await db.Payments.AsNoTracking().SingleAsync(p => p.Id == confirmed.Id, Token)).Status);
         Assert.Equal(PaymentStatus.Failed, (await db.Payments.AsNoTracking().SingleAsync(p => p.Id == rejected.Id, Token)).Status);
     }

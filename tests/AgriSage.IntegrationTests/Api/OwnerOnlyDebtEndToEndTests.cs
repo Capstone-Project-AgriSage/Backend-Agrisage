@@ -83,6 +83,8 @@ public sealed class OwnerOnlyDebtEndToEndTests(StaffHttpTests.StaffApiFactory fa
             Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync($"/api/payments/{paymentId}/reject", new { reason = "r" }, token)).StatusCode);
             Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync($"/api/customers/{e.FarmerId}/credit/suspend", new { reason = "r" }, token)).StatusCode);
             Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync($"/api/customers/{e.FarmerId}/credit/block", new { reason = "r" }, token)).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync($"/api/customers/{e.FarmerId}/credit/activate", new { reason = "r" }, token)).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync($"/api/debt-entries/{entryId}/change-due-date", new { newDueDate = "2099-12-01", reason = "r" }, token)).StatusCode);
         }
         Assert.Equal(before, await OwnerOnlyDebtDatabaseTests.SnapshotAsync(e, paymentId));
 

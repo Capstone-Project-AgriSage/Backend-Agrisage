@@ -165,8 +165,13 @@ public sealed class DebtService(IAgriSageDbContext db, IRowLockService locks, ID
 
     public async Task<DebtEntryResponse> ActionAsync(Guid id, string action, string reason, decimal? amount, DateOnly? dueDate, CancellationToken token)
     {
-        var actor = action is "ADJUST" or "CANCEL"
-            ? await access.OwnerActorAsync("DEBT." + action, token) : access.Actor();
+        // Adjust, cancel and changing the due date are owner-only (F3.21); dispute and keep stay open to Sale staff.
+        var actor = action switch
+        {
+            "ADJUST" or "CANCEL" => await access.OwnerActorAsync("DEBT." + action, token),
+            "CHANGE_DUE_DATE" => await access.OwnerActorAsync("DEBT.DUE_DATE", token),
+            _ => access.Actor(),
+        };
         return await ActionCoreAsync(id, action, reason, amount, dueDate, actor, token);
     }
 

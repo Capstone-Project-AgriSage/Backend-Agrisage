@@ -24,6 +24,8 @@ public sealed class OwnerOnlyDebtPermissionHttpTests(StaffHttpTests.StaffApiFact
         { "BANK_PAYMENTS.REJECT", $"/api/payments/{Id}/reject", new { reason = "r" } },
         { "CREDIT.SUSPEND", $"/api/customers/{Id}/credit/suspend", new { reason = "r" } },
         { "CREDIT.BLOCK", $"/api/customers/{Id}/credit/block", new { reason = "r" } },
+        { "CREDIT.ACTIVATE", $"/api/customers/{Id}/credit/activate", new { reason = "r" } },
+        { "DEBT.DUE_DATE", $"/api/debt-entries/{Id}/change-due-date", new { newDueDate = "2099-12-01", reason = "r" } },
     };
 
     private (HttpClient Client, IAsyncDisposable App) Client(string code, string role)
@@ -58,6 +60,7 @@ public sealed class OwnerOnlyDebtPermissionHttpTests(StaffHttpTests.StaffApiFact
     [Theory]
     [InlineData("DEBT.ADJUST", "adjust")]
     [InlineData("DEBT.CANCEL", "cancel")]
+    [InlineData("DEBT.DUE_DATE", "change-due-date")]
     public async Task Store_owner_with_the_permission_reaches_request_validation(string code, string action)
     {
         var (client, app) = Client(code, "STORE_OWNER");
