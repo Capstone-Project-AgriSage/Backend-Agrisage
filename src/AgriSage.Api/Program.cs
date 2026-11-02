@@ -34,7 +34,7 @@ builder.Services.AddControllers(options =>
 {
     options.Filters.Add<AgriSage.Api.Authorization.PermissionFilter>();
     options.Filters.Add<ValidationFilter>();
-});
+}).AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new UtcDateTimeOffsetConverter()));
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddApiAuthentication();
 builder.Services.AddAuthorization();
