@@ -108,7 +108,8 @@ public class LockDebtPermissionDelegationMigrationTests
                 await db.SaveChangesAsync(Token);
             }
 
-            await using (var db = Context()) await db.GetService<IMigrator>().MigrateAsync(null, Token);
+            // Up to this migration only: later migrations add their own role defaults.
+            await using (var db = Context()) await db.GetService<IMigrator>().MigrateAsync("20261102193332_LockDebtPermissionDelegation", Token);
 
             await using var check = Context();
             async Task<bool?> Member(StoreMember m, Guid permission) => await check.StoreMemberPermissions.AsNoTracking()

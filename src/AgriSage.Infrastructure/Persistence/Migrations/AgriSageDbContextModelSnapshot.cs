@@ -4175,6 +4175,60 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         },
                         new
                         {
+                            Id = new Guid("5c2f2e3b-4b85-4ee0-b855-0aad4290088f"),
+                            Code = "DEBT.ROLLOVER",
+                            IsActive = true,
+                            IsDelegable = true,
+                            Module = "DEBT",
+                            Name = "Gia hạn nợ"
+                        },
+                        new
+                        {
+                            Id = new Guid("7ceb1441-6396-4245-8ab8-020712168942"),
+                            Code = "CROP_SEASONS.READ",
+                            IsActive = true,
+                            IsDelegable = true,
+                            Module = "CROP_SEASONS",
+                            Name = "Xem"
+                        },
+                        new
+                        {
+                            Id = new Guid("5a85c6fb-065e-4d96-8e65-11d7ed536e66"),
+                            Code = "CROP_SEASONS.MANAGE",
+                            IsActive = true,
+                            IsDelegable = false,
+                            Module = "CROP_SEASONS",
+                            Name = "Quản lý vụ mùa"
+                        },
+                        new
+                        {
+                            Id = new Guid("2ad0e01f-1a01-41ad-9fa3-3269d15755da"),
+                            Code = "DEBT_POLICY.READ",
+                            IsActive = true,
+                            IsDelegable = true,
+                            Module = "DEBT_POLICY",
+                            Name = "Xem"
+                        },
+                        new
+                        {
+                            Id = new Guid("9ae57c49-af20-440b-a94f-9a33344d012c"),
+                            Code = "DEBT_POLICY.MANAGE",
+                            IsActive = true,
+                            IsDelegable = false,
+                            Module = "DEBT_POLICY",
+                            Name = "Quản lý chính sách công nợ"
+                        },
+                        new
+                        {
+                            Id = new Guid("ffbb2c76-2185-48a3-8e1e-200b47d47652"),
+                            Code = "MY_CROP_SEASONS.READ",
+                            IsActive = true,
+                            IsDelegable = false,
+                            Module = "MY_CROP_SEASONS",
+                            Name = "Xem"
+                        },
+                        new
+                        {
                             Id = new Guid("8474cf9f-a967-c10a-c439-573bf58efcbe"),
                             Code = "DEBT.READ",
                             IsActive = true,

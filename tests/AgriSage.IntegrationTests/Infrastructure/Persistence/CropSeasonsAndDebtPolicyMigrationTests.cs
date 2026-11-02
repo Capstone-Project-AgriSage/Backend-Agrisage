@@ -72,7 +72,8 @@ public class CropSeasonsAndDebtPolicyMigrationTests
                          ('00000000-0000-0000-0000-00000000f007', '00000000-0000-0000-0000-00000000f005', 'DE-2', 'MANUAL_ADJUSTMENT', 800000, 800000, 0, '2026-12-01', 'PAID', '00000000-0000-0000-0000-00000000f002', now(), now());
                 """);
 
-            await using (var db = Context()) await db.GetService<IMigrator>().MigrateAsync(null, Token);
+            // Up to this migration only, so later migrations cannot change what this test checks.
+            await using (var db = Context()) await db.GetService<IMigrator>().MigrateAsync("20261102203458_CropSeasonsAndDebtPolicy", Token);
             await using (var db = Context())
             {
                 var entries = await db.DebtEntries.AsNoTracking().OrderBy(e => e.EntryNumber).ToListAsync(Token);
