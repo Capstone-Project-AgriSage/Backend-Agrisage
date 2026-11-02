@@ -1,6 +1,7 @@
 using AgriSage.Application.Common;
 using AgriSage.Application.Common.Models;
 using AgriSage.Domain.Features.Inventory.Enums;
+using AgriSage.Domain.Features.Products.Enums;
 using Microsoft.EntityFrameworkCore;
 
 namespace AgriSage.Application.Features.Inventory;
@@ -35,6 +36,8 @@ public sealed partial class InventoryService
         {
             query = hasStock ? query.Where(r => r.OnHand > 0) : query.Where(r => r.OnHand == 0);
         }
+        if (request.HasSellableStock is { } sellable)
+            query = sellable ? query.Where(r => r.Sellable > 0) : query.Where(r => r.Sellable <= 0);
 
         var total = await query.LongCountAsync(cancellationToken);
         var rows = await query.OrderBy(r => r.Sku).ThenBy(r => r.StoreProductId)
@@ -60,6 +63,14 @@ public sealed partial class InventoryService
         var lots = context.InventoryLots.AsNoTracking()
             .Where(l => l.StoreProduct.StoreId == storeId && l.Balance.QuantityOnHand > 0
                 && l.ExpiryDate != null && l.ExpiryDate <= lastDay);
+        if (request.CategoryId is { } categoryId)
+            lots = lots.Where(l => l.StoreProduct.Product.CategoryId == categoryId);
+        if (!string.IsNullOrWhiteSpace(request.Search)) {
+            var term = request.Search.Trim().ToLowerInvariant();
+            lots = lots.Where(l => l.StoreProduct.Product.Name.ToLower().Contains(term)
+                || l.StoreProduct.Product.Sku.ToLower().Contains(term)
+                || (l.StoreProduct.StoreSku != null && l.StoreProduct.StoreSku.ToLower().Contains(term)));
+        }
         var lotAlerts = lots.Select(l => new AlertRow
         {
             Type = l.ExpiryDate < today ? "EXPIRED" : "EXPIRING",
@@ -74,7 +85,13 @@ public sealed partial class InventoryService
             Reserved = l.Balance.QuantityReserved,
             MinStockLevelBase = l.StoreProduct.MinStockLevelBase
         });
-        var lowStockAlerts = SummaryQuery(storeId, today)
+        var summaries = SummaryQuery(storeId, today);
+        if (request.CategoryId is { } category) summaries = summaries.Where(r => r.CategoryId == category);
+        if (!string.IsNullOrWhiteSpace(request.Search)) {
+            var term = request.Search.Trim().ToLowerInvariant();
+            summaries = summaries.Where(r => r.Sku.ToLower().Contains(term) || r.ProductName.ToLower().Contains(term));
+        }
+        var lowStockAlerts = summaries
             .Where(r => r.MinStockLevelBase != null && r.Sellable < r.MinStockLevelBase)
             .Select(r => new AlertRow
             {
@@ -91,11 +108,17 @@ public sealed partial class InventoryService
                 MinStockLevelBase = r.MinStockLevelBase
             });
 
+        var outOfStockAlerts = summaries.Where(r => r.EligibleProduct && r.Sellable <= 0).Select(r => new AlertRow {
+            Type = "OUT_OF_STOCK", StoreProductId = r.StoreProductId, Sku = r.Sku, ProductName = r.ProductName,
+            InventoryLotId = null, LotNumber = null, ExpiryDate = null, LotStatus = null,
+            OnHand = r.OnHand, Reserved = r.Reserved, MinStockLevelBase = r.MinStockLevelBase
+        });
         var query = type switch
         {
             "LOW_STOCK" => lowStockAlerts,
+            "OUT_OF_STOCK" => outOfStockAlerts,
             "EXPIRING" or "EXPIRED" => lotAlerts.Where(r => r.Type == type),
-            _ => lotAlerts.Concat(lowStockAlerts)
+            _ => lotAlerts.Concat(lowStockAlerts).Concat(outOfStockAlerts)
         };
         var total = await query.LongCountAsync(cancellationToken);
         // All alert types share one count and one stable, SQL-side page.
@@ -162,6 +185,7 @@ public sealed partial class InventoryService
                select new SummaryRow
                {
                    StoreProductId = sp.Id,
+                   EligibleProduct = sp.IsActive && sp.IsSellable && sp.Product.Status == ProductStatus.Active,
                    CategoryId = sp.Product.CategoryId,
                    Sku = sp.StoreSku ?? sp.Product.Sku,
                    ProductSku = sp.Product.Sku,
@@ -179,6 +203,7 @@ public sealed partial class InventoryService
 
     private sealed class SummaryRow
     {
+        public bool EligibleProduct { get; init; }
         public Guid StoreProductId { get; init; }
         public Guid CategoryId { get; init; }
         public string Sku { get; init; } = null!;

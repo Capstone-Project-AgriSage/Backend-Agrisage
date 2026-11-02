@@ -208,6 +208,15 @@ public sealed class UpdateStoreProductRequestValidator : AbstractValidator<Updat
     {
         RuleFor(r => r.StoreSku).MaximumLength(50);
         RuleFor(r => r.MinStockLevelBase).GreaterThanOrEqualTo(0).When(r => r.MinStockLevelBase is not null);
+        When(r => r.Replenishment is not null, () => {
+            RuleFor(r => r.Replenishment!.LeadTimeDays).InclusiveBetween(0, 365);
+            RuleFor(r => r.Replenishment!.SafetyStockBase).GreaterThanOrEqualTo(0);
+            RuleFor(r => r.Replenishment!.TargetCoverageDays).InclusiveBetween(1, 90);
+            RuleFor(r => r.Replenishment!.TargetStockLevelBase).Must(t => t is null || t >= 0);
+            RuleFor(r => r).Must(r => r.Replenishment!.TargetStockLevelBase is null || r.MinStockLevelBase is null
+                || r.Replenishment.TargetStockLevelBase >= r.MinStockLevelBase)
+                .WithMessage("Target stock must not be lower than minimum stock.");
+        });
     }
 }
 

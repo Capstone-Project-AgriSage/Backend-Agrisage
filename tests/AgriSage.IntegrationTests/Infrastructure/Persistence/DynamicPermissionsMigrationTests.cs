@@ -16,7 +16,8 @@ public sealed class DynamicPermissionsMigrationTests
         Assert.All(ops.OfType<CreateTableOperation>().SelectMany(t => t.ForeignKeys), fk => Assert.Equal(ReferentialAction.Restrict, fk.OnDelete));
         // The catalog as this migration shipped it: permissions added by later migrations are not part of it.
         var shipped = PermissionCatalog.Entries
-            .Where(p => !AiDiagnosisPermissionsMigrationTests.NewCodes.Contains(p.Code) && !AdvisoryMigrationTests.NewCodes.Contains(p.Code))
+            .Where(p => !AiDiagnosisPermissionsMigrationTests.NewCodes.Contains(p.Code) && !AdvisoryMigrationTests.NewCodes.Contains(p.Code)
+                && !InventoryReplenishmentMigrationTests.NewCodes.Contains(p.Code))
             .ToList();
         var seed = Assert.Single(ops.OfType<InsertDataOperation>());
         Assert.Equal(shipped.Count, seed.Values.GetLength(0));

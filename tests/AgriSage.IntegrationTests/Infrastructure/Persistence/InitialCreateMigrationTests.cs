@@ -33,7 +33,8 @@ public class InitialCreateMigrationTests
                 "20261010064131_AiDiagnosisPermissions",
                 "20261020030801_PermissionOverrideInheritance",
                 "20261027143255_EventDrivenRealtime",
-                "20261101232318_AdvisoryProblemProducts"
+                "20261101232318_AdvisoryProblemProducts",
+                "20261102090829_InventoryReplenishment"
             ],
             context.Database.GetMigrations());
     }

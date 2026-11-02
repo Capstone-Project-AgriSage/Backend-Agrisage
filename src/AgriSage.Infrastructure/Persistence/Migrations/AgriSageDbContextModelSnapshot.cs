@@ -3465,6 +3465,33 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                     b.HasData(
                         new
                         {
+                            Id = new Guid("cb30e359-0710-4c8a-b2ab-7ea248e5d441"),
+                            Code = "REPLENISHMENT.READ",
+                            IsActive = true,
+                            IsDelegable = true,
+                            Module = "INVENTORY",
+                            Name = "Xem kế hoạch nhập hàng"
+                        },
+                        new
+                        {
+                            Id = new Guid("cb30e359-0710-4c8a-b2ab-7ea248e5d442"),
+                            Code = "SEASONAL_RULES.READ",
+                            IsActive = true,
+                            IsDelegable = true,
+                            Module = "INVENTORY",
+                            Name = "Xem quy tắc mùa vụ"
+                        },
+                        new
+                        {
+                            Id = new Guid("cb30e359-0710-4c8a-b2ab-7ea248e5d443"),
+                            Code = "SEASONAL_RULES.MANAGE",
+                            IsActive = true,
+                            IsDelegable = true,
+                            Module = "INVENTORY",
+                            Name = "Quản lý quy tắc mùa vụ"
+                        },
+                        new
+                        {
                             Id = new Guid("47034f4b-8d3f-d668-6b16-41c7a8a9f1ce"),
                             Code = "AUDIT.READ",
                             IsActive = true,
@@ -6117,6 +6144,149 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AgriSage.Domain.Features.Inventory.Entities.SeasonalRule", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CropType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("crop_type");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("DeletedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<decimal>("DemandFactor")
+                        .HasPrecision(6, 3)
+                        .HasColumnType("numeric(6,3)")
+                        .HasColumnName("demand_factor");
+
+                    b.Property<DateOnly>("EndsOn")
+                        .HasColumnType("date")
+                        .HasColumnName("ends_on");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("name");
+
+                    b.Property<int>("PrepareDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("prepare_days");
+
+                    b.Property<string>("Region")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("region");
+
+                    b.Property<DateOnly>("StartsOn")
+                        .HasColumnType("date")
+                        .HasColumnName("starts_on");
+
+                    b.Property<Guid>("StoreId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("store_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_inventory_seasonal_rules");
+
+                    b.HasIndex("StoreId", "IsActive", "StartsOn")
+                        .HasDatabaseName("ix_inventory_seasonal_rules_store_id_is_active_starts_on");
+
+                    b.ToTable("inventory_seasonal_rules", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_seasonal_rule_dates", "ends_on >= starts_on");
+
+                            t.HasCheckConstraint("ck_seasonal_rule_factor", "demand_factor BETWEEN 0.1 AND 5");
+
+                            t.HasCheckConstraint("ck_seasonal_rule_prepare", "prepare_days BETWEEN 0 AND 90");
+                        });
+                });
+
+            modelBuilder.Entity("AgriSage.Domain.Features.Inventory.Entities.SeasonalRuleItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("DeletedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<Guid>("SeasonalRuleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("seasonal_rule_id");
+
+                    b.Property<Guid>("StoreProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("store_product_id");
+
+                    b.Property<long?>("TargetStockLevelBase")
+                        .HasColumnType("bigint")
+                        .HasColumnName("target_stock_level_base");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_inventory_seasonal_rule_items");
+
+                    b.HasIndex("SeasonalRuleId")
+                        .HasDatabaseName("ix_inventory_seasonal_rule_items_seasonal_rule_id");
+
+                    b.HasIndex("StoreProductId")
+                        .HasDatabaseName("ix_inventory_seasonal_rule_items_store_product_id");
+
+                    b.HasIndex("SeasonalRuleId", "StoreProductId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_inventory_seasonal_rule_items_seasonal_rule_id_store_product")
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.ToTable("inventory_seasonal_rule_items", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_seasonal_item_target", "target_stock_level_base >= 0");
+                        });
+                });
+
             modelBuilder.Entity("AgriSage.Domain.Features.Inventory.Entities.StockMovement", b =>
                 {
                     b.Property<Guid>("Id")
@@ -8268,6 +8438,11 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         .HasDefaultValue(true)
                         .HasColumnName("is_sellable");
 
+                    b.Property<int>("LeadTimeDays")
+                        .HasColumnType("integer")
+                        .HasDefaultValue(7)
+                        .HasColumnName("lead_time_days");
+
                     b.Property<long?>("MinStockLevelBase")
                         .HasColumnType("bigint")
                         .HasColumnName("min_stock_level_base");
@@ -8275,6 +8450,16 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("ProductId")
                         .HasColumnType("uuid")
                         .HasColumnName("product_id");
+
+                    b.Property<bool>("ReplenishmentEnabled")
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("replenishment_enabled");
+
+                    b.Property<long>("SafetyStockBase")
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("safety_stock_base");
 
                     b.Property<Guid>("StoreId")
                         .HasColumnType("uuid")
@@ -8284,6 +8469,15 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)")
                         .HasColumnName("store_sku");
+
+                    b.Property<int>("TargetCoverageDays")
+                        .HasColumnType("integer")
+                        .HasDefaultValue(14)
+                        .HasColumnName("target_coverage_days");
+
+                    b.Property<long?>("TargetStockLevelBase")
+                        .HasColumnType("bigint")
+                        .HasColumnName("target_stock_level_base");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -8302,7 +8496,10 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                     b.HasIndex("StoreId", "IsActive", "IsSellable")
                         .HasDatabaseName("ix_store_products_store_id_is_active_is_sellable");
 
-                    b.ToTable("store_products", (string)null);
+                    b.ToTable("store_products", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_store_product_replenishment", "(min_stock_level_base IS NULL OR min_stock_level_base >= 0) AND (target_stock_level_base IS NULL OR (target_stock_level_base >= 0 AND (min_stock_level_base IS NULL OR target_stock_level_base >= min_stock_level_base))) AND lead_time_days BETWEEN 0 AND 365 AND safety_stock_base >= 0 AND target_coverage_days BETWEEN 1 AND 90");
+                        });
                 });
 
             modelBuilder.Entity("AgriSage.Domain.Features.Products.Entities.Unit", b =>
@@ -10385,6 +10582,45 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_inventory_reservation_items_order_item_id");
                 });
 
+            modelBuilder.Entity("AgriSage.Domain.Features.Inventory.Entities.SeasonalRule", b =>
+                {
+                    b.HasOne("AgriSage.Domain.Features.Identity.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("DeletedBy")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_inventory_seasonal_rules_deleted_by");
+
+                    b.HasOne("AgriSage.Domain.Features.Stores.Entities.Store", null)
+                        .WithMany()
+                        .HasForeignKey("StoreId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_inventory_seasonal_rules_store_id");
+                });
+
+            modelBuilder.Entity("AgriSage.Domain.Features.Inventory.Entities.SeasonalRuleItem", b =>
+                {
+                    b.HasOne("AgriSage.Domain.Features.Identity.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("DeletedBy")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_inventory_seasonal_rule_items_deleted_by");
+
+                    b.HasOne("AgriSage.Domain.Features.Inventory.Entities.SeasonalRule", null)
+                        .WithMany("Items")
+                        .HasForeignKey("SeasonalRuleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_inventory_seasonal_rule_items_seasonal_rule_id");
+
+                    b.HasOne("AgriSage.Domain.Features.Products.Entities.StoreProduct", null)
+                        .WithMany()
+                        .HasForeignKey("StoreProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_inventory_seasonal_rule_items_store_product_id");
+                });
+
             modelBuilder.Entity("AgriSage.Domain.Features.Inventory.Entities.StockMovement", b =>
                 {
                     b.HasOne("AgriSage.Domain.Features.Identity.Entities.User", null)
@@ -11379,6 +11615,11 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                 });
 
             modelBuilder.Entity("AgriSage.Domain.Features.Inventory.Entities.InventoryReservation", b =>
+                {
+                    b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("AgriSage.Domain.Features.Inventory.Entities.SeasonalRule", b =>
                 {
                     b.Navigation("Items");
                 });

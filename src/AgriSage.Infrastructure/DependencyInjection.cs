@@ -125,6 +125,7 @@ public static class DependencyInjection
 
         // Goods receipt Excel template (ClosedXML, stateless).
         services.AddSingleton<IReceiptSpreadsheet, ClosedXmlReceiptSpreadsheet>();
+        services.AddSingleton<AgriSage.Application.Features.Reports.IInventoryReportSpreadsheet, ClosedXmlInventoryReportSpreadsheet>();
 
         // Objects in the private diagnosis bucket (signed URLs, bytes): the same typed client as the public bucket.
         services.AddTransient<IPrivateFileStore>(provider => (IPrivateFileStore)provider.GetRequiredService<IFileStorageService>());

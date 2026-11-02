@@ -88,6 +88,9 @@ public interface IAgriSageDbContext
     // Inventory
     DbSet<InventoryLot> InventoryLots { get; }
 
+    DbSet<SeasonalRule> SeasonalRules { get; }
+    DbSet<SeasonalRuleItem> SeasonalRuleItems { get; }
+
     DbSet<InventoryLotBalance> InventoryLotBalances { get; }
 
     DbSet<StockMovement> StockMovements { get; }

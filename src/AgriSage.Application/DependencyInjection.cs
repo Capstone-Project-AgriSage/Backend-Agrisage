@@ -84,6 +84,10 @@ public static class DependencyInjection
         services.AddScoped<IGoodsReceiptService>(provider => provider.GetRequiredService<GoodsReceiptService>());
         services.AddScoped<IGoodsReceiptImportService, GoodsReceiptImportService>();
         services.AddScoped<IInventoryService, InventoryService>();
+        services.AddScoped<InventoryPlanningData>();
+        services.AddScoped<IReplenishmentService, ReplenishmentService>();
+        services.AddScoped<ISeasonalRuleService, SeasonalRuleService>();
+        services.AddScoped<IInventoryPlanningReportService, InventoryPlanningReportService>();
         services.AddScoped<StockAdjustmentPosting>();
         services.AddScoped<IStockAdjustmentService, StockAdjustmentService>();
         services.AddScoped<StocktakeQueries>();
