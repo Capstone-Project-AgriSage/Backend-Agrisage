@@ -4,6 +4,7 @@ using AgriSage.Application.Common;
 using AgriSage.Application.Common.Interfaces;
 using AgriSage.Application.Features.Credit;
 using AgriSage.Application.Features.Orders;
+using AgriSage.Application.Features.Permissions;
 using AgriSage.Application.Features.Pricing;
 using AgriSage.Domain.Features.Credit.Entities;
 using AgriSage.Domain.Features.Customers.Entities;
@@ -101,6 +102,11 @@ internal sealed class CreditTestDatabase : IAsyncDisposable
         lot.ReceiveStock(1000, 100_000);
         StoreProductId = storeProduct.Id; PackagingId = packaging.Id; LotId = lot.Id;
         db.AddRange(ownerRole, farmerRole, owner, farmerUser, farmer, store, tier, profile, account, category, unit, product, storeProduct, lot);
+        // Since dynamic permissions (27594a9) the services ask IPermissionEvaluator, which needs the owner to be an active member
+        // of the store and the Store Owner role defaults to exist in the database. Both are required: either one alone is refused.
+        db.StoreMembers.Add(new StoreMember(store.Id, owner.Id));
+        foreach (var permission in PermissionCatalog.Entries.Where(p => p.DefaultRoles.Contains("STORE_OWNER")))
+            db.RolePermissions.Add(new RolePermission(ownerRole.Id, permission.Id, true));
         await db.SaveChangesAsync(token);
         var prices = scope.ServiceProvider.GetRequiredService<IPriceListService>();
         var list = await prices.CreateAsync(new("PRICE", "Price", Clock.UtcNow.AddDays(-1), IsWalkInDefault: true), token);
