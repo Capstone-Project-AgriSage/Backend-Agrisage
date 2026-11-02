@@ -45,6 +45,14 @@ public sealed class CategoryListRequestValidator : AbstractValidator<CategoryLis
     }
 }
 
+public sealed class ReorderCategoryRequestValidator : AbstractValidator<ReorderCategoryRequest>
+{
+    public ReorderCategoryRequestValidator()
+    {
+        RuleFor(r => r.Position).GreaterThanOrEqualTo(0);
+    }
+}
+
 public sealed class BrandRequestValidator : AbstractValidator<BrandRequest>
 {
     public BrandRequestValidator()

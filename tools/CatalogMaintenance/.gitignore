@@ -1,0 +1,10 @@
+bin/
+obj/
+assets/
+preview.png
+logos-prepared.json
+logos.json
+products-prepared.json
+products-preview.png
+products-before-*.json
+products-verification-current.json

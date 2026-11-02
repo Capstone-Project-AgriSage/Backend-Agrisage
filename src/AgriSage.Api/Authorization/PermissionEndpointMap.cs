@@ -108,6 +108,7 @@ public static class PermissionEndpointMap
         ["Categories.Activate"] = "CATEGORIES.ACTIVATE",
         ["Categories.Deactivate"] = "CATEGORIES.DEACTIVATE",
         ["Categories.Delete"] = "CATEGORIES.DELETE",
+        ["Categories.Reorder"] = "CATEGORIES.UPDATE",
         ["Products.List"] = "PRODUCTS.READ",
         ["Products.Get"] = "PRODUCTS.READ",
         ["Products.Create"] = "PRODUCTS.CREATE",

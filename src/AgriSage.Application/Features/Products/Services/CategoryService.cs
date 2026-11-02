@@ -23,8 +23,12 @@ public sealed class CategoryService(IAgriSageDbContext context, IDatabaseErrorCl
 
         await EnsureParentExistsAsync(request.ParentId, cancellationToken);
 
-        var category = new Category(code, request.Name.Trim(), request.ParentId, Texts.Clean(request.Description), request.DisplayOrder);
+        var siblings = await GetSiblingsAsync(request.ParentId, null, cancellationToken);
+        var position = ClampPosition(request.DisplayOrder, siblings.Count);
+        var category = new Category(code, request.Name.Trim(), request.ParentId, Texts.Clean(request.Description), position);
         context.Categories.Add(category);
+        siblings.Insert(position, category);
+        NormalizeSiblings(siblings);
         await SaveAsync(cancellationToken);
 
         return ToResponse(category);
@@ -33,6 +37,7 @@ public sealed class CategoryService(IAgriSageDbContext context, IDatabaseErrorCl
     public async Task<CategoryResponse> UpdateAsync(Guid id, UpdateCategoryRequest request, CancellationToken cancellationToken)
     {
         var category = await FindAsync(id, cancellationToken);
+        var oldParentId = category.ParentId;
         await EnsureParentExistsAsync(request.ParentId, cancellationToken);
 
         if (request.ParentId is not null)
@@ -47,8 +52,23 @@ public sealed class CategoryService(IAgriSageDbContext context, IDatabaseErrorCl
             }
         }
 
-        category.Update(request.Name.Trim(), Texts.Clean(request.Description), request.DisplayOrder);
+        var oldSiblings = await GetSiblingsAsync(oldParentId, null, cancellationToken);
+        var currentPosition = oldSiblings.FindIndex(item => item.Id == id);
+        var newSiblings = oldParentId == request.ParentId
+            ? oldSiblings.Where(item => item.Id != id).ToList()
+            : await GetSiblingsAsync(request.ParentId, id, cancellationToken);
+        var targetPosition = request.DisplayOrder is { } requested
+            ? ClampPosition(requested, newSiblings.Count)
+            : oldParentId == request.ParentId ? Math.Clamp(currentPosition < 0 ? newSiblings.Count : currentPosition, 0, newSiblings.Count) : newSiblings.Count;
+
+        category.Update(request.Name.Trim(), Texts.Clean(request.Description), targetPosition);
         category.MoveTo(request.ParentId);
+        if (oldParentId != request.ParentId)
+        {
+            NormalizeSiblings(oldSiblings.Where(item => item.Id != id).ToList());
+        }
+        newSiblings.Insert(targetPosition, category);
+        NormalizeSiblings(newSiblings);
         await context.SaveChangesAsync(cancellationToken);
 
         return ToResponse(category);
@@ -106,6 +126,17 @@ public sealed class CategoryService(IAgriSageDbContext context, IDatabaseErrorCl
         await context.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task ReorderAsync(Guid id, int position, CancellationToken cancellationToken)
+    {
+        var category = await FindAsync(id, cancellationToken);
+        var siblings = await GetSiblingsAsync(category.ParentId, null, cancellationToken);
+        var remaining = siblings.Where(item => item.Id != id).ToList();
+        var targetPosition = ClampPosition(position, remaining.Count);
+        remaining.Insert(targetPosition, category);
+        NormalizeSiblings(remaining);
+        await context.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
         var category = await FindAsync(id, cancellationToken);
@@ -120,8 +151,35 @@ public sealed class CategoryService(IAgriSageDbContext context, IDatabaseErrorCl
             throw new ConflictException("The category has products; move them first or deactivate the category.");
         }
 
+        var siblings = await GetSiblingsAsync(category.ParentId, id, cancellationToken);
         context.Categories.Remove(category);
+        NormalizeSiblings(siblings);
         await context.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task<List<Category>> GetSiblingsAsync(Guid? parentId, Guid? excludedId, CancellationToken cancellationToken)
+    {
+        var query = context.Categories.Where(c => c.ParentId == parentId);
+        if (excludedId is not null)
+        {
+            query = query.Where(c => c.Id != excludedId);
+        }
+
+        return await query.OrderBy(c => c.DisplayOrder).ThenBy(c => c.Name).ThenBy(c => c.Id).ToListAsync(cancellationToken);
+    }
+
+    private static int ClampPosition(int? requested, int count) => Math.Clamp(requested ?? count, 0, count);
+
+    private static void NormalizeSiblings(IReadOnlyList<Category> siblings)
+    {
+        for (var index = 0; index < siblings.Count; index++)
+        {
+            var category = siblings[index];
+            if (category.DisplayOrder != index)
+            {
+                category.Update(category.Name, category.Description, index);
+            }
+        }
     }
 
     private async Task<Category> FindAsync(Guid id, CancellationToken cancellationToken, bool tracking = true)

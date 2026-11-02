@@ -2,10 +2,15 @@ using AgriSage.Application.Common.Models;
 
 namespace AgriSage.Application.Features.Products.Dtos.Requests;
 
-public sealed record CreateCategoryRequest(string Code, string Name, string? Description, int DisplayOrder, Guid? ParentId);
+// DisplayOrder is zero-based for the API. Null means append to the end of the sibling list.
+public sealed record CreateCategoryRequest(string Code, string Name, string? Description, int? DisplayOrder, Guid? ParentId);
 
 // The code is fixed once created; only the other fields change.
-public sealed record UpdateCategoryRequest(string Name, string? Description, int DisplayOrder, Guid? ParentId);
+// DisplayOrder is zero-based for the API. Null preserves the current position when the parent is unchanged,
+// or appends when the category is moved to a new parent.
+public sealed record UpdateCategoryRequest(string Name, string? Description, int? DisplayOrder, Guid? ParentId);
+
+public sealed record ReorderCategoryRequest(int Position);
 
 public sealed record CategoryListRequest : PaginationRequest
 {
