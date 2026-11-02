@@ -6,5 +6,6 @@ public enum DebtEntryActionType
     Keep,
     Adjust,
     Cancel,
-    ChangeDueDate
+    ChangeDueDate,
+    Rollover // moves the collection season and due date (CS-07); amount unchanged
 }

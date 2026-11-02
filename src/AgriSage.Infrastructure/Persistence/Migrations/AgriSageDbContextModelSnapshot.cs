@@ -1132,6 +1132,122 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                     b.ToTable("farmer_profiles", (string)null);
                 });
 
+            modelBuilder.Entity("AgriSage.Domain.Features.Debt.Entities.CropSeason", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTimeOffset?>("ClosedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("closed_at");
+
+                    b.Property<Guid?>("ClosedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("closed_by");
+
+                    b.Property<string>("ClosedSummary")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("closed_summary");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("code");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CropType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasDefaultValue("RICE")
+                        .HasColumnName("crop_type");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("DeletedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<int>("GraceDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("grace_days");
+
+                    b.Property<DateOnly>("HarvestEnd")
+                        .HasColumnType("date")
+                        .HasColumnName("harvest_end");
+
+                    b.Property<DateOnly>("HarvestStart")
+                        .HasColumnType("date")
+                        .HasColumnName("harvest_start");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("name");
+
+                    b.Property<DateOnly>("OrderWindowStart")
+                        .HasColumnType("date")
+                        .HasColumnName("order_window_start");
+
+                    b.Property<DateOnly>("PaymentDueDate")
+                        .HasColumnType("date")
+                        .HasColumnName("payment_due_date");
+
+                    b.Property<Guid?>("SeasonalRuleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("seasonal_rule_id");
+
+                    b.Property<Guid>("StoreId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("store_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_crop_seasons");
+
+                    b.HasIndex("SeasonalRuleId")
+                        .HasDatabaseName("ix_crop_seasons_seasonal_rule_id");
+
+                    b.HasIndex("StoreId", "Code")
+                        .IsUnique()
+                        .HasDatabaseName("ux_crop_seasons_store_id_code")
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.HasIndex("StoreId", "HarvestStart")
+                        .HasDatabaseName("ix_crop_seasons_store_id_harvest_start");
+
+                    b.ToTable("crop_seasons", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_crop_seasons_closed", "(closed_at IS NULL AND closed_by IS NULL AND closed_summary IS NULL) OR (closed_at IS NOT NULL AND closed_by IS NOT NULL AND closed_summary IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_crop_seasons_grace_days", "grace_days BETWEEN 0 AND 365");
+
+                            t.HasCheckConstraint("ck_crop_seasons_harvest_dates", "harvest_end > harvest_start");
+
+                            t.HasCheckConstraint("ck_crop_seasons_order_window", "order_window_start < harvest_start");
+
+                            t.HasCheckConstraint("ck_crop_seasons_payment_due_date", "payment_due_date = harvest_end + grace_days");
+                        });
+                });
+
             modelBuilder.Entity("AgriSage.Domain.Features.Debt.Entities.DebtAccount", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1210,6 +1326,10 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         .HasColumnName("id")
                         .HasDefaultValueSql("gen_random_uuid()");
 
+                    b.Property<Guid?>("CollectionCropSeasonId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("collection_crop_season_id");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -1238,6 +1358,10 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("delivery_id");
 
+                    b.Property<string>("DueBasis")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("due_basis");
+
                     b.Property<DateOnly>("DueDate")
                         .HasColumnType("date")
                         .HasColumnName("due_date");
@@ -1257,10 +1381,18 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("order_id");
 
+                    b.Property<Guid?>("OriginCropSeasonId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("origin_crop_season_id");
+
                     b.Property<decimal>("OriginalAmount")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)")
                         .HasColumnName("original_amount");
+
+                    b.Property<DateOnly>("OriginalDueDate")
+                        .HasColumnType("date")
+                        .HasColumnName("original_due_date");
 
                     b.Property<decimal>("OutstandingAmount")
                         .HasPrecision(18, 2)
@@ -1272,6 +1404,11 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         .HasColumnType("numeric(18,2)")
                         .HasDefaultValue(0m)
                         .HasColumnName("prepayment_applied_amount");
+
+                    b.Property<int>("RolloverCount")
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("rollover_count");
 
                     b.Property<Guid?>("SourceStockMovementId")
                         .HasColumnType("uuid")
@@ -1296,6 +1433,9 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                     b.HasKey("Id")
                         .HasName("pk_debt_entries");
 
+                    b.HasIndex("CollectionCropSeasonId")
+                        .HasDatabaseName("ix_debt_entries_collection_crop_season_id");
+
                     b.HasIndex("DeliveryAttemptId")
                         .HasDatabaseName("ix_debt_entries_delivery_attempt_id");
 
@@ -1308,6 +1448,9 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("OrderId")
                         .HasDatabaseName("ix_debt_entries_order_id");
+
+                    b.HasIndex("OriginCropSeasonId")
+                        .HasDatabaseName("ix_debt_entries_origin_crop_season_id");
 
                     b.HasIndex("SourceStockMovementId")
                         .HasDatabaseName("ix_debt_entries_source_stock_movement_id");
@@ -1338,6 +1481,8 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("ck_debt_entries_prepayment_applied_amount", "prepayment_applied_amount >= 0");
 
                             t.HasCheckConstraint("ck_debt_entries_prepayment_within_fulfillment", "prepayment_applied_amount <= fulfillment_value");
+
+                            t.HasCheckConstraint("ck_debt_entries_rollover_count", "rollover_count >= 0");
 
                             t.HasCheckConstraint("ck_debt_entries_source_references", "(source_type = 'DELIVERY' AND order_id IS NOT NULL AND delivery_id IS NOT NULL AND source_stock_movement_id IS NOT NULL) OR (source_type = 'PICKUP' AND order_id IS NOT NULL AND source_stock_movement_id IS NOT NULL) OR source_type = 'MANUAL_ADJUSTMENT'");
 
@@ -1385,9 +1530,17 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("deleted_by");
 
+                    b.Property<Guid?>("NewCropSeasonId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("new_crop_season_id");
+
                     b.Property<DateOnly?>("NewDueDate")
                         .HasColumnType("date")
                         .HasColumnName("new_due_date");
+
+                    b.Property<Guid?>("OldCropSeasonId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("old_crop_season_id");
 
                     b.Property<DateOnly?>("OldDueDate")
                         .HasColumnType("date")
@@ -1404,6 +1557,11 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(1000)")
                         .HasColumnName("reason");
 
+                    b.Property<string>("ReasonCode")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("reason_code");
+
                     b.Property<decimal?>("ResultingOutstandingAmount")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)")
@@ -1416,13 +1574,21 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                     b.HasKey("Id")
                         .HasName("pk_debt_entry_actions");
 
+                    b.HasIndex("NewCropSeasonId")
+                        .HasDatabaseName("ix_debt_entry_actions_new_crop_season_id");
+
+                    b.HasIndex("OldCropSeasonId")
+                        .HasDatabaseName("ix_debt_entry_actions_old_crop_season_id");
+
                     b.HasIndex("DebtEntryId", "CreatedAt")
                         .IsDescending(false, true)
                         .HasDatabaseName("ix_debt_entry_actions_debt_entry_id_created_at");
 
                     b.ToTable("debt_entry_actions", null, t =>
                         {
-                            t.HasCheckConstraint("ck_debt_entry_actions_action_type", "action_type IN ('DISPUTE', 'KEEP', 'ADJUST', 'CANCEL', 'CHANGE_DUE_DATE')");
+                            t.HasCheckConstraint("ck_debt_entry_actions_action_type", "action_type IN ('DISPUTE', 'KEEP', 'ADJUST', 'CANCEL', 'CHANGE_DUE_DATE', 'ROLLOVER')");
+
+                            t.HasCheckConstraint("ck_debt_entry_actions_reason_code", "reason_code IN ('MAT_MUA', 'THIEN_TAI', 'KHO_KHAN', 'TRI_AN', 'SAI_SOT', 'KHONG_THU_HOI', 'KHAC')");
                         });
                 });
 
@@ -1547,6 +1713,100 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("ck_debt_transactions_status", "status IN ('POSTED', 'REVERSED')");
 
                             t.HasCheckConstraint("ck_debt_transactions_transaction_type", "transaction_type IN ('CREDIT_SALE', 'PAYMENT', 'ADJUSTMENT_IN', 'ADJUSTMENT_OUT', 'RETURN', 'REVERSAL')");
+                        });
+                });
+
+            modelBuilder.Entity("AgriSage.Domain.Features.Debt.Entities.StoreDebtPolicy", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int>("DefaultGraceDays")
+                        .HasColumnType("integer")
+                        .HasDefaultValue(30)
+                        .HasColumnName("default_grace_days");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("DeletedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<int?>("MaxCreditTermDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_credit_term_days");
+
+                    b.Property<int>("MaxTotalExtensionDays")
+                        .HasColumnType("integer")
+                        .HasDefaultValue(365)
+                        .HasColumnName("max_total_extension_days");
+
+                    b.Property<int>("OnTimeSeasonsForLimitRaise")
+                        .HasColumnType("integer")
+                        .HasDefaultValue(2)
+                        .HasColumnName("on_time_seasons_for_limit_raise");
+
+                    b.Property<int>("OwnerReviewAfterRollovers")
+                        .HasColumnType("integer")
+                        .HasDefaultValue(2)
+                        .HasColumnName("owner_review_after_rollovers");
+
+                    b.Property<string>("ReminderOffsets")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("reminder_offsets");
+
+                    b.Property<int>("StaffRolloverLimit")
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("staff_rollover_limit");
+
+                    b.Property<Guid>("StoreId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("store_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_store_debt_policies");
+
+                    b.HasIndex("StoreId")
+                        .HasDatabaseName("ix_store_debt_policies_store_id");
+
+                    b.HasIndex(new[] { "StoreId" }, "ux_store_debt_policies_store_id")
+                        .IsUnique()
+                        .HasDatabaseName("ux_store_debt_policies_store_id")
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.ToTable("store_debt_policies", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_store_debt_policies_default_grace_days", "default_grace_days BETWEEN 0 AND 365");
+
+                            t.HasCheckConstraint("ck_store_debt_policies_max_credit_term_days", "max_credit_term_days IS NULL OR max_credit_term_days >= 1");
+
+                            t.HasCheckConstraint("ck_store_debt_policies_max_total_extension_days", "max_total_extension_days >= 1");
+
+                            t.HasCheckConstraint("ck_store_debt_policies_on_time_seasons_for_limit_raise", "on_time_seasons_for_limit_raise >= 1");
+
+                            t.HasCheckConstraint("ck_store_debt_policies_owner_review_after_rollovers", "owner_review_after_rollovers >= staff_rollover_limit");
+
+                            t.HasCheckConstraint("ck_store_debt_policies_staff_rollover_limit", "staff_rollover_limit >= 0");
                         });
                 });
 
@@ -7074,6 +7334,10 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("credit_term_days_snapshot");
 
+                    b.Property<Guid?>("CropSeasonId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("crop_season_id");
+
                     b.Property<Guid?>("CustomerGroupIdSnapshot")
                         .HasColumnType("uuid")
                         .HasColumnName("customer_group_id_snapshot");
@@ -7227,6 +7491,9 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                     b.HasKey("Id")
                         .HasName("pk_orders");
 
+                    b.HasIndex("CropSeasonId")
+                        .HasDatabaseName("ix_orders_crop_season_id");
+
                     b.HasIndex("CustomerGroupIdSnapshot")
                         .HasDatabaseName("ix_orders_customer_group_id_snapshot");
 
@@ -7261,6 +7528,8 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                     b.ToTable("orders", null, t =>
                         {
                             t.HasCheckConstraint("ck_orders_credit_term_days_snapshot", "credit_term_days_snapshot IS NULL OR credit_term_days_snapshot >= 0");
+
+                            t.HasCheckConstraint("ck_orders_crop_season_credit_only", "crop_season_id IS NULL OR settlement_type = 'CREDIT'");
 
                             t.HasCheckConstraint("ck_orders_customer_settlement", "(customer_type = 'REGISTERED' AND farmer_profile_id IS NOT NULL) OR (customer_type = 'WALK_IN' AND farmer_profile_id IS NULL AND settlement_type = 'FULL_PAYMENT')");
 
@@ -9684,6 +9953,34 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("AgriSage.Domain.Features.Debt.Entities.CropSeason", b =>
+                {
+                    b.HasOne("AgriSage.Domain.Features.Identity.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("ClosedBy")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_crop_seasons_closed_by");
+
+                    b.HasOne("AgriSage.Domain.Features.Identity.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("DeletedBy")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_crop_seasons_deleted_by");
+
+                    b.HasOne("AgriSage.Domain.Features.Inventory.Entities.SeasonalRule", null)
+                        .WithMany()
+                        .HasForeignKey("SeasonalRuleId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_crop_seasons_seasonal_rule_id");
+
+                    b.HasOne("AgriSage.Domain.Features.Stores.Entities.Store", null)
+                        .WithMany()
+                        .HasForeignKey("StoreId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_crop_seasons_store_id");
+                });
+
             modelBuilder.Entity("AgriSage.Domain.Features.Debt.Entities.DebtAccount", b =>
                 {
                     b.HasOne("AgriSage.Domain.Features.Identity.Entities.User", null)
@@ -9711,6 +10008,12 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("AgriSage.Domain.Features.Debt.Entities.DebtEntry", b =>
                 {
+                    b.HasOne("AgriSage.Domain.Features.Debt.Entities.CropSeason", null)
+                        .WithMany()
+                        .HasForeignKey("CollectionCropSeasonId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_debt_entries_collection_crop_season_id");
+
                     b.HasOne("AgriSage.Domain.Features.Identity.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("CreatedBy")
@@ -9749,6 +10052,12 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.NoAction)
                         .HasConstraintName("fk_debt_entries_order_id");
 
+                    b.HasOne("AgriSage.Domain.Features.Debt.Entities.CropSeason", null)
+                        .WithMany()
+                        .HasForeignKey("OriginCropSeasonId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_debt_entries_origin_crop_season_id");
+
                     b.HasOne("AgriSage.Domain.Features.Inventory.Entities.StockMovement", null)
                         .WithMany()
                         .HasForeignKey("SourceStockMovementId")
@@ -9777,6 +10086,18 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         .HasForeignKey("DeletedBy")
                         .OnDelete(DeleteBehavior.NoAction)
                         .HasConstraintName("fk_debt_entry_actions_deleted_by");
+
+                    b.HasOne("AgriSage.Domain.Features.Debt.Entities.CropSeason", null)
+                        .WithMany()
+                        .HasForeignKey("NewCropSeasonId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_debt_entry_actions_new_crop_season_id");
+
+                    b.HasOne("AgriSage.Domain.Features.Debt.Entities.CropSeason", null)
+                        .WithMany()
+                        .HasForeignKey("OldCropSeasonId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_debt_entry_actions_old_crop_season_id");
                 });
 
             modelBuilder.Entity("AgriSage.Domain.Features.Debt.Entities.DebtTransaction", b =>
@@ -9829,6 +10150,22 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         .HasForeignKey("SalesReturnId")
                         .OnDelete(DeleteBehavior.NoAction)
                         .HasConstraintName("fk_debt_transactions_sales_return_id");
+                });
+
+            modelBuilder.Entity("AgriSage.Domain.Features.Debt.Entities.StoreDebtPolicy", b =>
+                {
+                    b.HasOne("AgriSage.Domain.Features.Identity.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("DeletedBy")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_store_debt_policies_deleted_by");
+
+                    b.HasOne("AgriSage.Domain.Features.Stores.Entities.Store", null)
+                        .WithMany()
+                        .HasForeignKey("StoreId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_store_debt_policies_store_id");
                 });
 
             modelBuilder.Entity("AgriSage.Domain.Features.Deliveries.Entities.Delivery", b =>
@@ -10897,6 +11234,12 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_orders_created_by");
+
+                    b.HasOne("AgriSage.Domain.Features.Debt.Entities.CropSeason", null)
+                        .WithMany()
+                        .HasForeignKey("CropSeasonId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_orders_crop_season_id");
 
                     b.HasOne("AgriSage.Domain.Features.Customers.Entities.CustomerGroup", null)
                         .WithMany()

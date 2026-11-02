@@ -42,6 +42,7 @@ internal sealed class OrderConfiguration : EntityConfiguration<Order>
         builder.HasOne(order => order.FarmerProfile).WithMany().HasForeignKey(order => order.FarmerProfileId);
         builder.HasReference<Order, CustomerGroup>(order => order.CustomerGroupIdSnapshot);
         builder.HasReference<Order, PriceList>(order => order.PriceListIdSnapshot);
+        builder.HasReference<Order, AgriSage.Domain.Features.Debt.Entities.CropSeason>(order => order.CropSeasonId);
         builder.HasReference<Order, UserAddress>(order => order.SourceAddressId);
         builder.HasUserReference(order => order.CreatedBy);
         builder.HasUserReference(order => order.ConfirmedBy);
@@ -60,6 +61,7 @@ internal sealed class OrderConfiguration : EntityConfiguration<Order>
         builder.HasCheck("subtotal_amount", "subtotal_amount >= 0");
         builder.HasCheck("total_amount", "total_amount >= 0");
         builder.HasCheck("credit_term_days_snapshot", "credit_term_days_snapshot IS NULL OR credit_term_days_snapshot >= 0");
+        builder.HasCheck("crop_season_credit_only", "crop_season_id IS NULL OR settlement_type = 'CREDIT'");
         // REGISTERED ⇔ Farmer Profile; WALK_IN ⇒ FULL_PAYMENT (so CREDIT ⇒ REGISTERED).
         builder.HasCheck(
             "customer_settlement",

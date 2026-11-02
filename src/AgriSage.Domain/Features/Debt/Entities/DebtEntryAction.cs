@@ -1,4 +1,5 @@
 using AgriSage.Domain.Common;
+using AgriSage.Domain.Common.Exceptions;
 using AgriSage.Domain.Features.Debt.Enums;
 
 namespace AgriSage.Domain.Features.Debt.Entities;
@@ -20,9 +21,20 @@ public sealed class DebtEntryAction : SoftDeletableChildEntity
         decimal? adjustmentAmount = null,
         decimal? resultingOutstandingAmount = null,
         DateOnly? oldDueDate = null,
-        DateOnly? newDueDate = null)
+        DateOnly? newDueDate = null,
+        Guid? oldCropSeasonId = null,
+        Guid? newCropSeasonId = null,
+        DebtReasonCode? reasonCode = null)
     {
+        if (reasonCode is { } code && !Enum.IsDefined(code))
+        {
+            throw new DomainException("Unknown debt reason code.");
+        }
+
         DebtEntryId = debtEntryId;
+        OldCropSeasonId = oldCropSeasonId;
+        NewCropSeasonId = newCropSeasonId;
+        ReasonCode = reasonCode;
         ActionType = actionType;
         Reason = Guard.NotNullOrWhiteSpace(reason);
         CreatedBy = createdBy;
@@ -47,6 +59,15 @@ public sealed class DebtEntryAction : SoftDeletableChildEntity
 
     public DateOnly? NewDueDate { get; private set; }
 
+    // Collection season before and after a ROLLOVER (D9).
+    public Guid? OldCropSeasonId { get; private set; }
+
+    public Guid? NewCropSeasonId { get; private set; }
+
+    // CS-11 reason code; null for actions recorded before the policy (D7) and for actions that take none.
+    public DebtReasonCode? ReasonCode { get; private set; }
+
+    // Free-text note typed by the user, always required.
     public string Reason { get; private set; } = null!;
 
     public Guid CreatedBy { get; private set; }
