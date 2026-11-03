@@ -430,6 +430,40 @@ MyCurrentCropSeasonResponse {
   applies; `NONE` = no credit profile.
 - Writes are audited (`CROP_SEASON_CREATED`, `CROP_SEASON_UPDATED`, `DEBT_CHANGE_DUE_DATE`).
 
+## 8c. F3.12 — Store debt policy (new, 2026-11-03)
+
+One policy per store (`store_debt_policies`): the default grace of new seasons (CS-05), reminder offsets (CS-09, D10),
+rollover limits (CS-08, D5), the on-time seasons before suggesting a higher limit (CS-14) and the optional term cap (D4).
+A store that has not saved one reads the documented defaults (`isDefault: true`, `version: 0`); the first save creates
+its row.
+
+| Method | Route | Role / permission | Body | Response |
+|---|---|---|---|---|
+| GET | `/api/debt-policy` | Operate / `DEBT_POLICY.READ` | — | `200 DebtPolicyResponse` |
+| PUT | `/api/debt-policy` | Manage, owner-only / `DEBT_POLICY.MANAGE` | `UpdateDebtPolicyRequest` (whole policy) | `200 DebtPolicyResponse`; `400` invalid value; `409` stale `version`; `403` Sale staff |
+
+```json
+DebtPolicyResponse {
+  "defaultGraceDays": 30, "reminderOffsets": { "n2": -7, "n4": 14, "n5": 30 },
+  "staffRolloverLimit": 1, "ownerReviewAfterRollovers": 2, "onTimeSeasonsForLimitRaise": 2,
+  "maxCreditTermDays": null, "maxTotalExtensionDays": 365, "version": 0, "isDefault": true
+}
+UpdateDebtPolicyRequest {
+  "defaultGraceDays": 45, "reminderOffsets": { "n2": -10, "n4": 7, "n5": 21 },
+  "staffRolloverLimit": 1, "ownerReviewAfterRollovers": 2, "onTimeSeasonsForLimitRaise": 2,
+  "maxCreditTermDays": null, "maxTotalExtensionDays": 365, "version": 0, "reason": "…|null"
+}
+```
+
+- Rules (`400` from the request validator, `422` from the Domain if it is bypassed): `defaultGraceDays` 0–365;
+  `n2 < 0 < n4 < n5` (days from the due date; N1 = harvest start and N3 = due date need no setting);
+  `staffRolloverLimit ≥ 0`; `ownerReviewAfterRollovers ≥ staffRolloverLimit`; `onTimeSeasonsForLimitRaise ≥ 1`;
+  `maxCreditTermDays` null (off) or ≥ 1; `maxTotalExtensionDays ≥ 1` (required, default 365); `reason` ≤ 1000.
+- `version` is the one last read. The first save also needs `version: 0` and returns `version: 1` when a value
+  changed, so an editor still holding the default gets `409`. Saving the same values changes nothing and is not audited.
+- Changing `defaultGraceDays` only proposes the grace of seasons created later; existing seasons keep theirs.
+- Audited as `DEBT_POLICY_CHANGED` (`STORE_DEBT_POLICY`, old and new values, optional reason).
+
 ---
 
 ## 9. Tests — must prove
