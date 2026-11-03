@@ -156,13 +156,34 @@ public sealed class CropSeasonService(
     }
 
     // Entries collected in this season that still follow its old due date move to the new one; entries with their own
-    // due date (a term cap, an earlier change or rollover to another date) keep it.
+    // due date (a term cap, an earlier change or rollover to another date) keep it, and so do disputed entries (the owner
+    // decides those). Runs under the store lock; every Farmer concerned is locked too, in id order (as the season-wide rollover
+    // does), and the entries are read AFTER the locks, so a payment, an adjustment, a dispute or a rollover that was running
+    // is seen as committed — never overwritten, never missed.
     private async Task<int> ExtendCollectingDebtAsync(CropSeason season, DateOnly oldDue, string reason, Guid actor, CancellationToken token)
     {
-        var entries = await db.DebtEntries.Include(e => e.Actions)
-            .Where(e => e.CollectionCropSeasonId == season.Id && e.DueDate == oldDue && e.OutstandingAmount > 0
-                && e.Status != DebtEntryStatus.Paid && e.Status != DebtEntryStatus.Cancelled)
-            .ToListAsync(token);
+        IQueryable<DebtEntry> Candidates() => db.DebtEntries.Where(e => e.CollectionCropSeasonId == season.Id && e.DueDate == oldDue
+            && e.OutstandingAmount > 0 && e.Status != DebtEntryStatus.Paid && e.Status != DebtEntryStatus.Cancelled
+            && e.Status != DebtEntryStatus.Disputed);
+
+        // A Farmer whose entry appears while the locks are taken (a delivery posting debt at that moment) is locked too; the
+        // loop ends when no unlocked Farmer is left. Nobody holds a Farmer lock while waiting for the store lock, so late
+        // locks cannot form a cycle.
+        var locked = new HashSet<Guid>();
+        while (true)
+        {
+            var missing = (await (from e in Candidates().AsNoTracking()
+                                  join a in db.DebtAccounts.AsNoTracking() on e.DebtAccountId equals a.Id
+                                  select a.FarmerProfileId).Distinct().ToListAsync(token)).Where(f => !locked.Contains(f)).Order().ToList();
+            if (missing.Count == 0) break;
+            foreach (var farmer in missing)
+            {
+                await locks.LockFarmerProfileAsync(farmer, token);
+                locked.Add(farmer);
+            }
+        }
+
+        var entries = await Candidates().Include(e => e.Actions).ToListAsync(token);
         foreach (var entry in entries)
         {
             var action = entry.ChangeDueDate(season.PaymentDueDate, reason, actor);
