@@ -1,6 +1,7 @@
 using AgriSage.Application.Common;
 using AgriSage.Application.Common.Exceptions;
 using AgriSage.Application.Common.Interfaces;
+using AgriSage.Application.Features.Debt;
 using AgriSage.Domain.Common;
 using AgriSage.Domain.Features.Credit.Enums;
 using AgriSage.Domain.Features.Debt.Enums;
@@ -13,7 +14,8 @@ namespace AgriSage.Application.Features.Credit;
 public sealed record CreditEligibilityRequest(decimal OrderAmount);
 public sealed record CreditEligibilityResponse(Guid CustomerId, decimal CreditLimit, decimal CurrentOutstandingDebt,
     decimal ReservedCredit, decimal AvailableCredit, decimal OrderAmount, decimal AvailableCreditAfterOrder,
-    bool HasOverdueDebt, decimal OverdueAmount, bool Eligible, string ReasonCode, string Message);
+    bool HasOverdueDebt, decimal OverdueAmount, bool Eligible, string ReasonCode, string Message,
+    DebtSeasonReference? ExpectedCropSeason = null, DateOnly? ExpectedDueDate = null, string? DueRule = null);
 
 public interface ICreditEligibilityService
 {
@@ -55,9 +57,26 @@ public sealed class CreditEligibilityService(IAgriSageDbContext db, IDateTimePro
             : limit <= 0 ? "NO_CREDIT_LIMIT"
             : profile.CreditTierId == null ? "NO_CREDIT_TERM"
             : orderAmount > available ? "INSUFFICIENT_CREDIT" : "ELIGIBLE";
+        // F3.13 (CS-04): the season an order confirmed today would join and the due date it would get if delivered today.
+        // An estimate: the debt and its real due date are created on delivery (D15).
+        DebtSeasonReference? expectedSeason = null;
+        DateOnly? expectedDue = null;
+        string? dueRule = null;
+        var termDays = profile?.CreditTierId is { } tierId
+            ? await db.CreditTiers.AsNoTracking().Where(t => t.Id == tierId).Select(t => (int?)t.DefaultPaymentTermDays).SingleOrDefaultAsync(token)
+            : null;
+        if (termDays is { } days)
+        {
+            var season = await DebtDueLookup.OpenSeasonOnAsync(db, store, today, token);
+            var cap = season is null ? null : await DebtDueLookup.CapAsync(db, store, token);
+            var due = DebtDueCalculator.Calculate(season, today, days, cap);
+            (expectedSeason, expectedDue, dueRule) = (season is null ? null : new DebtSeasonReference(season.Id, season.Code, season.Name), due.DueDate, due.Rule);
+        }
+
         return new(customerId, limit, debt, reserved, Math.Max(0, available), orderAmount,
             Math.Max(0, available - orderAmount), overdue > 0, overdue, reason == "ELIGIBLE", reason,
-            reason == "ELIGIBLE" ? "Customer is eligible for this credit amount." : $"Credit refused: {reason}.");
+            reason == "ELIGIBLE" ? "Customer is eligible for this credit amount." : $"Credit refused: {reason}.",
+            expectedSeason, expectedDue, dueRule);
     }
 
     public static void RequireEligible(CreditEligibilityResponse result)

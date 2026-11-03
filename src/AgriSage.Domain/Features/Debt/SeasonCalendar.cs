@@ -37,17 +37,43 @@ public static class SeasonCalendar
     public static DateOnly? NextOrderWindowStart(IEnumerable<CropSeason> seasons) =>
         seasons.Select(s => (DateOnly?)s.HarvestStart).Max();
 
-    // Due date of a debt created on fulfilledDay for a season due on seasonDue. D4: an optional cap (store policy,
-    // off by default) shortens it to fulfilledDay + cap. Proposal pending lead: a delivery made after the season due date
-    // is due on its own delivery day rather than already overdue.
-    public static DateOnly DueDate(DateOnly seasonDue, DateOnly fulfilledDay, int? maxCreditTermDays)
+    // Due date of a credit debt created on fulfilledDay (F3.13, D1, D4, D15; owner L3 choice B, 2026-11-03):
+    //  - the order has a season not yet past its due date: the season's payment due date (SEASON). D4: an optional cap (store
+    //    policy, off by default) shortens it to fulfilledDay + cap (CAPPED);
+    //  - the delivery comes after the season's due date: it would be overdue on day one, so the customer gets the usual
+    //    credit-tier term from the delivery day (TERM_DAYS, LateForSeason);
+    //  - no season: the credit-tier term from the delivery day, as before (TERM_DAYS). The cap does not apply to the term.
+    public static DueCalculation ComputeDue(CropSeason? season, DateOnly fulfilledDay, int tierTermDays, int? maxCreditTermDays)
     {
         if (maxCreditTermDays is <= 0)
         {
             throw new DomainException("The maximum credit term must be at least one day.");
         }
 
-        var due = maxCreditTermDays is { } cap && fulfilledDay.AddDays(cap) < seasonDue ? fulfilledDay.AddDays(cap) : seasonDue;
-        return due < fulfilledDay ? fulfilledDay : due;
+        if (tierTermDays < 0)
+        {
+            throw new DomainException("The credit term cannot be negative.");
+        }
+
+        if (season is null || season.PaymentDueDate < fulfilledDay)
+        {
+            return new(fulfilledDay.AddDays(tierTermDays), DueRules.TermDays, season is not null);
+        }
+
+        return maxCreditTermDays is { } cap && fulfilledDay.AddDays(cap) < season.PaymentDueDate
+            ? new(fulfilledDay.AddDays(cap), DueRules.Capped, false)
+            : new(season.PaymentDueDate, DueRules.Season, false);
     }
 }
+
+// How a due date was reached; stored with the debt (D17) and returned as dueRule.
+public static class DueRules
+{
+    public const string Season = "SEASON";
+    public const string Capped = "CAPPED";
+    public const string TermDays = "TERM_DAYS";
+    public const string Manual = "MANUAL";
+}
+
+// LateForSeason: the order has a season but it was delivered after the season's due date.
+public readonly record struct DueCalculation(DateOnly DueDate, string Rule, bool LateForSeason);

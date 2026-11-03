@@ -137,16 +137,13 @@ public sealed class CropSeasonService(
         var farmer = await db.FarmerProfiles.AsNoTracking().Where(f => f.UserId == user && f.User.Role.Code == RoleCode.Farmer)
             .Select(f => (Guid?)f.Id).SingleOrDefaultAsync(token) ?? throw new ForbiddenException();
         var today = Today;
-        var season = SeasonCalendar.Resolve(await db.CropSeasons.AsNoTracking()
-            .Where(s => s.StoreId == store && s.ClosedAt == null && s.OrderWindowStart <= today && today < s.HarvestStart)
-            .ToListAsync(token), today);
-        var cap = await db.StoreDebtPolicies.AsNoTracking().Where(p => p.StoreId == store)
-            .Select(p => p.MaxCreditTermDays).SingleOrDefaultAsync(token);
+        var season = await DebtDueLookup.OpenSeasonOnAsync(db, store, today, token);
+        var cap = await DebtDueLookup.CapAsync(db, store, token);
         if (season is not null)
         {
-            var due = SeasonCalendar.DueDate(season.PaymentDueDate, today, cap);
-            return new(season.Id, season.Code, season.Name, season.HarvestStart, season.HarvestEnd, due,
-                due < season.PaymentDueDate ? "CAPPED" : "SEASON", null, true);
+            // The season is open for orders, so its due date is always ahead of today: the tier term is not needed here.
+            var due = SeasonCalendar.ComputeDue(season, today, 0, cap);
+            return new(season.Id, season.Code, season.Name, season.HarvestStart, season.HarvestEnd, due.DueDate, due.Rule, null, true);
         }
 
         var term = await (from p in db.FarmerCreditProfiles.AsNoTracking()

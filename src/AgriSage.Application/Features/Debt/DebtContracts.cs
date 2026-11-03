@@ -44,7 +44,9 @@ public sealed record DebtReasonRequest(string Reason);
 public sealed record DebtAdjustmentRequest(decimal Amount, string Reason, string? ReasonCode = null);
 public sealed record DebtCancelRequest(string Reason, string? ReasonCode = null);
 public sealed record DebtDueDateRequest(DateOnly NewDueDate, string Reason, string? ReasonCode = null);
-public sealed record ManualDebtEntryRequest(decimal Amount, DateOnly DueDate, string Reason);
+// F3.13: with CropSeasonId the debt belongs to that season (origin = collection) and DueDate may be left out: it then takes
+// the season's due date. DueDate stays required without a season.
+public sealed record ManualDebtEntryRequest(decimal Amount, DateOnly? DueDate, string Reason, Guid? CropSeasonId = null);
 public sealed record DebtAccountResponse(Guid Id, Guid FarmerProfileId, string Status, decimal CurrentBalance,
     decimal OverdueAmount, int OpenEntryCount, DateOnly? OldestDueDate, DateTimeOffset? LastTransactionAt, long Version,
     IReadOnlyList<DebtCollectionGroup> Groups);
@@ -155,7 +157,9 @@ public sealed class ManualDebtEntryRequestValidator : AbstractValidator<ManualDe
     {
         RuleFor(r => r.Amount).Must(a => a > 0 && Credit.CreditMoney.Valid(a));
         RuleFor(r => r.Reason).NotEmpty().MaximumLength(1000);
-        RuleFor(r => r.DueDate).NotEmpty();
+        RuleFor(r => r.DueDate).NotNull().When(r => r.CropSeasonId is null);
+        RuleFor(r => r.DueDate!.Value).NotEqual(default(DateOnly)).When(r => r.DueDate.HasValue).OverridePropertyName("dueDate");
+        RuleFor(r => r.CropSeasonId!.Value).NotEqual(Guid.Empty).When(r => r.CropSeasonId.HasValue).OverridePropertyName("cropSeasonId");
     }
 }
 public sealed class DebtDueDateRequestValidator : AbstractValidator<DebtDueDateRequest>

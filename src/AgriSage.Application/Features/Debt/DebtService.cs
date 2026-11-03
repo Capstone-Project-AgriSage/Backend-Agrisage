@@ -301,9 +301,39 @@ public sealed class DebtService(IAgriSageDbContext db, IRowLockService locks, ID
         if (account == null) { account = new DebtAccount(store, farmerId); db.DebtAccounts.Add(account); }
         var number = await DocumentNumbers.NextAsync(db.DebtEntries.IgnoreQueryFilters().AsNoTracking().Select(e => e.EntryNumber),
             DocumentNumbers.DebtEntry, Today, token);
-        var posting = account.CreateManualAdjustmentEntry(number, request.Amount, request.DueDate, actor, clock.UtcNow, note: request.Reason.Trim());
+        // F3.13: a manual debt may belong to a season (open, of this store). Without a given due date it takes the season's
+        // (D4 cap included); a season already past its due date needs an explicit date.
+        CropSeason? season = null;
+        DateOnly due;
+        string? basis = null;
+        if (request.CropSeasonId is { } seasonId)
+        {
+            season = await db.CropSeasons.AsNoTracking().SingleOrDefaultAsync(s => s.Id == seasonId && s.StoreId == store, token)
+                ?? throw new BusinessRuleException("The season does not exist in this store.");
+            if (season.IsClosed) throw new BusinessRuleException($"Season '{season.Code}' is closed; debt cannot be recorded in it.");
+            if (request.DueDate is { } given)
+            {
+                due = given;
+                basis = DebtDueCalculator.ManualBasis(season, Today);
+            }
+            else
+            {
+                if (season.PaymentDueDate < Today)
+                    throw new BusinessRuleException($"The due date of season '{season.Code}' has passed; give a dueDate.");
+                var calculated = DebtDueCalculator.Calculate(season, Today, 0, await DebtDueLookup.CapAsync(db, store, token));
+                (due, basis) = (calculated.DueDate, calculated.Basis);
+            }
+        }
+        else
+        {
+            due = request.DueDate ?? throw new BusinessRuleException("A due date is required without a season.");
+        }
+
+        var posting = account.CreateManualAdjustmentEntry(number, request.Amount, due, actor, clock.UtcNow, note: request.Reason.Trim(),
+            originCropSeasonId: season?.Id, dueBasis: basis);
         db.DebtEntries.Add(posting.Entry); db.DebtTransactions.Add(posting.Transaction);
-        audit.Record("DEBT_MANUAL_ENTRY", "DEBT_ENTRY", posting.Entry.Id, store, newValues: new { request.Amount, request.DueDate }, reason: request.Reason);
+        audit.Record("DEBT_MANUAL_ENTRY", "DEBT_ENTRY", posting.Entry.Id, store,
+            newValues: new { request.Amount, DueDate = due, CropSeasonId = season?.Id }, reason: request.Reason);
         await db.SaveChangesAsync(token); await tx.CommitAsync(token);
         return await EntryAsync(posting.Entry.Id, token);
     }

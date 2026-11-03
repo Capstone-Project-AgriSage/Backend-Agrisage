@@ -155,20 +155,49 @@ public class CropSeasonTests
         Assert.Null(SeasonCalendar.NextOrderWindowStart([]));
     }
 
-    // D4: the optional cap shortens the term to delivery + cap days; the season due date is otherwise the same for every
-    // delivery. Proposal (pending lead): a delivery after the season due date is not overdue on its first day.
+    // F3.13 (owner L3 choice B): the season due date, shortened by the optional cap (D4); a delivery after the season due
+    // date gets the credit-tier term from the delivery day instead of being overdue on day one; no season keeps the tier
+    // term. The cap only shortens the season due date.
     [Theory]
-    [InlineData("2026-12-06", null, "2027-04-14")]
-    [InlineData("2026-12-06", 60, "2027-02-04")]
-    [InlineData("2027-03-01", 60, "2027-04-14")]
-    [InlineData("2027-05-01", null, "2027-05-01")]
-    public void Due_date_uses_the_season_due_date_with_an_optional_cap(string fulfilled, int? cap, string expected) =>
-        Assert.Equal(DateOnly.Parse(expected), SeasonCalendar.DueDate(new DateOnly(2027, 4, 14), DateOnly.Parse(fulfilled), cap));
+    [InlineData("2026-12-06", null, "2027-04-14", "SEASON", false)]
+    [InlineData("2026-12-06", 60, "2027-02-04", "CAPPED", false)]
+    [InlineData("2027-03-01", 60, "2027-04-14", "SEASON", false)]            // 60 days from delivery is past the season due date
+    [InlineData("2027-04-13", null, "2027-04-14", "SEASON", false)]
+    [InlineData("2027-04-14", null, "2027-04-14", "SEASON", false)]          // delivered on the due date: due that day
+    [InlineData("2027-04-15", null, "2027-05-15", "TERM_DAYS", true)]        // one day late: 30-day tier term from delivery
+    [InlineData("2027-05-20", null, "2027-06-19", "TERM_DAYS", true)]
+    [InlineData("2027-05-20", 7, "2027-06-19", "TERM_DAYS", true)]           // the cap does not shorten the tier term
+    [InlineData("2027-02-28", 45, "2027-04-14", "SEASON", false)]            // 45 days from 28/02 is 14/04: not shorter
+    [InlineData("2027-02-27", 45, "2027-04-13", "CAPPED", false)]
+    public void Due_date_follows_the_season_then_the_tier_term_after_it(string fulfilled, int? cap, string expected, string rule, bool late)
+    {
+        var due = SeasonCalendar.ComputeDue(DongXuan(), DateOnly.Parse(fulfilled), 30, cap);
+
+        Assert.Equal((DateOnly.Parse(expected), rule, late), (due.DueDate, due.Rule, due.LateForSeason));
+    }
+
+    [Theory]
+    [InlineData("2026-12-06", null, "2027-01-05")]
+    [InlineData("2026-12-06", 7, "2027-01-05")]                              // the cap never applies without a season
+    [InlineData("2028-02-29", null, "2028-03-30")]                           // leap day
+    public void Without_a_season_the_tier_term_counts_from_the_delivery_day(string fulfilled, int? cap, string expected)
+    {
+        var due = SeasonCalendar.ComputeDue(null, DateOnly.Parse(fulfilled), 30, cap);
+
+        Assert.Equal((DateOnly.Parse(expected), "TERM_DAYS", false), (due.DueDate, due.Rule, due.LateForSeason));
+    }
 
     [Fact]
-    public void Due_date_cap_must_be_positive()
+    public void A_zero_day_tier_term_is_due_on_the_delivery_day()
     {
-        Assert.Throws<DomainException>(() => SeasonCalendar.DueDate(new DateOnly(2027, 4, 14), new DateOnly(2027, 1, 1), 0));
+        Assert.Equal(new DateOnly(2026, 12, 6), SeasonCalendar.ComputeDue(null, new DateOnly(2026, 12, 6), 0, null).DueDate);
+    }
+
+    [Fact]
+    public void Due_date_cap_and_term_must_be_valid()
+    {
+        Assert.Throws<DomainException>(() => SeasonCalendar.ComputeDue(DongXuan(), new DateOnly(2027, 1, 1), 30, 0));
+        Assert.Throws<DomainException>(() => SeasonCalendar.ComputeDue(null, new DateOnly(2027, 1, 1), -1, null));
     }
 
     // CS-11: the seven reason codes of the policy document; rollover accepts only the hardship codes (owner L3 choice,
