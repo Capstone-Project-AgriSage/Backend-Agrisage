@@ -268,9 +268,9 @@ release the same amount of the order's unused credit reservation (design §XVI-D
 | GET | `/api/debt-entries/{id}` | Operate | — | `200 DebtEntryResponse` |
 | POST | `/api/debt-entries/{id}/dispute` | Operate | `{ reason }` | `200 DebtEntryResponse` |
 | POST | `/api/debt-entries/{id}/keep` | Operate | `{ reason }` | `200 DebtEntryResponse` |
-| POST | `/api/debt-entries/{id}/change-due-date` | Manage (owner-only, not delegable; was Operate until 2026-11-03) | `{ newDueDate, reason }` | `200 DebtEntryResponse` |
-| POST | `/api/debt-entries/{id}/adjust` | Manage | `{ amount, reason }` | `200 DebtEntryResponse` |
-| POST | `/api/debt-entries/{id}/cancel` | Manage | `{ reason }` | `200 DebtEntryResponse` |
+| POST | `/api/debt-entries/{id}/change-due-date` | Manage (owner-only, not delegable; was Operate until 2026-11-03) | `{ newDueDate, reason, reasonCode? }` (F3.14) | `200 DebtEntryResponse` |
+| POST | `/api/debt-entries/{id}/adjust` | Manage | `{ amount, reason, reasonCode? }` (F3.14) | `200 DebtEntryResponse` |
+| POST | `/api/debt-entries/{id}/cancel` | Manage | `{ reason, reasonCode? }` (F3.14) | `200 DebtEntryResponse` |
 | GET | `/api/me/debt` | FARMER | — | `200 DebtAccountResponse` |
 | GET | `/api/me/debt-entries` (+ `/{id}`) | FARMER | query: `status`, paging | own entries only |
 | POST | `/api/me/debt-entries/{id}/dispute` | FARMER | `{ reason }` | `200 DebtEntryResponse` |
@@ -463,6 +463,40 @@ UpdateDebtPolicyRequest {
   changed, so an editor still holding the default gets `409`. Saving the same values changes nothing and is not audited.
 - Changing `defaultGraceDays` only proposes the grace of seasons created later; existing seasons keep theirs.
 - Audited as `DEBT_POLICY_CHANGED` (`STORE_DEBT_POLICY`, old and new values, optional reason).
+
+## 8d. F3.14 — Rollover of one entry and reason codes (new, 2026-11-03)
+
+A rollover moves an unpaid entry to a later season: only its collection season and due date change (D9). The amount, the
+ledger, the origin season and the original due date stay; `rolloverCount` grows by one.
+
+| Method | Route | Role / permission | Body | Response |
+|---|---|---|---|---|
+| POST | `/api/debt-entries/{id}/rollover` | Operate / `DEBT.ROLLOVER` (delegable) | `{ reasonCode, note, targetCropSeasonId?, overrideExtensionLimit? }` | `200 DebtEntryResponse`; `400` missing/unknown/non-hardship code or note; `403` staff past the rollover limit; `404`; `422` see below |
+
+- `reasonCode` ∈ `MAT_MUA`, `THIEN_TAI`, `KHO_KHAN`, `KHAC` (hardship only); `note` is always required.
+- No `targetCropSeasonId`: the next open season (by harvest start) whose `paymentDueDate` is later than the entry's due
+  date. The new due date is the target season's `paymentDueDate` (no term cap on a rollover).
+- Who (CS-08): Sale staff while `rolloverCount < staffRolloverLimit` of the debt policy (first rollover by default);
+  then only the owner (`403` for staff). ADMIN and STORE_OWNER may always roll over.
+- Total extension (D5): new due date − original due date ≤ `maxTotalExtensionDays` (365). Staff past it → `422`. The
+  owner past it → `422` unless `overrideExtensionLimit: true` (recorded in the audit).
+- `422`: no later open season, target season of another store or closed, same season or not a later due date, entry
+  disputed, paid or cancelled.
+- Concurrent rollovers of one entry are serialized per Farmer: one succeeds, the other gets `422`.
+- Audited as `DEBT_ROLLOVER` (old and new due date and season, `rolloverCount`, `originalDueDate`, `reasonCode`,
+  `overrideExtensionLimit`).
+
+**Reason codes on the owner actions (D7).** `adjust`, `cancel` and `change-due-date` take an optional `reasonCode` (the 7
+codes: `MAT_MUA`, `THIEN_TAI`, `KHO_KHAN`, `TRI_AN`, `SAI_SOT`, `KHONG_THU_HOI`, `KHAC`); an unknown code → `400`. It
+becomes mandatory once F3.22 decides when (pending). `change-due-date` stays owner-only, never in the past, does not
+count as a rollover, and records `exceedsTotalExtension` in its audit when it goes past the limit.
+
+`DebtActionResponse` adds `reasonCode`, `isPrePolicy` (a debt change, i.e. adjust, cancel, due date or rollover,
+recorded without a code: "Trước khi áp dụng chính sách"), `oldCropSeasonId`, `newCropSeasonId`.
+
+**Farmer notifications** (once per action, through the audit outbox): `DEBT_ROLLOVER` and `DEBT_CHANGE_DUE_DATE` →
+`DEBT_DUE_DATE_CHANGED`; `DEBT_ADJUST` → `DEBT_REDUCED`; `DEBT_CANCEL` → `DEBT_CANCELLED`; `DEBT_KEEP` →
+`DEBT_DISPUTE_RESOLVED`. The owner's season due-date move (8b) notifies through the same `DEBT_CHANGE_DUE_DATE`.
 
 ---
 

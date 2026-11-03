@@ -94,7 +94,9 @@ public sealed class DebtService(IAgriSageDbContext db, IRowLockService locks, ID
                 account.CurrentBalance, reserved, Math.Max(0, profile?.CalculateAvailableCredit(account.CurrentBalance, reserved) ?? 0)),
             row.OrderId is { } order ? await orders.GetAsync(order, token) : null,
             entry.Actions.OrderBy(a => a.CreatedAt).ThenBy(a => a.Id).Select(a => new DebtActionResponse(a.Id, EnumText.Format(a.ActionType),
-                a.Reason, a.AdjustmentAmount, a.OldDueDate, a.NewDueDate, a.CreatedBy, a.CreatedAt)).ToList(),
+                a.Reason, a.AdjustmentAmount, a.OldDueDate, a.NewDueDate, a.CreatedBy, a.CreatedAt,
+                a.ReasonCode is { } code ? EnumText.Format(code) : null, a.ReasonCode is null && ChangesDebt(a.ActionType),
+                a.OldCropSeasonId, a.NewCropSeasonId)).ToList(),
             transactions.Select(MapTransaction).ToList(), history, entry.CreatedAt);
     }
 
@@ -163,7 +165,11 @@ public sealed class DebtService(IAgriSageDbContext db, IRowLockService locks, ID
         return new(amount, result, left);
     }
 
-    public async Task<DebtEntryResponse> ActionAsync(Guid id, string action, string reason, decimal? amount, DateOnly? dueDate, CancellationToken token)
+    public Task<DebtEntryResponse> ActionAsync(Guid id, string action, string reason, decimal? amount, DateOnly? dueDate, CancellationToken token) =>
+        ActionAsync(id, action, reason, amount, dueDate, null, token);
+
+    public async Task<DebtEntryResponse> ActionAsync(Guid id, string action, string reason, decimal? amount, DateOnly? dueDate,
+        string? reasonCode, CancellationToken token)
     {
         // Adjust, cancel and changing the due date are owner-only (F3.21); dispute and keep stay open to Sale staff.
         var actor = action switch
@@ -172,11 +178,17 @@ public sealed class DebtService(IAgriSageDbContext db, IRowLockService locks, ID
             "CHANGE_DUE_DATE" => await access.OwnerActorAsync("DEBT.DUE_DATE", token),
             _ => access.Actor(),
         };
-        return await ActionCoreAsync(id, action, reason, amount, dueDate, actor, token);
+        // D7: the code is stored with the debt changes; it stays optional until it becomes mandatory (F3.22).
+        var code = action is "ADJUST" or "CANCEL" or "CHANGE_DUE_DATE" ? DebtReasonCodeText.Parse(reasonCode) : null;
+        return await ActionCoreAsync(id, action, reason, amount, dueDate, actor, token, code);
     }
 
+    // Debt changes that need a reason code (D7); a dispute and its resolution do not change the debt.
+    internal static bool ChangesDebt(DebtEntryActionType type) => type is DebtEntryActionType.Adjust or DebtEntryActionType.Cancel
+        or DebtEntryActionType.ChangeDueDate or DebtEntryActionType.Rollover;
+
     private async Task<DebtEntryResponse> ActionCoreAsync(Guid id, string action, string reason, decimal? amount,
-        DateOnly? dueDate, Guid actor, CancellationToken token)
+        DateOnly? dueDate, Guid actor, CancellationToken token, DebtReasonCode? code = null)
     {
         if (string.IsNullOrWhiteSpace(reason)) throw new BusinessRuleException("Debt actions require a reason.");
         var store = await ActiveStore.GetIdAsync(db, token);
@@ -185,19 +197,29 @@ public sealed class DebtService(IAgriSageDbContext db, IRowLockService locks, ID
         await locks.LockFarmerProfileAsync(row.FarmerId, token);
         var account = await db.DebtAccounts.SingleAsync(a => a.Id == row.AccountId, token);
         var entry = await db.DebtEntries.Include(e => e.Actions).SingleAsync(e => e.Id == id, token);
+        bool? exceedsTotalExtension = null;
         switch (action)
         {
             case "DISPUTE": entry.Dispute(reason.Trim(), actor); break;
             case "KEEP": entry.Keep(reason.Trim(), actor); break;
             case "CHANGE_DUE_DATE":
                 if (dueDate == null || dueDate < Today) throw new BusinessRuleException("The new due date cannot be in the past.");
-                entry.ChangeDueDate(dueDate.Value, reason.Trim(), actor); break;
-            case "ADJUST": db.DebtTransactions.Add(account.AdjustEntry(entry, amount ?? 0, reason.Trim(), actor, clock.UtcNow)); break;
-            case "CANCEL": db.DebtTransactions.Add(account.CancelEntry(entry, reason.Trim(), actor, clock.UtcNow)); break;
+                // §1.1: owner-only, so it may go past the store's total extension limit (counted from the original due date);
+                // that is recorded. It is not a rollover: the rollover count does not change.
+                var policy = await db.StoreDebtPolicies.AsNoTracking().SingleOrDefaultAsync(p => p.StoreId == store, token)
+                    ?? new StoreDebtPolicy(store);
+                exceedsTotalExtension = policy.ExceedsTotalExtension(entry.OriginalDueDate, dueDate.Value);
+                entry.ChangeDueDate(dueDate.Value, reason.Trim(), actor, code); break;
+            case "ADJUST": db.DebtTransactions.Add(account.AdjustEntry(entry, amount ?? 0, reason.Trim(), actor, clock.UtcNow, code)); break;
+            case "CANCEL": db.DebtTransactions.Add(account.CancelEntry(entry, reason.Trim(), actor, clock.UtcNow, code)); break;
             default: throw new BusinessRuleException("Unknown debt action.");
         }
         foreach (var a in entry.Actions.Where(a => db.DebtEntryActions.Entry(a).State == EntityState.Detached)) db.DebtEntryActions.Add(a);
-        audit.Record($"DEBT_{action}", "DEBT_ENTRY", id, store, newValues: new { entry.OutstandingAmount, entry.DueDate, Status = EnumText.Format(entry.Status) }, reason: reason);
+        audit.Record($"DEBT_{action}", "DEBT_ENTRY", id, store, newValues: new
+        {
+            entry.OutstandingAmount, entry.DueDate, Status = EnumText.Format(entry.Status),
+            ReasonCode = code is { } c ? EnumText.Format(c) : null, ExceedsTotalExtension = exceedsTotalExtension,
+        }, reason: reason);
         await db.SaveChangesAsync(token);
         await tx.CommitAsync(token);
         return await EntryAsync(id, token);

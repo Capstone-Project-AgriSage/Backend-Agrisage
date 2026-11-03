@@ -9,7 +9,7 @@ namespace AgriSage.Api.Features.Debt;
 
 [ApiController]
 [Authorize(Roles = ApiRoles.Operate)]
-public sealed class DebtController(IDebtService service) : ControllerBase
+public sealed class DebtController(IDebtService service, IDebtRolloverService rollovers) : ControllerBase
 {
     [HttpGet("api/debt-entries")]
     public Task<PagedResult<DebtEntryListItem>> Entries([FromQuery] DebtEntryListRequest request, CancellationToken token) => service.EntriesAsync(request, token);
@@ -36,13 +36,16 @@ public sealed class DebtController(IDebtService service) : ControllerBase
     public Task<DebtEntryResponse> Keep(Guid id, DebtReasonRequest request, CancellationToken token) => service.ActionAsync(id, "KEEP", request.Reason, null, null, token);
     [HttpPost("api/debt-entries/{id:guid}/change-due-date")]
     [Authorize(Roles = ApiRoles.Manage)]
-    public Task<DebtEntryResponse> DueDate(Guid id, DebtDueDateRequest request, CancellationToken token) => service.ActionAsync(id, "CHANGE_DUE_DATE", request.Reason, null, request.NewDueDate, token);
+    public Task<DebtEntryResponse> DueDate(Guid id, DebtDueDateRequest request, CancellationToken token) => service.ActionAsync(id, "CHANGE_DUE_DATE", request.Reason, null, request.NewDueDate, request.ReasonCode, token);
     [HttpPost("api/debt-entries/{id:guid}/adjust")]
     [Authorize(Roles = ApiRoles.Manage)]
-    public Task<DebtEntryResponse> Adjust(Guid id, DebtAdjustmentRequest request, CancellationToken token) => service.ActionAsync(id, "ADJUST", request.Reason, request.Amount, null, token);
+    public Task<DebtEntryResponse> Adjust(Guid id, DebtAdjustmentRequest request, CancellationToken token) => service.ActionAsync(id, "ADJUST", request.Reason, request.Amount, null, request.ReasonCode, token);
     [HttpPost("api/debt-entries/{id:guid}/cancel")]
     [Authorize(Roles = ApiRoles.Manage)]
-    public Task<DebtEntryResponse> Cancel(Guid id, DebtReasonRequest request, CancellationToken token) => service.ActionAsync(id, "CANCEL", request.Reason, null, null, token);
+    public Task<DebtEntryResponse> Cancel(Guid id, DebtCancelRequest request, CancellationToken token) => service.ActionAsync(id, "CANCEL", request.Reason, null, null, request.ReasonCode, token);
+    // F3.14: Sale staff extend while the store policy allows it; then the owner (checked again in the service).
+    [HttpPost("api/debt-entries/{id:guid}/rollover")]
+    public Task<DebtEntryResponse> Rollover(Guid id, DebtRolloverRequest request, CancellationToken token) => rollovers.RolloverAsync(id, request, token);
     [HttpPost("api/customers/{farmerProfileId:guid}/debt/manual-entries")]
     [Authorize(Roles = ApiRoles.Manage)]
     public async Task<IActionResult> Manual(Guid farmerProfileId, ManualDebtEntryRequest request, CancellationToken token)

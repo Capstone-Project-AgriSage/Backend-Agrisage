@@ -34,8 +34,10 @@ public sealed record DebtTransactionListRequest : PaginationRequest
     public DateOnly? ToDate { get; init; }
 }
 public sealed record DebtReasonRequest(string Reason);
-public sealed record DebtAdjustmentRequest(decimal Amount, string Reason);
-public sealed record DebtDueDateRequest(DateOnly NewDueDate, string Reason);
+// ReasonCode (D7, CS-11): optional until it becomes mandatory; a code that is sent must be one of the 7 codes.
+public sealed record DebtAdjustmentRequest(decimal Amount, string Reason, string? ReasonCode = null);
+public sealed record DebtCancelRequest(string Reason, string? ReasonCode = null);
+public sealed record DebtDueDateRequest(DateOnly NewDueDate, string Reason, string? ReasonCode = null);
 public sealed record ManualDebtEntryRequest(decimal Amount, DateOnly DueDate, string Reason);
 public sealed record DebtAccountResponse(Guid Id, Guid FarmerProfileId, string Status, decimal CurrentBalance,
     decimal OverdueAmount, int OpenEntryCount, DateOnly? OldestDueDate, DateTimeOffset? LastTransactionAt, long Version);
@@ -47,8 +49,10 @@ public sealed record DebtEntryListItem(Guid Id, string EntryNumber, Guid FarmerP
 public sealed record DebtTransactionResponse(Guid Id, Guid? DebtEntryId, string TransactionType, decimal AmountDelta,
     decimal BalanceBefore, decimal BalanceAfter, DateTimeOffset OccurredAt, string Status, Guid? PaymentAllocationId,
     Guid? SalesReturnId, Guid? DebtEntryActionId, string? Note, Guid? CreatedBy);
+// IsPrePolicy: a debt change (adjust, cancel, due date, rollover) recorded without a reason code (D7).
 public sealed record DebtActionResponse(Guid Id, string ActionType, string Reason, decimal? AdjustmentAmount,
-    DateOnly? OldDueDate, DateOnly? NewDueDate, Guid CreatedBy, DateTimeOffset CreatedAt);
+    DateOnly? OldDueDate, DateOnly? NewDueDate, Guid CreatedBy, DateTimeOffset CreatedAt, string? ReasonCode = null,
+    bool IsPrePolicy = false, Guid? OldCropSeasonId = null, Guid? NewCropSeasonId = null);
 public sealed record DebtCustomerResponse(Guid Id, string FullName, string? PhoneNumber, decimal CreditLimit,
     decimal CurrentOutstandingDebt, decimal ReservedCredit, decimal AvailableCredit);
 public sealed record DebtEntryResponse(Guid Id, string EntryNumber, string SourceType, Guid? OrderId, string? OrderNumber,
@@ -74,6 +78,7 @@ public interface IDebtService
     Task<PagedResult<DebtTransactionResponse>> TransactionsAsync(Guid farmerId, DebtTransactionListRequest request, CancellationToken token);
     Task<AllocationPreviewResponse> PreviewAsync(Guid farmerId, decimal amount, CancellationToken token);
     Task<DebtEntryResponse> ActionAsync(Guid id, string action, string reason, decimal? amount, DateOnly? dueDate, CancellationToken token);
+    Task<DebtEntryResponse> ActionAsync(Guid id, string action, string reason, decimal? amount, DateOnly? dueDate, string? reasonCode, CancellationToken token);
     Task<DebtEntryResponse> ManualAsync(Guid farmerId, ManualDebtEntryRequest request, CancellationToken token);
     Task<DebtDashboardResponse> DashboardAsync(CancellationToken token);
     Task<Guid> OwnCustomerAsync(CancellationToken token);
@@ -114,6 +119,7 @@ public sealed class DebtAdjustmentRequestValidator : AbstractValidator<DebtAdjus
     {
         RuleFor(r => r.Amount).Must(a => a > 0 && Credit.CreditMoney.Valid(a));
         RuleFor(r => r.Reason).NotEmpty().MaximumLength(1000);
+        RuleFor(r => r.ReasonCode).Must(DebtReasonCodeText.IsKnown).When(r => r.ReasonCode is not null).WithMessage(DebtReasonCodeText.Unknown);
     }
 }
 public sealed class ManualDebtEntryRequestValidator : AbstractValidator<ManualDebtEntryRequest>
@@ -128,5 +134,29 @@ public sealed class ManualDebtEntryRequestValidator : AbstractValidator<ManualDe
 public sealed class DebtDueDateRequestValidator : AbstractValidator<DebtDueDateRequest>
 {
     public DebtDueDateRequestValidator()
-    { RuleFor(r => r.Reason).NotEmpty().MaximumLength(1000); RuleFor(r => r.NewDueDate).NotEmpty(); }
+    {
+        RuleFor(r => r.Reason).NotEmpty().MaximumLength(1000); RuleFor(r => r.NewDueDate).NotEmpty();
+        RuleFor(r => r.ReasonCode).Must(DebtReasonCodeText.IsKnown).When(r => r.ReasonCode is not null).WithMessage(DebtReasonCodeText.Unknown);
+    }
+}
+public sealed class DebtCancelRequestValidator : AbstractValidator<DebtCancelRequest>
+{
+    public DebtCancelRequestValidator()
+    {
+        RuleFor(r => r.Reason).NotEmpty().MaximumLength(1000);
+        RuleFor(r => r.ReasonCode).Must(DebtReasonCodeText.IsKnown).When(r => r.ReasonCode is not null).WithMessage(DebtReasonCodeText.Unknown);
+    }
+}
+
+// The 7 reason codes as UPPER_SNAKE text (MAT_MUA, THIEN_TAI, ...), as stored and returned.
+public static class DebtReasonCodeText
+{
+    public const string Unknown = "Unknown reason code. Use MAT_MUA, THIEN_TAI, KHO_KHAN, TRI_AN, SAI_SOT, KHONG_THU_HOI or KHAC.";
+
+    public static bool IsKnown(string? text) => EnumText.TryParse<DebtReasonCode>(text, out _);
+
+    // Null when no code was sent; an unknown code is refused (the request validators refuse it first with 400).
+    public static DebtReasonCode? Parse(string? text) => text is null ? null
+        : EnumText.TryParse<DebtReasonCode>(text, out var code) ? code
+        : throw new Common.Exceptions.BusinessRuleException(Unknown);
 }

@@ -236,6 +236,7 @@ public static class PermissionEndpointMap
         ["Debt.Adjust"] = "DEBT.ADJUST",
         ["Debt.Cancel"] = "DEBT.CANCEL",
         ["Debt.Manual"] = "DEBT.MANUAL",
+        ["Debt.Rollover"] = "DEBT.ROLLOVER",
         ["Debt.Dashboard"] = "DEBT.READ_DASHBOARD",
         ["MeDebt.Account"] = "MY_DEBT.READ",
         ["MeDebt.Entries"] = "MY_DEBT.READ",

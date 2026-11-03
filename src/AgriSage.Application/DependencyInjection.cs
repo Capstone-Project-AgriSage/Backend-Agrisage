@@ -62,6 +62,7 @@ public static class DependencyInjection
         services.AddScoped<IDebtService, DebtService>();
         services.AddScoped<ICropSeasonService, CropSeasonService>();
         services.AddScoped<IDebtPolicyService, DebtPolicyService>();
+        services.AddScoped<IDebtRolloverService, DebtRolloverService>();
         services.AddScoped<IBankDebtPaymentService, BankDebtPaymentService>();
         services.AddScoped<CustomerAddresses>();
         services.AddScoped<IMyProfileService, MyProfileService>();
