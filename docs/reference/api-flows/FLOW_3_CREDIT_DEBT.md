@@ -386,6 +386,52 @@ the limit total is 0).
 
 ---
 
+## 8b. F3.11 — Crop seasons for debt collection (new, 2026-11-03)
+
+A season is the store's debt-collection calendar entry (CS-04): credit orders confirmed in its order window
+`[orderWindowStart, harvestStart)` belong to it, and their debt is due on `paymentDueDate = harvestEnd + graceDays`.
+Seasons chain without gap or overlap: only the first season takes `orderWindowStart`; each later one opens on the
+previous `harvestStart`, and a season is only added after the last one. `status` is derived from today's Vietnam date
+(PLANNED → OPEN → HARVESTING (harvest end day included) → COLLECTING → CLOSED); only closing is stored (F3.19).
+Inventory seasonal rules stay a separate calendar; `seasonalRuleId` only links one for shared reporting.
+
+| Method | Route | Role / permission | Body / query | Response |
+|---|---|---|---|---|
+| GET | `/api/crop-seasons` | Operate / `CROP_SEASONS.READ` | `year?` (harvest start year), `status?`, `page`, `pageSize` | `200 PagedResult<CropSeasonResponse>`, newest harvest first |
+| GET | `/api/crop-seasons/{id}` | Operate / `CROP_SEASONS.READ` | — | `200 CropSeasonResponse` / `404` |
+| POST | `/api/crop-seasons` | Manage, owner-only / `CROP_SEASONS.MANAGE` | `{ code, name, harvestStart, harvestEnd, graceDays?, orderWindowStart?, cropType?, seasonalRuleId? }` | `201 CropSeasonResponse`; `409` duplicate code; `422` gap, overlap or missing first `orderWindowStart` |
+| PUT | `/api/crop-seasons/{id}` | Manage, owner-only / `CROP_SEASONS.MANAGE` | `{ name, harvestStart, harvestEnd, graceDays, version, seasonalRuleId?, applyNewDueDateToCollectingDebts?, reason? }` | `200 CropSeasonResponse`; `409` stale `version`; `422` closed season or harvest past the next season |
+| GET | `/api/me/crop-seasons/current` | Farmer / `MY_CROP_SEASONS.READ` | — | `200 MyCurrentCropSeasonResponse` |
+
+```json
+CropSeasonResponse {
+  "id": "uuid", "code": "DX-2026", "name": "Đông Xuân 2026–2027", "cropType": "RICE",
+  "orderWindowStart": "2026-10-01", "harvestStart": "2027-02-15", "harvestEnd": "2027-03-15",
+  "graceDays": 30, "paymentDueDate": "2027-04-14", "status": "OPEN", "seasonalRuleId": null,
+  "closedAt": null, "version": 0,
+  "originated": { "outstandingAmount": 2000000, "openEntryCount": 2 },
+  "collecting": { "outstandingAmount": 1000000, "openEntryCount": 1 }
+}
+MyCurrentCropSeasonResponse {
+  "cropSeasonId": "uuid|null", "code": "DX-2026|null", "name": "…|null", "harvestStart": "…|null", "harvestEnd": "…|null",
+  "expectedDueDate": "2027-04-14|null", "dueRule": "SEASON|CAPPED|TERM_DAYS|NONE", "termDays": 30|null, "isEstimate": true
+}
+```
+
+- `originated` = open debt that arose in the season (reports); `collecting` = open debt collected in it now (it moves
+  there on rollover; used to close the season).
+- Changing `harvestStart` moves the next season's `orderWindowStart` in the same transaction. Orders and debts keep
+  their origin season.
+- By default recorded debt keeps its due date (D17). `applyNewDueDateToCollectingDebts: true` (owner, `reason`
+  required) moves entries collected in this season that are still on its old due date to the new one, only later,
+  each with a `CHANGE_DUE_DATE` action and audit.
+- `MyCurrentCropSeasonResponse` is an estimate shown before ordering: the debt and its real due date are created at
+  delivery. `CAPPED` = the store's optional term cap applied; `TERM_DAYS` = no season covers today, the credit-tier term
+  applies; `NONE` = no credit profile.
+- Writes are audited (`CROP_SEASON_CREATED`, `CROP_SEASON_UPDATED`, `DEBT_CHANGE_DUE_DATE`).
+
+---
+
 ## 9. Tests — must prove
 
 | Task | Must prove |

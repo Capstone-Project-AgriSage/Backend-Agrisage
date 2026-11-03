@@ -60,6 +60,7 @@ public static class DependencyInjection
         services.AddScoped<ICustomerCreditService, CustomerCreditService>();
         services.AddScoped<ICreditEligibilityService, CreditEligibilityService>();
         services.AddScoped<IDebtService, DebtService>();
+        services.AddScoped<ICropSeasonService, CropSeasonService>();
         services.AddScoped<IBankDebtPaymentService, BankDebtPaymentService>();
         services.AddScoped<CustomerAddresses>();
         services.AddScoped<IMyProfileService, MyProfileService>();
