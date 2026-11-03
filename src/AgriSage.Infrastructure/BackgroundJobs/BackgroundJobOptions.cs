@@ -13,7 +13,6 @@ public sealed class BackgroundJobOptions
     [Range(10, 86400)] public int AlertSeconds { get; init; } = 3600;
     [Range(10, 86400)] public int PaymentSeconds { get; init; } = 120;
     [Range(10, 86400)] public int AuthenticationSeconds { get; init; } = 3600;
-    [Range(0, 30)] public int DebtReminderDays { get; init; } = 3;
     [Range(1, 365)] public int ExpiryWarningDays { get; init; } = 30;
     public bool ExpireLots { get; init; } = true;
     public bool DebtReminders { get; init; } = true;

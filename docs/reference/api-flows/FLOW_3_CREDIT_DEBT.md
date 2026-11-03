@@ -607,6 +607,30 @@ LimitSuggestionsResponse {
   or before the original due date, never rolled over, moved, reduced, forgiven or returned. Fewer seasons → empty `seasons`
   and `items`. Read-only: the owner changes the limit through the existing credit-limit API.
 
+## 8h. F3.18 — Debt reminders at fixed milestones (new, 2026-11-03)
+
+No new route. The background job `DebtReminders` (same `BackgroundJobs:DebtReminders` switch) no longer reminds every day
+for every entry due within `DebtReminderDays`; that option is removed. It sends the milestones of the store debt policy
+(D10, CS-09), per customer and group:
+
+| Milestone | When | To | Notification type |
+|---|---|---|---|
+| N1 | harvest start of the season the debt is collected in, until its N2 | the Farmer, one per (Farmer, season) | `DEBT_DUE_SOON` |
+| N2 | due date + `reminderOffsets.n2` (default −7) | the Farmer, per (Farmer, due date) | `DEBT_DUE_SOON` |
+| N3 | the due date | the Farmer; one summary to the owner and each Sale staff member per day | `DEBT_DUE_SOON`, then `DEBT_OVERDUE` after the day |
+| N4 | due date + `n4` (default 14) | the Farmer; one summary to the owner and each Sale staff member per day | `DEBT_OVERDUE` |
+| N5 | due date + `n5` (default 30) | the Farmer; one summary to the owner | `DEBT_OVERDUE` |
+
+- A run sends only the latest milestone reached for each (Farmer, due date): a job that did not run for days sends one
+  reminder, never the missed ones. A milestone is sent once (deduplication keys `debt-reminder:{farmerProfileId}:{seasonId}:N1`,
+  `debt-reminder:{farmerProfileId}:{yyyyMMdd of the due date}:N2..N5`, and `debt-reminder-staff:{yyyyMMdd}:N3..N5`).
+- Disputed, paid and cancelled entries are not reminded (a kept dispute is reminded again). A rollover or a due-date change
+  moves the due date, so the schedule follows the new one. Debt without a season keeps N2–N5.
+- Dates are Vietnam's (17:00 UTC = 00:00). Customers are processed in pages of `BatchSize`, saved page by page; the job only
+  writes notifications and never touches the ledger.
+- Reminders sent under the old daily key (`debt:{entryId}:{yyyyMMdd}`) stay as history and do not block the new ones.
+- Rollout: enable the job after the seasons are entered; without seasons only N2–N5 apply.
+
 ---
 
 ## 9. Tests — must prove

@@ -51,7 +51,7 @@ public sealed class OperationsWorker(IServiceScopeFactory scopes, IOptions<Backg
             case BackgroundTask.ExpireLots:
                 await services.GetRequiredService<IInventoryService>().ExpireDueLotsAsync(token); break;
             case BackgroundTask.DebtReminders:
-                await services.GetRequiredService<OperationalAlertsService>().DebtRemindersAsync(o.BatchSize, o.DebtReminderDays, token); break;
+                await services.GetRequiredService<OperationalAlertsService>().DebtRemindersAsync(o.BatchSize, token); break;
             case BackgroundTask.InventoryAlerts:
                 await services.GetRequiredService<OperationalAlertsService>().InventoryAlertsAsync(o.BatchSize, o.ExpiryWarningDays, token); break;
             case BackgroundTask.ExpireAuthentication:
