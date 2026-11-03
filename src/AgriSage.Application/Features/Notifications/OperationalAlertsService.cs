@@ -22,7 +22,7 @@ public sealed class OperationalAlertsService(IAgriSageDbContext context, Notific
     //  N2..N5 — due date + offsets of the store debt policy (−7, 0, +14, +30 by default), per (Farmer, due date).
     // Each run sends only the latest milestone reached (a missed day never sends a backlog), at most once per milestone and
     // group (the deduplication key). Disputed, paid and cancelled entries are not reminded; a rollover changes the due date
-    // and so the schedule. N3 and N4 also give each Sale staff member and owner one summary per milestone and day; N5 gives
+    // and so the schedule. N3 and N4 also give each Sale staff member and owner one summary (in groups) per milestone and day; N5 gives
     // the owner one. Pages of customers are saved one by one; only notifications are written.
     public async Task DebtRemindersAsync(int batchSize, CancellationToken token)
     {
@@ -37,7 +37,6 @@ public sealed class OperationalAlertsService(IAgriSageDbContext context, Notific
         var seasons = (await context.CropSeasons.AsNoTracking()
                 .Where(s => s.StoreId == store && s.ClosedAt == null && s.HarvestStart <= today && s.HarvestStart >= start).ToListAsync(token))
             .Where(s => today < s.PaymentDueDate.AddDays(offsets.N2)).ToDictionary(s => s.Id);
-        var reached = new Dictionary<string, int> { ["N3"] = 0, ["N4"] = 0, ["N5"] = 0 };
 
         var accounts = from a in context.DebtAccounts.AsNoTracking()
                        where a.StoreId == store && context.DebtEntries.Any(e => e.DebtAccountId == a.Id && e.OutstandingAmount > 0
@@ -89,7 +88,6 @@ public sealed class OperationalAlertsService(IAgriSageDbContext context, Notific
                     };
                     await writer.AddAsync([row.UserId], due < today ? "DEBT_OVERDUE" : "DEBT_DUE_SOON", title,
                         $"{message} Vui lòng xem chi tiết công nợ.", key, "DEBT_ACCOUNT", row.Id, token);
-                    if (reached.ContainsKey(milestone)) reached[milestone]++;
                 }
             }
 
@@ -97,25 +95,40 @@ public sealed class OperationalAlertsService(IAgriSageDbContext context, Notific
             if (rows.Count < batchSize) break;
         }
 
+        // The summaries count the group reminders written TODAY (not only in this run), and the per-day key keeps them to one.
+        // So a run that failed after saving the Farmer reminders but before the summaries is repaired by the next run: its
+        // Farmer reminders are already saved (nothing is sent twice), the summaries are still missing and are written then.
+        var reached = await TodaysGroupReminders(today, token);
         if (reached["N3"] + reached["N4"] > 0)
         {
             var staff = await NotificationRecipients.StaffAsync(context, store, token, RoleCode.StoreOwner, RoleCode.SalesStaff);
             if (reached["N3"] > 0)
-                await writer.AddAsync(staff, "DEBT_DUE_SOON", "Khách đến hạn trả nợ",
-                    $"{reached["N3"]} khách vừa đến hạn trả nợ. Vui lòng xem danh sách công nợ.", $"debt-reminder-staff:{date}:N3", "STORE", store, token);
+                await writer.AddAsync(staff, "DEBT_DUE_SOON", "Nợ đến hạn trả",
+                    $"{reached["N3"]} nhóm nợ vừa đến hạn trả nợ. Vui lòng xem danh sách công nợ.", $"debt-reminder-staff:{date}:N3", "STORE", store, token);
             if (reached["N4"] > 0)
-                await writer.AddAsync(staff, "DEBT_OVERDUE", "Khách quá hạn trả nợ",
-                    $"{reached["N4"]} khách đã quá hạn {offsets.N4} ngày. Vui lòng liên hệ nhắc nợ.", $"debt-reminder-staff:{date}:N4", "STORE", store, token);
+                await writer.AddAsync(staff, "DEBT_OVERDUE", "Nợ quá hạn trả",
+                    $"{reached["N4"]} nhóm nợ đã quá hạn {offsets.N4} ngày. Vui lòng liên hệ nhắc nợ.", $"debt-reminder-staff:{date}:N4", "STORE", store, token);
         }
 
         if (reached["N5"] > 0)
         {
             var owners = await NotificationRecipients.StaffAsync(context, store, token, RoleCode.StoreOwner);
-            await writer.AddAsync(owners, "DEBT_OVERDUE", "Khách quá hạn lâu cần quyết định",
-                $"{reached["N5"]} khách đã quá hạn {offsets.N5} ngày. Vui lòng xem mục Cần quyết định.", $"debt-reminder-staff:{date}:N5", "STORE", store, token);
+            await writer.AddAsync(owners, "DEBT_OVERDUE", "Nợ quá hạn lâu cần quyết định",
+                $"{reached["N5"]} nhóm nợ đã quá hạn {offsets.N5} ngày. Vui lòng xem mục Cần quyết định.", $"debt-reminder-staff:{date}:N5", "STORE", store, token);
         }
 
         await context.SaveChangesAsync(token);
+    }
+
+    // One Farmer reminder per (Farmer, due date) group and milestone: its key is debt-reminder:{farmer}:{yyyyMMdd}:N3..N5.
+    private async Task<Dictionary<string, int>> TodaysGroupReminders(DateOnly today, CancellationToken token)
+    {
+        var dayStart = BusinessCalendar.StartOfDay(today);
+        var keys = await context.Notifications.IgnoreQueryFilters().AsNoTracking()
+            .Where(n => n.CreatedAt >= dayStart && n.DeduplicationKey != null && n.DeduplicationKey.StartsWith("debt-reminder:")
+                && (n.DeduplicationKey.EndsWith(":N3") || n.DeduplicationKey.EndsWith(":N4") || n.DeduplicationKey.EndsWith(":N5")))
+            .Select(n => n.DeduplicationKey!).ToListAsync(token);
+        return new[] { "N3", "N4", "N5" }.ToDictionary(m => m, m => keys.Count(k => k.EndsWith(":" + m, StringComparison.Ordinal)));
     }
 
     private static string Money(decimal amount) => amount.ToString("N0", Vietnamese) + " đ";
