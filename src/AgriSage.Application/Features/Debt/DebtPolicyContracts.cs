@@ -51,7 +51,7 @@ public sealed class UpdateDebtPolicyRequestValidator : AbstractValidator<UpdateD
             RuleFor(r => r.ReminderOffsets.N5).GreaterThan(r => r.ReminderOffsets.N4).OverridePropertyName("reminderOffsets.n5");
         });
         RuleFor(r => r.StaffRolloverLimit).GreaterThanOrEqualTo(0);
-        RuleFor(r => r.OwnerReviewAfterRollovers).GreaterThanOrEqualTo(r => r.StaffRolloverLimit);
+        RuleFor(r => r.OwnerReviewAfterRollovers).GreaterThanOrEqualTo(r => r.StaffRolloverLimit).GreaterThanOrEqualTo(1);
         RuleFor(r => r.OnTimeSeasonsForLimitRaise).GreaterThanOrEqualTo(1);
         RuleFor(r => r.MaxCreditTermDays).GreaterThanOrEqualTo(1).When(r => r.MaxCreditTermDays.HasValue);
         RuleFor(r => r.MaxTotalExtensionDays).GreaterThanOrEqualTo(1);

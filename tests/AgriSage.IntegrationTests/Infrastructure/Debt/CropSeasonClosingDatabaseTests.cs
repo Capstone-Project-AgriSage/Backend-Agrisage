@@ -244,6 +244,34 @@ public sealed class CropSeasonClosingDatabaseTests
         Assert.All(entries, x => Assert.Null(x.CollectionCropSeasonId));
     }
 
+    // Review finding 1: a manual debt put into a season takes the store lock like the closing does, so while the season is
+    // being closed it waits, then sees it closed and is refused (no entry, no ledger line).
+    [CreditDbFact]
+    public async Task A_manual_debt_into_a_season_being_closed_waits_and_is_refused()
+    {
+        await using var e = await CreditTestDatabase.StartAsync(Token);
+        var (dx, _) = await SeasonsAsync(e);
+        At(e, 2027, 4, 28);
+
+        using var closer = e.Scope();
+        var db = closer.ServiceProvider.GetRequiredService<AgriSageDbContext>();
+        await using var tx = await db.Database.BeginTransactionAsync(Token);
+        await closer.ServiceProvider.GetRequiredService<AgriSage.Application.Common.Interfaces.IRowLockService>().LockStoreAsync(e.StoreId, Token);
+        var season = await db.CropSeasons.SingleAsync(x => x.Id == dx.Id, Token);
+        season.Close(e.User.UserId!.Value, e.Clock.UtcNow, "{}", new DateOnly(2027, 4, 28));
+        await db.SaveChangesAsync(Token);
+
+        var manual = Run(e, sp => sp.GetRequiredService<IDebtService>()
+            .ManualAsync(e.FarmerId, new(400_000m, new DateOnly(2027, 5, 30), "Nợ cũ", dx.Id), Token));
+        await Task.Delay(TimeSpan.FromSeconds(2), Token);
+        Assert.False(manual.IsCompleted);
+        await tx.CommitAsync(Token);
+
+        await Assert.ThrowsAsync<BusinessRuleException>(() => manual);
+        using var s = e.Scope();
+        Assert.Empty(await s.ServiceProvider.GetRequiredService<AgriSageDbContext>().DebtEntries.AsNoTracking().ToListAsync(Token));
+    }
+
     // The season-wide rollover locks the store too: a rollover into a season being closed waits, then is refused.
     [CreditDbFact]
     public async Task A_season_rollover_into_a_season_being_closed_waits_and_is_refused()

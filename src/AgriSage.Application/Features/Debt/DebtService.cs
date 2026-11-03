@@ -295,6 +295,9 @@ public sealed class DebtService(IAgriSageDbContext db, IRowLockService locks, ID
         if (string.IsNullOrWhiteSpace(request.Reason)) throw new BusinessRuleException("Manual debt requires a reason.");
         var store = await ActiveStore.GetIdAsync(db, token);
         await using var tx = await db.BeginTransactionAsync(token);
+        // A debt put into a season shares the store lock with closing it (store first, then Farmer: the order everywhere),
+        // so a season cannot be closed between the check below and the insert.
+        if (request.CropSeasonId is not null) await locks.LockStoreAsync(store, token);
         await locks.LockFarmerProfileAsync(farmerId, token);
         await access.FindAsync(farmerId, token);
         var account = await db.DebtAccounts.SingleOrDefaultAsync(a => a.StoreId == store && a.FarmerProfileId == farmerId, token);

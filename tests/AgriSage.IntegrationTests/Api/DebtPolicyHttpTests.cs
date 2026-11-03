@@ -61,7 +61,7 @@ public sealed class DebtPolicyHttpTests(StaffHttpTests.StaffApiFactory factory) 
     public static TheoryData<string> InvalidBodies => new()
     {
         "grace-negative", "grace-over-365", "no-offsets", "n2-on-due-date", "n4-before-due-date", "n5-not-after-n4",
-        "staff-limit-negative", "owner-review-before-staff-limit", "no-on-time-season", "term-cap-zero",
+        "staff-limit-negative", "owner-review-before-staff-limit", "owner-review-zero", "no-on-time-season", "term-cap-zero",
         "total-extension-zero", "version-negative", "reason-too-long",
     };
 
@@ -80,6 +80,7 @@ public sealed class DebtPolicyHttpTests(StaffHttpTests.StaffApiFactory factory) 
             "n5-not-after-n4" => Body(n4: 14, n5: 14),
             "staff-limit-negative" => Body(staffRolloverLimit: -1, ownerReviewAfterRollovers: 0),
             "owner-review-before-staff-limit" => Body(staffRolloverLimit: 3, ownerReviewAfterRollovers: 2),
+            "owner-review-zero" => Body(staffRolloverLimit: 0, ownerReviewAfterRollovers: 0),
             "no-on-time-season" => Body(onTimeSeasonsForLimitRaise: 0),
             "term-cap-zero" => Body(maxCreditTermDays: 0),
             "total-extension-zero" => Body(maxTotalExtensionDays: 0),

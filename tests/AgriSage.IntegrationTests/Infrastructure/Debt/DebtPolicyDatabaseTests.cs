@@ -128,6 +128,8 @@ public sealed class DebtPolicyDatabaseTests
             Changed with { ReminderOffsets = new(-10, 21, 21) },
             Changed with { StaffRolloverLimit = -1, OwnerReviewAfterRollovers = 0 },
             Changed with { StaffRolloverLimit = 3, OwnerReviewAfterRollovers = 2 },
+            // Review finding 3: at 0 every entry would need a decision.
+            Changed with { StaffRolloverLimit = 0, OwnerReviewAfterRollovers = 0 },
             Changed with { OnTimeSeasonsForLimitRaise = 0 },
             Changed with { MaxCreditTermDays = 0 },
             Changed with { MaxTotalExtensionDays = 0 },

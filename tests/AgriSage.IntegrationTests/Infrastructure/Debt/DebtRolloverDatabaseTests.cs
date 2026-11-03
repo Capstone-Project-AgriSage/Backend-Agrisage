@@ -153,7 +153,7 @@ public sealed class DebtRolloverDatabaseTests
     public async Task The_store_policy_sets_how_often_staff_may_extend()
     {
         await using var e = await CreditTestDatabase.StartAsync(Token);
-        await SetPolicyAsync(e, staffLimit: 0, ownerReview: 0);
+        await SetPolicyAsync(e, staffLimit: 0, ownerReview: 1);
         await Season(e, DongXuan);
         var id = await DebtAsync(e);
         var staff = await RolloverStaffAsync(e);

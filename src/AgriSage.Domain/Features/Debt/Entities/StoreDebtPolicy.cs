@@ -61,6 +61,9 @@ public sealed class StoreDebtPolicy : SoftDeletableEntity, IHasConcurrencyVersio
             throw new DomainException("The staff rollover limit cannot be negative.");
         if (ownerReviewAfterRollovers < staffRolloverLimit)
             throw new DomainException("Owner review cannot start before the staff rollover limit is used up.");
+        // At 0 every entry would count as "needs a decision" (rolloverCount >= 0), emptying the screen of its meaning.
+        if (ownerReviewAfterRollovers < 1)
+            throw new DomainException("Owner review must start after at least one rollover.");
         if (onTimeSeasonsForLimitRaise < 1)
             throw new DomainException("At least one on-time season is needed before suggesting a higher limit.");
         if (maxCreditTermDays is < 1)
