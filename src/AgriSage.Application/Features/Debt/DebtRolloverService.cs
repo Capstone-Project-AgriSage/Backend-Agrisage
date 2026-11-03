@@ -39,6 +39,9 @@ public sealed class DebtRolloverService(
             ?? throw new NotFoundException("Debt entry", entryId);
 
         await using var tx = await db.BeginTransactionAsync(token);
+        // Store first, then the Farmer, as the credit and customer services lock. The store lock (F3.19) serializes this
+        // with closing a season; the target is read after it, so debt never moves into a season that has just been closed.
+        await locks.LockStoreAsync(store, token);
         await locks.LockFarmerProfileAsync(farmer, token);
         var entry = await db.DebtEntries.Include(e => e.Actions).SingleAsync(e => e.Id == entryId, token);
         var policy = await db.StoreDebtPolicies.AsNoTracking().SingleOrDefaultAsync(p => p.StoreId == store, token)
@@ -116,7 +119,14 @@ public sealed class DebtRolloverService(
         await using var tx = request.DryRun ? null : await db.BeginTransactionAsync(token);
         if (!request.DryRun)
         {
+            // Store first (as closing a season and the credit services lock), then each Farmer in order.
+            await locks.LockStoreAsync(store, token);
             foreach (var farmer in found.Select(e => e.FarmerProfileId).Distinct().Order()) await locks.LockFarmerProfileAsync(farmer, token);
+            // F3.19: the target must still be open once the store is locked.
+            if (await db.CropSeasons.AsNoTracking().AnyAsync(s => s.Id == target.Id && s.ClosedAt != null, token))
+            {
+                throw new BusinessRuleException($"Season '{target.Code}' is closed; debt cannot move into it.");
+            }
         }
 
         var ids = found.Select(e => e.Id).ToList();

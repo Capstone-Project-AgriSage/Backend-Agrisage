@@ -11,7 +11,8 @@ namespace AgriSage.Api.Features.Debt;
 [ApiController]
 [Route("api/crop-seasons")]
 [Authorize(Roles = ApiRoles.Operate)]
-public sealed class CropSeasonsController(ICropSeasonService service, IDebtRolloverService rollovers) : ControllerBase
+public sealed class CropSeasonsController(ICropSeasonService service, IDebtRolloverService rollovers,
+    ICropSeasonClosingService closing) : ControllerBase
 {
     [HttpGet]
     public Task<PagedResult<CropSeasonResponse>> List([FromQuery] CropSeasonListRequest request, CancellationToken token) =>
@@ -37,4 +38,19 @@ public sealed class CropSeasonsController(ICropSeasonService service, IDebtRollo
     [HttpPost("{id:guid}/debt/rollover")]
     public Task<CropSeasonRolloverResponse> RolloverDebt(Guid id, CropSeasonRolloverRequest request, CancellationToken token) =>
         rollovers.RolloverSeasonAsync(id, request, token);
+
+    // F3.19: what still blocks closing (D11), for the closing screen.
+    [HttpGet("{id:guid}/closing-check")]
+    public Task<CropSeasonClosingCheckResponse> ClosingCheck(Guid id, CancellationToken token) => closing.ClosingCheckAsync(id, token);
+
+    // F3.19: owner-only (CROP_SEASONS.MANAGE, not delegable); a closed season never changes or reopens.
+    [HttpPost("{id:guid}/close")]
+    [Authorize(Roles = ApiRoles.Manage)]
+    public Task<CropSeasonResponse> Close(Guid id, CloseCropSeasonRequest request, CancellationToken token) =>
+        closing.CloseAsync(id, request, token);
+
+    // F3.19: customers on time in the last closed seasons (D12); read-only, the limit is changed through the credit API.
+    [HttpGet("{id:guid}/limit-suggestions")]
+    [Authorize(Roles = ApiRoles.Manage)]
+    public Task<LimitSuggestionsResponse> LimitSuggestions(Guid id, CancellationToken token) => closing.LimitSuggestionsAsync(id, token);
 }

@@ -554,11 +554,58 @@ CropSeasonRolloverResponse {
 - Each entry follows F3.14; one that does not qualify is skipped with `reason`: `NOT_FOUND` (not an entry of this store),
   `NOT_IN_SEASON`, `NOTHING_OWED`, `DISPUTED`, `NOT_LATER` (its own due date is not before the target's), `NEEDS_OWNER`
   (Sale staff past the staff rollover limit), `EXCEEDS_TOTAL_EXTENSION` (past the limit without the owner's override).
-- The qualifying entries move in one transaction; every Farmer is locked in `farmerProfileId` order, so it runs safely
-  beside payments. A second call skips what already moved.
+- The qualifying entries move in one transaction; the store is locked first, then every Farmer in `farmerProfileId` order
+  (the order the credit and customer services use), so it runs safely beside payments. A second call skips what already
+  moved.
 - `dryRun: true` returns the same result and writes nothing (no lock, no audit, no notification).
 - Each moved entry gets a `ROLLOVER` action, a `DEBT_ROLLOVER` audit and a Farmer notification (`DEBT_DUE_DATE_CHANGED`);
   the run is audited once as `CROP_SEASON_DEBT_ROLLOVER` on the source season.
+
+## 8g. F3.19 — Closing a season, limit suggestions, debt by season (new, 2026-11-03)
+
+| Method | Route | Role / permission | Body / query | Response |
+|---|---|---|---|---|
+| GET | `/api/crop-seasons/{id}/closing-check` | Operate / `CROP_SEASONS.READ` | — | `200 CropSeasonClosingCheckResponse`; `404` |
+| POST | `/api/crop-seasons/{id}/close` | Manage, owner-only / `CROP_SEASONS.MANAGE` | `{ version, note? }` | `200 CropSeasonResponse` (`status: CLOSED`); `409` stale `version`; `422` not closable |
+| GET | `/api/crop-seasons/{id}/limit-suggestions` | Manage / `DEBT.READ_DASHBOARD` | — | `200 LimitSuggestionsResponse`; `422` season not closed |
+| GET | `/api/reports/debt-by-season` | Manage / `DEBT.READ_DASHBOARD` | `year?`, `page`, `pageSize` | `200 PagedResult<DebtBySeasonItem>`, newest harvest first |
+
+```json
+CropSeasonClosingCheckResponse {
+  "seasonId": "uuid", "status": "COLLECTING", "canClose": false, "reasons": ["OPEN_ENTRIES"],
+  "openEntryCount": 2, "openEntries": [ { "entryId": "uuid", "entryNumber": "DE-…", "farmerProfileId": "uuid",
+                                          "fullName": "…", "outstandingAmount": 200000, "status": "PARTIALLY_PAID" } ],
+  "openCreditOrderCount": 0, "openCreditOrders": [ { "orderId": "uuid", "orderNumber": "OD-…", "status": "CONFIRMED" } ]
+}
+DebtBySeasonItem {
+  "season": { "id": "uuid", "code": "DX-2026", "name": "…" }, "harvestStart": "2027-02-15", "paymentDueDate": "2027-04-14",
+  "status": "CLOSED", "closedAt": "…|null", "isFrozen": true,
+  "origin": { "originatedAmount": 2000000, "collectedAmount": 1000000, "returnedAmount": 0, "reducedAmount": 0,
+              "cancelledAmount": 0, "carriedOverAmount": 1000000, "outstandingAmount": 1000000, "entryCount": 2, "customerCount": 1 },
+  "collection": { "carriedInAmount": 0, "toCollectAmount": 0, "openEntryCount": 0 }
+}
+LimitSuggestionsResponse {
+  "seasonId": "uuid", "requiredSeasons": 2, "seasons": [ { "id": "uuid", "code": "DX-2026", "name": "…" }, … ],
+  "items": [ { "farmerProfileId": "uuid", "fullName": "…", "phoneNumber": "…", "creditLimit": 20000000,
+               "creditStatus": "ACTIVE", "paidAmount": 3000000, "lastPaidOn": "2027-09-10" } ]
+}
+```
+
+- **Closing (D11).** `reasons`: `ALREADY_CLOSED`; `HARVEST_NOT_ENDED` (not collecting yet: the harvest end day still counts as
+  harvesting); `OPEN_ENTRIES` (debt still collected in the season, disputed included); `OPEN_CREDIT_ORDERS` (credit orders
+  of the season not completed or cancelled). Lists show at most 50 items; counts are complete. `close` locks the store,
+  checks again, records `closed_summary` (the report figures at that moment), `closed_at`, `closed_by` and audits
+  `CROP_SEASON_CLOSED` (figures, note). A closed season never changes, reopens or receives debt: rollovers lock the store
+  before reading their target, so one that waits behind a closing is refused afterwards.
+- **Report (D9).** `origin`: debt that arose in the season, whatever season collects it now; `originated − collected −
+  returned − reduced − cancelled = outstanding` (posted ledger lines; `reduced` = ADJUST, `cancelled` = CANCEL);
+  `carriedOver` = the part of `outstanding` now collected in a later season. `collection`: debt collected in the season
+  now; `carriedIn` = the part that arose elsewhere (or had no season). A closed season shows its `closed_summary`
+  (`isFrozen: true`); later payments on carried-over debt appear under the season that collects it.
+- **Limit suggestions (D12, CS-14).** For a closed season and the closed seasons just before it (`requiredSeasons` =
+  `onTimeSeasonsForLimitRaise`, default 2): customers with debt arising in each of them, all of it paid by real payments on
+  or before the original due date, never rolled over, moved, reduced, forgiven or returned. Fewer seasons → empty `seasons`
+  and `items`. Read-only: the owner changes the limit through the existing credit-limit API.
 
 ---
 
