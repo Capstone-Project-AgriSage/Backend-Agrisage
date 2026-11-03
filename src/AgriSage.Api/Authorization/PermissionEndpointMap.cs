@@ -247,6 +247,7 @@ public static class PermissionEndpointMap
         ["CropSeasons.Get"] = "CROP_SEASONS.READ",
         ["CropSeasons.Create"] = "CROP_SEASONS.MANAGE",
         ["CropSeasons.Update"] = "CROP_SEASONS.MANAGE",
+        ["CropSeasons.RolloverDebt"] = "DEBT.ROLLOVER",
         ["MeCropSeasons.Current"] = "MY_CROP_SEASONS.READ",
         ["DebtPolicy.Get"] = "DEBT_POLICY.READ",
         ["DebtPolicy.Update"] = "DEBT_POLICY.MANAGE",

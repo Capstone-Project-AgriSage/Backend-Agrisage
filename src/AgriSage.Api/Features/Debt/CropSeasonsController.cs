@@ -11,7 +11,7 @@ namespace AgriSage.Api.Features.Debt;
 [ApiController]
 [Route("api/crop-seasons")]
 [Authorize(Roles = ApiRoles.Operate)]
-public sealed class CropSeasonsController(ICropSeasonService service) : ControllerBase
+public sealed class CropSeasonsController(ICropSeasonService service, IDebtRolloverService rollovers) : ControllerBase
 {
     [HttpGet]
     public Task<PagedResult<CropSeasonResponse>> List([FromQuery] CropSeasonListRequest request, CancellationToken token) =>
@@ -32,4 +32,9 @@ public sealed class CropSeasonsController(ICropSeasonService service) : Controll
     [Authorize(Roles = ApiRoles.Manage)]
     public Task<CropSeasonResponse> Update(Guid id, UpdateCropSeasonRequest request, CancellationToken token) =>
         service.UpdateAsync(id, request, token);
+
+    // F3.15: roll the season's debt over to a later season (DEBT.ROLLOVER; each entry follows the F3.14 rules).
+    [HttpPost("{id:guid}/debt/rollover")]
+    public Task<CropSeasonRolloverResponse> RolloverDebt(Guid id, CropSeasonRolloverRequest request, CancellationToken token) =>
+        rollovers.RolloverSeasonAsync(id, request, token);
 }

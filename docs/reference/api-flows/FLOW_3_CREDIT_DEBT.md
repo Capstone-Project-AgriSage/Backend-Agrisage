@@ -530,6 +530,36 @@ credit-tier term.
 
 Pending in F3.17: `outstandingBySeason[]` on the debt repayment receipt (payments module).
 
+## 8f. F3.15 — Roll a whole season over (new, 2026-11-03)
+
+| Method | Route | Role / permission | Body | Response |
+|---|---|---|---|---|
+| POST | `/api/crop-seasons/{id}/debt/rollover` | Operate / `DEBT.ROLLOVER` | `{ reasonCode, note, targetCropSeasonId?, entryIds?, dryRun?, overrideExtensionLimit? }` | `200 CropSeasonRolloverResponse`; `400` code, note or list invalid (≤ 500 ids); `404` season; `422` target or size |
+
+```json
+CropSeasonRolloverResponse {
+  "sourceSeasonId": "uuid", "targetSeason": { "id": "uuid", "code": "HT-2027", "name": "Hè Thu 2027" },
+  "newDueDate": "2027-09-14", "dryRun": false,
+  "rolledOver": [ { "entryId": "uuid", "entryNumber": "DE-…", "farmerProfileId": "uuid", "oldDueDate": "2027-04-14",
+                    "newDueDate": "2027-09-14", "outstandingAmount": 2000000 } ],
+  "skipped": [ { "entryId": "uuid", "entryNumber": "DE-…|null", "reason": "DISPUTED" } ]
+}
+```
+
+- `{id}` is the season the debt is collected in. Without `entryIds`: every open entry collected there; with `entryIds`: only
+  those (duplicates ignored). More than 500 open entries → `422`, roll them over in lists.
+- Target: the given season (open, a later due date than the source) or, by default, the next open season whose due date is
+  later than the source's. Closed, unknown, the same or an earlier season → `422`. Every entry gets the target's
+  `paymentDueDate`.
+- Each entry follows F3.14; one that does not qualify is skipped with `reason`: `NOT_FOUND` (not an entry of this store),
+  `NOT_IN_SEASON`, `NOTHING_OWED`, `DISPUTED`, `NOT_LATER` (its own due date is not before the target's), `NEEDS_OWNER`
+  (Sale staff past the staff rollover limit), `EXCEEDS_TOTAL_EXTENSION` (past the limit without the owner's override).
+- The qualifying entries move in one transaction; every Farmer is locked in `farmerProfileId` order, so it runs safely
+  beside payments. A second call skips what already moved.
+- `dryRun: true` returns the same result and writes nothing (no lock, no audit, no notification).
+- Each moved entry gets a `ROLLOVER` action, a `DEBT_ROLLOVER` audit and a Farmer notification (`DEBT_DUE_DATE_CHANGED`);
+  the run is audited once as `CROP_SEASON_DEBT_ROLLOVER` on the source season.
+
 ---
 
 ## 9. Tests — must prove
