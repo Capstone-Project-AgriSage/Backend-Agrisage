@@ -49,7 +49,7 @@ public sealed class DebtRolloverDatabaseTests
 
     private static async Task<Guid> DebtAsync(CreditTestDatabase e, long quantity = 5)
     {
-        var order = await e.FulfillAsync(quantity, Token);
+        var order = await e.FulfillAsync(quantity, Token, withoutSeason: true);
         using var s = e.Scope();
         return (await s.ServiceProvider.GetRequiredService<AgriSageDbContext>().DebtEntries.AsNoTracking()
             .SingleAsync(x => x.OrderId == order.Id, Token)).Id;

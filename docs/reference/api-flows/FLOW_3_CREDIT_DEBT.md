@@ -263,7 +263,7 @@ release the same amount of the order's unused credit reservation (design §XVI-D
 | GET | `/api/debt-accounts` | Operate | query: `search`, `hasOutstanding`, `overdueOnly`, paging | `200 PagedResult<DebtAccountListItem>` |
 | GET | `/api/customers/{farmerProfileId}/debt` | Operate | — | `200 DebtAccountResponse` |
 | GET | `/api/customers/{farmerProfileId}/debt/transactions` | Operate | query: `fromDate`, `toDate`, paging | `200 PagedResult<DebtTransactionResponse>` |
-| POST | `/api/customers/{farmerProfileId}/debt/manual-entries` | Manage | `{ amount, dueDate, reason }` | `201 DebtEntryResponse` |
+| POST | `/api/customers/{farmerProfileId}/debt/manual-entries` | Manage | `{ amount, dueDate?, reason, cropSeasonId? }` (F3.13: `dueDate` may be left out with a season) | `201 DebtEntryResponse` |
 | GET | `/api/debt-entries` | Operate | query: `farmerProfileId`, `status`, `overdueOnly`, `dueFrom`, `dueTo`, `orderId`, paging | `200 PagedResult<DebtEntryListItem>` |
 | GET | `/api/debt-entries/{id}` | Operate | — | `200 DebtEntryResponse` |
 | POST | `/api/debt-entries/{id}/dispute` | Operate | `{ reason }` | `200 DebtEntryResponse` |
@@ -630,6 +630,43 @@ for every entry due within `DebtReminderDays`; that option is removed. It sends 
   writes notifications and never touches the ledger.
 - Reminders sent under the old daily key (`debt:{entryId}:{yyyyMMdd}`) stay as history and do not block the new ones.
 - Rollout: enable the job after the seasons are entered; without seasons only N2–N5 apply.
+
+## 8i. F3.13 — Orders join a season, debt due date by season (new, 2026-11-03)
+
+Two moments (D15), no new route:
+
+**1. Order confirmation (credit orders only).** The order joins the season whose order window `[orderWindowStart,
+harvestStart)` contains the **Vietnam** day of the confirmation (midnight = 17:00 UTC), under the Farmer lock, and keeps it
+(`orders.crop_season_id`; editing the season later does not move it). No season for that day (none entered, or past the
+last one) → no season, the credit-tier term as before. Credit is reserved at confirmation; **no debt exists yet**.
+`OrderResponse` adds `originSeason` (`{ id, code, name }`) and `expectedDueDate`: while the order can still be delivered
+(confirmed, preparing, ready, partially fulfilled), the due date its debt would get if delivered today; `null` otherwise.
+`ORDER_CONFIRMED` audit carries `cropSeasonId`. The Farmer sees the estimate before ordering in
+`GET /api/me/crop-seasons/current` (8b) and staff in `POST /api/customers/{id}/credit-eligibility`.
+
+**2. Delivery or pickup.** Each fulfilment creates its own debt entry for the unpaid value (a two-part delivery gives two
+entries of the same origin season). Origin season = collection season = the order's season. Due date, with `fulfilledDay`
+the Vietnam day of the delivery (owner L3 choice B, 2026-11-03):
+
+| Case | Due date | `dueRule` |
+|---|---|---|
+| order has a season, `paymentDueDate ≥ fulfilledDay` | the season's `paymentDueDate` | `SEASON` |
+| …and the store cap `maxCreditTermDays` is shorter (`fulfilledDay + cap < paymentDueDate`) | `fulfilledDay + cap` | `CAPPED` |
+| order has a season, delivered **after** its `paymentDueDate` | `fulfilledDay + credit-tier term` | `TERM_DAYS` (`lateForSeason`) |
+| no season | `fulfilledDay + credit-tier term` (as before) | `TERM_DAYS` |
+
+The cap only shortens a season due date, never the tier term. `originalDueDate` = this date. The values the date was computed
+from are stored with the entry (`due_basis`, D17): rule, season id/code, harvest end, grace days, season due date, tier term,
+cap (when it applied), delivery day, `lateForSeason`; later changes of the season or the tier never move an existing debt.
+
+**Credit check** `POST /api/customers/{id}/credit-eligibility` adds `expectedCropSeason` (`{ id, code, name }|null`),
+`expectedDueDate` and `dueRule` (the estimate as if delivered today; `null` without a credit tier). Overdue debt still never
+refuses credit (CS-10).
+
+**Manual debt** `POST /api/customers/{id}/debt/manual-entries` adds optional `cropSeasonId`. With a season (open, of this
+store) the debt belongs to it (origin = collection) and `dueDate` may be left out: it takes the season's due date (cap
+included); a season already past its due date needs an explicit `dueDate` (`422`), a closed or unknown season is `422`. An
+explicit `dueDate` with a season is kept and recorded as `MANUAL`. Without a season `dueDate` is required, as before.
 
 ---
 

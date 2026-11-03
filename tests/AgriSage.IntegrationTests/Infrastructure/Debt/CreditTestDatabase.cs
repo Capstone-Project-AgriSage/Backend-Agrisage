@@ -122,10 +122,18 @@ internal sealed class CreditTestDatabase : IAsyncDisposable
         return await s.ServiceProvider.GetRequiredService<IOrderService>().CreateAsync(
             new("REGISTERED", "CREDIT", "PICKUP", [new(StoreProductId, PackagingId, quantity)], FarmerId), token);
     }
-    public async Task<OrderResponse> FulfillAsync(long quantity, CancellationToken token)
+    // Since F3.13 a confirmed credit order joins the season open for orders that day. withoutSeason clears it, for the tests of
+    // debt that belongs to no season (the credit-tier term), whatever seasons the store has.
+    public async Task<OrderResponse> FulfillAsync(long quantity, CancellationToken token, bool withoutSeason = false)
     {
         var o = await OrderAsync(quantity, token);
         using (var s = Scope()) await s.ServiceProvider.GetRequiredService<IOrderConfirmationService>().ConfirmAsync(o.Id, token);
+        if (withoutSeason)
+        {
+            using var clear = Scope();
+            await clear.ServiceProvider.GetRequiredService<AgriSageDbContext>().Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE orders SET crop_season_id = NULL WHERE id = {o.Id}", token);
+        }
         using var pickup = Scope();
         return await pickup.ServiceProvider.GetRequiredService<IOrderPickupService>().PickupAsync(o.Id,
             new([new(o.Items.Single().Id, [new(LotId, quantity)])]), token);

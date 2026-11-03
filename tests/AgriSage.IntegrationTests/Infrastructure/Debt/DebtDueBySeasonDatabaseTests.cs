@@ -38,13 +38,10 @@ public sealed class DebtDueBySeasonDatabaseTests
     {
         var order = await e.OrderAsync(quantity, Token);
         await Run(e, sp => sp.GetRequiredService<IOrderConfirmationService>().ConfirmAsync(order.Id, Token));
-        if (season is { } id)
-        {
-            using var s = e.Scope();
-            await s.ServiceProvider.GetRequiredService<AgriSageDbContext>().Database.ExecuteSqlInterpolatedAsync(
-                $"UPDATE orders SET crop_season_id = {id} WHERE id = {order.Id}", Token);
-        }
-
+        // Set explicitly (null included): since F3.13 the confirmation itself gives the order the season open that day.
+        using var s = e.Scope();
+        await s.ServiceProvider.GetRequiredService<AgriSageDbContext>().Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE orders SET crop_season_id = {season} WHERE id = {order.Id}", Token);
         return order;
     }
 

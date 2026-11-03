@@ -1,13 +1,16 @@
 using AgriSage.Application.Common;
 using AgriSage.Application.Common.Exceptions;
 using AgriSage.Application.Common.Interfaces;
+using AgriSage.Application.Features.Debt;
+using AgriSage.Domain.Features.Debt.Entities;
 using AgriSage.Domain.Features.Orders.Entities;
+using AgriSage.Domain.Features.Orders.Enums;
 using Microsoft.EntityFrameworkCore;
 
 namespace AgriSage.Application.Features.Orders;
 
 // Reads an order as the shared OrderResponse (api-flows README §2). Flow L2 reuses it for the Farmer's own orders.
-public sealed class OrderQueries(IAgriSageDbContext context)
+public sealed class OrderQueries(IAgriSageDbContext context, IDateTimeProvider? clock = null)
 {
     public async Task<OrderResponse> GetAsync(Guid id, CancellationToken cancellationToken)
     {
@@ -16,7 +19,32 @@ public sealed class OrderQueries(IAgriSageDbContext context)
             .FirstOrDefaultAsync(o => o.Id == id && o.StoreId == storeId, cancellationToken)
             ?? throw new NotFoundException("Order", id);
 
-        return ToResponse(order);
+        var response = ToResponse(order);
+        return order.SettlementType == SettlementType.Credit && order.CreditTermDaysSnapshot is not null
+            ? await WithCreditDueAsync(order, response, cancellationToken)
+            : response;
+    }
+
+    // F3.13: a confirmed credit order shows the season it joined and, while it can still be delivered, the due date its debt
+    // would get if delivered today (an estimate: the debt and its real due date arise on delivery, D15).
+    private async Task<OrderResponse> WithCreditDueAsync(Order order, OrderResponse response, CancellationToken cancellationToken)
+    {
+        CropSeason? season = order.CropSeasonId is { } seasonId
+            ? await context.CropSeasons.AsNoTracking().SingleOrDefaultAsync(s => s.Id == seasonId && s.StoreId == order.StoreId, cancellationToken)
+            : null;
+        DateOnly? expected = null;
+        if (clock is not null && order.Status is OrderStatus.Confirmed or OrderStatus.Preparing or OrderStatus.ReadyForFulfillment
+                or OrderStatus.PartiallyFulfilled)
+        {
+            var cap = season is null ? null : await DebtDueLookup.CapAsync(context, order.StoreId, cancellationToken);
+            expected = DebtDueCalculator.Calculate(season, BusinessCalendar.Today(clock.UtcNow), order.CreditTermDaysSnapshot!.Value, cap).DueDate;
+        }
+
+        return response with
+        {
+            OriginSeason = season is null ? null : new DebtSeasonReference(season.Id, season.Code, season.Name),
+            ExpectedDueDate = expected,
+        };
     }
 
     public static OrderResponse ToResponse(Order order) => new(
