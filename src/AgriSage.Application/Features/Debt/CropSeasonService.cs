@@ -166,9 +166,10 @@ public sealed class CropSeasonService(
             && e.OutstandingAmount > 0 && e.Status != DebtEntryStatus.Paid && e.Status != DebtEntryStatus.Cancelled
             && e.Status != DebtEntryStatus.Disputed);
 
-        // A Farmer whose entry appears while the locks are taken (a delivery posting debt at that moment) is locked too; the
-        // loop ends when no unlocked Farmer is left. Nobody holds a Farmer lock while waiting for the store lock, so late
-        // locks cannot form a cycle.
+        // Each pass locks its Farmers in id order. A Farmer whose entry appears while the locks are taken (a delivery posting
+        // debt at that moment) is locked in a later pass, possibly with a lower id than one already held. That cannot form a
+        // cycle: the only paths that lock several Farmers (the season-wide rollover) take the store lock first, which this
+        // transaction holds; every other path locks one Farmer and never waits for the store lock while holding it.
         var locked = new HashSet<Guid>();
         while (true)
         {
