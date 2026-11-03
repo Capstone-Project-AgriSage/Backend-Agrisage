@@ -148,6 +148,9 @@ public sealed class OwnerOnlyDebtSeasonEndToEndTests(StaffHttpTests.StaffApiFact
                     new { name = "Sửa", harvestStart = "2027-02-15", harvestEnd = "2027-03-15", graceDays = 60, version = dx.Version }, Token)).StatusCode);
                 Assert.Equal(HttpStatusCode.Forbidden, (await staff.PutAsJsonAsync("/api/debt-policy", PolicyBody, Token)).StatusCode);
                 Assert.Equal(HttpStatusCode.Forbidden, (await staff.PostAsJsonAsync($"/api/crop-seasons/{dx.Id}/close", new { version = dx.Version }, Token)).StatusCode);
+                // F3.20: starting debt reminders is the owner's, even as a dry run; staff cannot set the start date.
+                Assert.Equal(HttpStatusCode.Forbidden, (await staff.PostAsJsonAsync("/api/debt-reminders/initialize", new { dryRun = true }, Token)).StatusCode);
+                Assert.Equal(HttpStatusCode.Forbidden, (await staff.PostAsJsonAsync("/api/debt-reminders/initialize", new { dryRun = false }, Token)).StatusCode);
                 // Without the dashboard-read permission the owner's views are closed to staff.
                 Assert.Equal(HttpStatusCode.Forbidden, (await staff.GetAsync($"/api/crop-seasons/{dx.Id}/limit-suggestions", Token)).StatusCode);
                 Assert.Equal(HttpStatusCode.Forbidden, (await staff.GetAsync("/api/reports/debt-by-season", Token)).StatusCode);
@@ -211,6 +214,11 @@ public sealed class OwnerOnlyDebtSeasonEndToEndTests(StaffHttpTests.StaffApiFact
         Assert.Equal(HttpStatusCode.OK, again.StatusCode);
         Assert.Equal(2, JsonDocument.Parse(await again.Content.ReadAsStringAsync(Token)).RootElement.GetProperty("rolloverCount").GetInt32());
         Assert.Equal(HttpStatusCode.OK, (await owner.GetAsync("/api/reports/debt-by-season", Token)).StatusCode);
+        // F3.20: the dry run (also the default of an empty body) counts and writes nothing; the real run sets the start date once.
+        var dry = await owner.PostAsJsonAsync("/api/debt-reminders/initialize", new { }, Token);
+        Assert.Equal(HttpStatusCode.OK, dry.StatusCode);
+        Assert.True(JsonDocument.Parse(await dry.Content.ReadAsStringAsync(Token)).RootElement.GetProperty("dryRun").GetBoolean());
+        Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync("/api/debt-reminders/initialize", new { dryRun = false }, Token)).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await owner.GetAsync($"/api/crop-seasons/{dxId}/closing-check", Token)).StatusCode);
         // Through the gates, but the harvest has not ended: the business rule refuses, not the permission.
         Assert.Equal(HttpStatusCode.UnprocessableEntity, (await owner.PostAsJsonAsync($"/api/crop-seasons/{dxId}/close", new { version = 0 }, Token)).StatusCode);

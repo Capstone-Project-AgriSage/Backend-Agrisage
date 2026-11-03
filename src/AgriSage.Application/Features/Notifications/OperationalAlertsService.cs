@@ -1,8 +1,9 @@
 using System.Globalization;
 using AgriSage.Application.Common;
 using AgriSage.Application.Common.Interfaces;
+using AgriSage.Application.Features.Debt;
 using AgriSage.Application.Features.Inventory;
-using AgriSage.Domain.Features.Debt.Entities;
+
 using AgriSage.Domain.Features.Debt.Enums;
 using AgriSage.Domain.Features.Identity.Enums;
 using AgriSage.Domain.Features.Inventory.Enums;
@@ -28,10 +29,13 @@ public sealed class OperationalAlertsService(IAgriSageDbContext context, Notific
         var today = BusinessCalendar.Today(clock.UtcNow);
         var date = today.ToString("yyyyMMdd");
         var store = await ActiveStore.GetIdAsync(context, token);
-        var offsets = (await context.StoreDebtPolicies.AsNoTracking().SingleOrDefaultAsync(p => p.StoreId == store, token)
-            ?? new StoreDebtPolicy(store)).ReminderOffsets;
+        // F3.20: nothing is sent until the owner starts reminders (T0); milestones before T0 are never sent, checked by date at
+        // every run (so a debt entered or given a season after the start cannot bring an old milestone back).
+        var policy = await context.StoreDebtPolicies.AsNoTracking().SingleOrDefaultAsync(p => p.StoreId == store, token);
+        if (policy?.RemindersStartDate is not { } start) return;
+        var offsets = policy.ReminderOffsets;
         var seasons = (await context.CropSeasons.AsNoTracking()
-                .Where(s => s.StoreId == store && s.ClosedAt == null && s.HarvestStart <= today).ToListAsync(token))
+                .Where(s => s.StoreId == store && s.ClosedAt == null && s.HarvestStart <= today && s.HarvestStart >= start).ToListAsync(token))
             .Where(s => today < s.PaymentDueDate.AddDays(offsets.N2)).ToDictionary(s => s.Id);
         var reached = new Dictionary<string, int> { ["N3"] = 0, ["N4"] = 0, ["N5"] = 0 };
 
@@ -70,9 +74,8 @@ public sealed class OperationalAlertsService(IAgriSageDbContext context, Notific
                 foreach (var group in own.GroupBy(e => e.DueDate))
                 {
                     var due = group.Key;
-                    var milestone = new[] { ("N2", due.AddDays(offsets.N2)), ("N3", due), ("N4", due.AddDays(offsets.N4)), ("N5", due.AddDays(offsets.N5)) }
-                        .LastOrDefault(m => m.Item2 <= today).Item1;
-                    if (milestone is null) continue;
+                    if (DebtReminderSchedule.Latest(due, offsets, today, start) is not { } latest) continue;
+                    var milestone = latest.Code;
                     var key = $"debt-reminder:{row.FarmerProfileId}:{due:yyyyMMdd}:{milestone}";
                     if (!sent.Add(key)) continue;
                     var amount = Money(group.Sum(e => e.OutstandingAmount));

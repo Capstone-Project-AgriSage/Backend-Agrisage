@@ -457,7 +457,7 @@ UpdateDebtPolicyRequest {
 
 - Rules (`400` from the request validator, `422` from the Domain if it is bypassed): `defaultGraceDays` 0–365;
   `n2 < 0 < n4 < n5` (days from the due date; N1 = harvest start and N3 = due date need no setting);
-  `staffRolloverLimit ≥ 0`; `ownerReviewAfterRollovers ≥ staffRolloverLimit`; `onTimeSeasonsForLimitRaise ≥ 1`;
+  `staffRolloverLimit ≥ 0`; `ownerReviewAfterRollovers ≥ max(staffRolloverLimit, 1)`; `onTimeSeasonsForLimitRaise ≥ 1`;
   `maxCreditTermDays` null (off) or ≥ 1; `maxTotalExtensionDays ≥ 1` (required, default 365); `reason` ≤ 1000.
 - `version` is the one last read. The first save also needs `version: 0` and returns `version: 1` when a value
   changed, so an editor still holding the default gets `409`. Saving the same values changes nothing and is not audited.
@@ -630,6 +630,28 @@ for every entry due within `DebtReminderDays`; that option is removed. It sends 
   writes notifications and never touches the ledger.
 - Reminders sent under the old daily key (`debt:{entryId}:{yyyyMMdd}`) stay as history and do not block the new ones.
 - Rollout: enable the job after the seasons are entered; without seasons only N2–N5 apply.
+
+**Starting reminders (F3.20, new 2026-11-03) — T0.** The job sends **nothing** for a store until its owner starts reminders:
+`store_debt_policies.reminders_start_date` (T0, `null` = not started; one nullable `date` column, the only schema change).
+This stops the first run on existing data from sending every old overdue group a catch-up reminder.
+
+| Route | Who | Notes |
+|---|---|---|
+| `POST /api/debt-reminders/initialize` `{ dryRun?: bool (default true), reason?: string }` | owner only (`DEBT_POLICY.MANAGE`, not delegable; staff 403 even as dry run) | |
+
+- `dryRun: true` (also an empty body) counts and **writes nothing, sends nothing**. `dryRun: false` sets T0 = **today in Vietnam
+  time**, writes the audit `DEBT_REMINDERS_STARTED` (T0, counts) in **one transaction** under the store lock, and sends no
+  notification. A failure rolls everything back (no T0, no policy row). Two starts at once: one start, the others answer
+  `alreadyStarted: true`. Run again: T0 never changes, nothing is written.
+- Response: `{ dryRun, alreadyStarted, startDate, farmers, activeGroups, skipped: { N1..N5 }, skippedTotal, groupsWithLaterMilestones }`.
+  `skipped` counts, per milestone, the catch-up reminders the job would have sent for milestones before T0 and now never will.
+- Rule of the job at every run: a milestone dated **before T0 is never sent** — also for a debt entered, or given a season, after
+  the start (the check is by date, not by a stored mark). N1 follows the same rule by the season's harvest start. Milestones on or
+  after T0 are sent as above.
+- Debts whose milestones were skipped stay on every debt screen and report; only automatic reminding is skipped. An old debt that
+  already passed N5 is not reminded again by this schedule — the owner reviews it ("Cần quyết định") and reminds by hand.
+- `GET /api/debt-policy` adds `remindersStartDate` (`null` = not started). `PUT /api/debt-policy` never changes it.
+- Rollout order: enter the seasons, then **start reminders last**.
 
 ## 8i. F3.13 — Orders join a season, debt due date by season (new, 2026-11-03)
 

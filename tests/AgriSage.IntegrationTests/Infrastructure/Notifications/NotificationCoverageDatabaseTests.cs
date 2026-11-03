@@ -166,6 +166,7 @@ public sealed class NotificationCoverageDatabaseTests
         await e.Context.SaveChangesAsync(Token);
         var service = new OperationalAlertsService(e.Context, writer, new AgriSage.Application.Features.Inventory.InventoryService(
             e.Context, e.Time, new RowLockService(e.Context)), e.Time);
+        await AgriSage.IntegrationTests.Infrastructure.Debt.ReminderStartHelper.EnsureAsync(e.Context, e.Store.Id, Token);
         await service.DebtRemindersAsync(1, Token);
         await service.DebtRemindersAsync(1, Token);
         await service.DebtRemindersAsync(1, Token);

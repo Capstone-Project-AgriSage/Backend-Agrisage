@@ -45,7 +45,7 @@ public sealed class FarmerBayScenarioDatabaseTests
     }
 
     private static Task RemindAsync(CreditTestDatabase e) =>
-        Run(e, async sp => { await sp.GetRequiredService<OperationalAlertsService>().DebtRemindersAsync(100, Token); return 0; });
+        Run(e, async sp => { await ReminderStartHelper.EnsureAsync(sp.GetRequiredService<AgriSageDbContext>(), e.StoreId, Token); await sp.GetRequiredService<OperationalAlertsService>().DebtRemindersAsync(100, Token); return 0; });
 
     private static async Task<List<string>> ReminderKeysAsync(CreditTestDatabase e, Guid user)
     {

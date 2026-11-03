@@ -17,7 +17,8 @@ public sealed record DebtPolicyResponse(
     int? MaxCreditTermDays,
     int MaxTotalExtensionDays,
     long Version,
-    bool IsDefault);
+    bool IsDefault,
+    DateOnly? RemindersStartDate = null);
 
 // Replaces the whole policy (owner only). Version is the one last read (0 while the store has no policy).
 public sealed record UpdateDebtPolicyRequest(

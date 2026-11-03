@@ -219,6 +219,7 @@ public sealed class NotificationsOperationsDatabaseTests
         var ledgerCount = await e.Context.DebtTransactions.CountAsync(t => t.DebtAccountId == account.Id, Token);
         var service = new OperationalAlertsService(e.Context, new NotificationWriter(e.Context),
             new InventoryService(e.Context, e.Time, new RowLockService(e.Context)), e.Time);
+        await AgriSage.IntegrationTests.Infrastructure.Debt.ReminderStartHelper.EnsureAsync(e.Context, e.Store.Id, Token);
         await service.DebtRemindersAsync(10, Token); await service.DebtRemindersAsync(10, Token);
         Assert.Equal(1, await e.Context.Notifications.CountAsync(n => n.UserId == e.User.Id && n.NotificationType == "DEBT_OVERDUE", Token));
         Assert.Equal(100_000m, account.CurrentBalance);

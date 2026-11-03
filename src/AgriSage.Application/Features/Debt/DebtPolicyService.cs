@@ -66,7 +66,7 @@ public sealed class DebtPolicyService(
     private static DebtPolicyResponse Respond(StoreDebtPolicy p, bool isDefault) => new(p.DefaultGraceDays,
         new(p.ReminderOffsets.N2, p.ReminderOffsets.N4, p.ReminderOffsets.N5), p.StaffRolloverLimit,
         p.OwnerReviewAfterRollovers, p.OnTimeSeasonsForLimitRaise, p.MaxCreditTermDays, p.MaxTotalExtensionDays, p.Version,
-        isDefault);
+        isDefault, p.RemindersStartDate);
 
     // Record equality tells whether the save changed anything; the audit stores it as old and new values.
     private sealed record Snapshot(

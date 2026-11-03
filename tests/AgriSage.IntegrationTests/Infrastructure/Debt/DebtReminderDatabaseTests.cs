@@ -22,7 +22,7 @@ public sealed class DebtReminderDatabaseTests
     }
 
     private static Task RemindAsync(CreditTestDatabase e, int batch = 100) =>
-        Run(e, async sp => { await sp.GetRequiredService<OperationalAlertsService>().DebtRemindersAsync(batch, Token); return 0; });
+        Run(e, async sp => { await ReminderStartHelper.EnsureAsync(sp.GetRequiredService<AgriSageDbContext>(), e.StoreId, Token); await sp.GetRequiredService<OperationalAlertsService>().DebtRemindersAsync(batch, Token); return 0; });
 
     // Vietnam noon of the day.
     private static void At(CreditTestDatabase e, DateOnly day) =>

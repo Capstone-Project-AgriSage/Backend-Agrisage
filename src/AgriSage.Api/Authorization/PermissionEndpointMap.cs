@@ -255,6 +255,7 @@ public static class PermissionEndpointMap
         ["MeCropSeasons.Current"] = "MY_CROP_SEASONS.READ",
         ["DebtPolicy.Get"] = "DEBT_POLICY.READ",
         ["DebtPolicy.Update"] = "DEBT_POLICY.MANAGE",
+        ["DebtReminders.Initialize"] = "DEBT_POLICY.MANAGE",
         ["CreditEligibility.Check"] = "CREDIT.CHECK",
         ["CreditTiers.List"] = "CREDIT_TIERS.READ",
         ["CreditTiers.Get"] = "CREDIT_TIERS.READ",

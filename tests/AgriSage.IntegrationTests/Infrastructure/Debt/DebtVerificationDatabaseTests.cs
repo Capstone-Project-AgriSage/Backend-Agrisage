@@ -244,7 +244,7 @@ public sealed class DebtVerificationDatabaseTests
         var moved = await ManualAsync(e, e.FarmerId, 1_000_000m, due);
         var (paidFarmer, paidUser) = await FarmerAsync(e, "Đã trả");
         await ManualAsync(e, paidFarmer, 1_000_000m, due);
-        Task Remind() => Run(e, async sp => { await sp.GetRequiredService<OperationalAlertsService>().DebtRemindersAsync(100, Token); return 0; });
+        Task Remind() => Run(e, async sp => { await ReminderStartHelper.EnsureAsync(sp.GetRequiredService<AgriSageDbContext>(), e.StoreId, Token); await sp.GetRequiredService<OperationalAlertsService>().DebtRemindersAsync(100, Token); return 0; });
         async Task<List<string>> Keys(Guid user)
         {
             using var s = e.Scope();
