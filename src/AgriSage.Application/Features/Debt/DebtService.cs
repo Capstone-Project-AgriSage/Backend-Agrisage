@@ -34,8 +34,43 @@ public sealed class DebtService(IAgriSageDbContext db, IRowLockService locks, ID
             Source = e.SourceType, Original = e.OriginalAmount, Outstanding = e.OutstandingAmount,
             Due = e.DueDate, Status = e.Status, CreatedAt = e.CreatedAt,
             Paid = db.DebtTransactions.Where(t => t.DebtEntryId == e.Id && t.TransactionType == DebtTransactionType.Payment
-                && t.Status == DebtTransactionStatus.Posted).Sum(t => (decimal?)-t.AmountDelta) ?? 0m
+                && t.Status == DebtTransactionStatus.Posted).Sum(t => (decimal?)-t.AmountDelta) ?? 0m,
+            OriginSeasonId = e.OriginCropSeasonId, CollectionSeasonId = e.CollectionCropSeasonId,
+            OriginalDue = e.OriginalDueDate, Rollovers = e.RolloverCount,
+            OriginSeason = db.CropSeasons.Where(s => s.Id == e.OriginCropSeasonId && s.StoreId == store)
+                .Select(s => new DebtSeasonReference(s.Id, s.Code, s.Name)).FirstOrDefault(),
+            CollectionSeason = db.CropSeasons.Where(s => s.Id == e.CollectionCropSeasonId && s.StoreId == store)
+                .Select(s => new DebtSeasonReference(s.Id, s.Code, s.Name)).FirstOrDefault()
         };
+
+    // F3.17: DUE_SOON = due today or within 7 days. An entry with nothing left to pay has no due state.
+    private const int DueSoonDays = 7;
+
+    private static string? DueState(decimal outstanding, DateOnly due, DateOnly today) =>
+        outstanding <= 0 ? null : due < today ? "OVERDUE" : due <= today.AddDays(DueSoonDays) ? "DUE_SOON" : "NOT_DUE";
+
+    // "Cần quyết định" (CS-08, CS-10): still owed, not disputed, and past the last reminder (due + N5 ≤ today) or rolled
+    // over as often as the owner reviews (owner_review_after_rollovers). Values from the store debt policy or its defaults.
+    private sealed record DecisionRule(DateOnly Cutoff, int OwnerReview)
+    {
+        public bool Applies(EntryRow e) => e.Outstanding > 0 && e.Status != DebtEntryStatus.Disputed
+            && e.Status != DebtEntryStatus.Paid && e.Status != DebtEntryStatus.Cancelled
+            && (e.Due <= Cutoff || e.Rollovers >= OwnerReview);
+    }
+
+    private async Task<DecisionRule> DecisionRuleAsync(Guid store, CancellationToken token)
+    {
+        var policy = await db.StoreDebtPolicies.AsNoTracking().SingleOrDefaultAsync(p => p.StoreId == store, token)
+            ?? new StoreDebtPolicy(store);
+        return new(Today.AddDays(-policy.ReminderOffsets.N5), policy.OwnerReviewAfterRollovers);
+    }
+
+    private static IQueryable<EntryRow> NeedingDecision(IQueryable<EntryRow> q, DecisionRule rule)
+    {
+        var (cutoff, review) = (rule.Cutoff, rule.OwnerReview);
+        return q.Where(e => e.Outstanding > 0 && e.Status != DebtEntryStatus.Disputed && e.Status != DebtEntryStatus.Paid
+            && e.Status != DebtEntryStatus.Cancelled && (e.Due <= cutoff || e.Rollovers >= review));
+    }
 
     public async Task<PagedResult<DebtEntryListItem>> EntriesAsync(DebtEntryListRequest request, CancellationToken token)
     {
@@ -45,7 +80,20 @@ public sealed class DebtService(IAgriSageDbContext db, IRowLockService locks, ID
         if (request.OrderId is { } order) q = q.Where(e => e.OrderId == order);
         if (EnumText.TryParse<DebtEntryStatus>(request.Status, out var status)) q = q.Where(e => e.Status == status);
         var today = Today;
+        var soon = today.AddDays(DueSoonDays);
+        var rule = await DecisionRuleAsync(store, token);
         if (request.OverdueOnly) q = q.Where(e => e.Outstanding > 0 && e.Due < today);
+        if (request.OriginSeasonId is { } origin) q = q.Where(e => e.OriginSeasonId == origin);
+        if (request.CollectionSeasonId is { } collection) q = q.Where(e => e.CollectionSeasonId == collection);
+        if (request.RolledOverOnly) q = q.Where(e => e.Rollovers > 0);
+        if (request.NeedsDecision) q = NeedingDecision(q, rule);
+        q = request.DueState switch
+        {
+            "OVERDUE" => q.Where(e => e.Outstanding > 0 && e.Due < today),
+            "DUE_SOON" => q.Where(e => e.Outstanding > 0 && e.Due >= today && e.Due <= soon),
+            "NOT_DUE" => q.Where(e => e.Outstanding > 0 && e.Due > soon),
+            _ => q,
+        };
         if (request.DueFrom is { } dueFrom) q = q.Where(e => e.Due >= dueFrom);
         if (request.DueTo is { } dueTo) q = q.Where(e => e.Due <= dueTo);
         if (request.FromDate is { } from) { var at = BusinessCalendar.StartOfDay(from); q = q.Where(e => e.CreatedAt >= at); }
@@ -67,7 +115,7 @@ public sealed class DebtService(IAgriSageDbContext db, IRowLockService locks, ID
             _ => request.Descending ? q.OrderByDescending(e => e.CreatedAt) : q.OrderBy(e => e.CreatedAt)
         };
         var rows = await sorted.ThenBy(e => e.Id).Skip(request.Skip).Take(request.PageSize).ToListAsync(token);
-        return new(rows.Select(e => Map(e, today)).ToList(), request.Page, request.PageSize, count);
+        return new(rows.Select(e => Map(e, today, rule)).ToList(), request.Page, request.PageSize, count);
     }
 
     public async Task<DebtEntryResponse> EntryAsync(Guid id, CancellationToken token)
@@ -86,7 +134,11 @@ public sealed class DebtService(IAgriSageDbContext db, IRowLockService locks, ID
         var paymentIds = await db.PaymentAllocations.AsNoTracking().Where(a => a.DebtEntryId == id).Select(a => a.PaymentId).Distinct().ToListAsync(token);
         var history = new List<PaymentResponse>();
         foreach (var paymentId in paymentIds) history.Add(await payments.GetAsync(paymentId, row.FarmerId, token));
-        var summary = Map(row, Today);
+        var summary = Map(row, Today, await DecisionRuleAsync(store, token));
+        // CS-13: who did each action (name and role), in one query.
+        var actorIds = entry.Actions.Select(a => a.CreatedBy).Distinct().ToList();
+        var actors = await db.Users.AsNoTracking().Where(u => actorIds.Contains(u.Id))
+            .Select(u => new { u.Id, u.FullName, u.Role.Code }).ToDictionaryAsync(u => u.Id, token);
         return new(id, row.Number, EnumText.Format(row.Source), entry.OrderId, row.OrderNumber, entry.DeliveryId,
             entry.DeliveryAttemptId, entry.SourceStockMovementId, entry.FulfillmentValue, entry.PrepaymentAppliedAmount,
             entry.OriginalAmount, row.Paid, entry.OutstandingAmount, entry.DueDate, summary.IsOverdue, summary.OverdueDays,
@@ -96,8 +148,10 @@ public sealed class DebtService(IAgriSageDbContext db, IRowLockService locks, ID
             entry.Actions.OrderBy(a => a.CreatedAt).ThenBy(a => a.Id).Select(a => new DebtActionResponse(a.Id, EnumText.Format(a.ActionType),
                 a.Reason, a.AdjustmentAmount, a.OldDueDate, a.NewDueDate, a.CreatedBy, a.CreatedAt,
                 a.ReasonCode is { } code ? EnumText.Format(code) : null, a.ReasonCode is null && ChangesDebt(a.ActionType),
-                a.OldCropSeasonId, a.NewCropSeasonId)).ToList(),
-            transactions.Select(MapTransaction).ToList(), history, entry.CreatedAt);
+                a.OldCropSeasonId, a.NewCropSeasonId, actors.GetValueOrDefault(a.CreatedBy)?.FullName,
+                actors.GetValueOrDefault(a.CreatedBy) is { } actor ? EnumText.Format(actor.Code) : null)).ToList(),
+            transactions.Select(MapTransaction).ToList(), history, entry.CreatedAt, summary.OriginSeason, summary.CollectionSeason,
+            summary.OriginalDueDate, summary.RolloverCount, summary.IsRolledOver, summary.DueState, summary.NeedsDecision);
     }
 
     public async Task<DebtAccountResponse> AccountAsync(Guid farmerId, CancellationToken token)
@@ -107,9 +161,19 @@ public sealed class DebtService(IAgriSageDbContext db, IRowLockService locks, ID
             ?? throw new NotFoundException("Customer debt account", farmerId);
         var entries = db.DebtEntries.AsNoTracking().Where(e => e.DebtAccountId == a.Id && e.OutstandingAmount > 0);
         var today = Today;
+        // F3.17: open debt grouped by (collection season, due date), as the reminders group it (D10).
+        var groups = await entries.GroupBy(e => new { e.CollectionCropSeasonId, e.DueDate })
+            .Select(g => new { g.Key.CollectionCropSeasonId, g.Key.DueDate, Amount = g.Sum(e => e.OutstandingAmount), Count = g.Count() })
+            .ToListAsync(token);
+        var seasonIds = groups.Where(g => g.CollectionCropSeasonId != null).Select(g => g.CollectionCropSeasonId!.Value).Distinct().ToList();
+        var seasons = await db.CropSeasons.AsNoTracking().Where(s => s.StoreId == store && seasonIds.Contains(s.Id))
+            .Select(s => new DebtSeasonReference(s.Id, s.Code, s.Name)).ToDictionaryAsync(s => s.Id, token);
         return new(a.Id, farmerId, EnumText.Format(a.Status), a.CurrentBalance,
             await entries.Where(e => e.DueDate < today).SumAsync(e => (decimal?)e.OutstandingAmount, token) ?? 0,
-            await entries.CountAsync(token), await entries.Select(e => (DateOnly?)e.DueDate).MinAsync(token), a.LastTransactionAt, a.Version);
+            await entries.CountAsync(token), await entries.Select(e => (DateOnly?)e.DueDate).MinAsync(token), a.LastTransactionAt, a.Version,
+            groups.OrderBy(g => g.DueDate).ThenBy(g => g.CollectionCropSeasonId)
+                .Select(g => new DebtCollectionGroup(g.CollectionCropSeasonId is { } s ? seasons.GetValueOrDefault(s) : null, g.DueDate,
+                    g.Amount, g.Count, DueState(g.Amount, g.DueDate, today)!)).ToList());
     }
 
     public async Task<PagedResult<DebtAccountListItem>> AccountsAsync(DebtAccountListRequest request, CancellationToken token)
@@ -260,11 +324,59 @@ public sealed class DebtService(IAgriSageDbContext db, IRowLockService locks, ID
         var top = await AccountsAsync(new DebtAccountListRequest { HasOutstanding = true, PageSize = 10 }, token);
         var recent = await payments.ListAsync(new PaymentListRequest { PaymentContext = "DEBT_REPAYMENT", Status = "PAID", PageSize = 10 }, null, token);
         var late = await EntriesAsync(new DebtEntryListRequest { OverdueOnly = true, SortBy = "DueDate", Descending = false, PageSize = 10 }, token);
+
+        // F3.17: the current season is the open one collected next (the earliest due date not yet past).
+        var current = await db.CropSeasons.AsNoTracking()
+            .Where(s => s.StoreId == store && s.ClosedAt == null && s.PaymentDueDate >= today)
+            .OrderBy(s => s.PaymentDueDate).Select(s => new DebtSeasonReference(s.Id, s.Code, s.Name)).FirstOrDefaultAsync(token);
+        var currentOutstanding = current is null ? 0
+            : await q.Where(e => e.CollectionSeasonId == current.Id).SumAsync(e => (decimal?)e.Outstanding, token) ?? 0;
+        var soon = today.AddDays(DueSoonDays);
+        var rule = await DecisionRuleAsync(store, token);
+        var deciding = NeedingDecision(q, rule);
+        var decisions = await deciding.OrderBy(e => e.Due).ThenBy(e => e.Id).Take(DashboardListSize).ToListAsync(token);
+        var alerts = CreditLimitAlerts(store);
+        var alertRows = await alerts.OrderByDescending(a => a.Used / a.CreditLimit).ThenBy(a => a.FarmerProfileId)
+            .Take(DashboardListSize).ToListAsync(token);
+
         return new(await q.SumAsync(e => (decimal?)e.Outstanding, token) ?? 0, await overdue.SumAsync(e => (decimal?)e.Outstanding, token) ?? 0,
             await collected.Where(t => t.OccurredAt >= dayStart && t.OccurredAt < tomorrow).SumAsync(t => (decimal?)-t.AmountDelta, token) ?? 0,
             await collected.Where(t => t.OccurredAt >= monthStart && t.OccurredAt < tomorrow).SumAsync(t => (decimal?)-t.AmountDelta, token) ?? 0,
             await q.Where(e => e.Outstanding > 0).Select(e => e.FarmerId).Distinct().CountAsync(token),
-            await overdue.Select(e => e.FarmerId).Distinct().CountAsync(token), top.Items, recent.Items, late.Items);
+            await overdue.Select(e => e.FarmerId).Distinct().CountAsync(token), top.Items, recent.Items, late.Items,
+            current, currentOutstanding,
+            await q.Where(e => e.Outstanding > 0 && e.Due >= today && e.Due <= soon).SumAsync(e => (decimal?)e.Outstanding, token) ?? 0,
+            await deciding.CountAsync(token), decisions.Select(e => Map(e, today, rule)).ToList(),
+            await alerts.CountAsync(token),
+            alertRows.Select(a => new CreditLimitAlert(a.FarmerProfileId, a.FullName, a.PhoneNumber, a.CreditLimit, a.Used,
+                Math.Max(0, a.CreditLimit - a.Used), a.Used >= a.CreditLimit ? "AT_LIMIT" : "NEAR_LIMIT")).ToList());
+    }
+
+    private const int DashboardListSize = 20;
+
+    // Share of the limit from which a customer is "near the limit" (proposal, pending approval).
+    private const decimal NearLimitShare = 0.9m;
+
+    // Active credit customers whose used credit (outstanding debt + remaining active reservations) reaches 90 % of the limit.
+    private IQueryable<AlertRow> CreditLimitAlerts(Guid store) =>
+        from p in db.FarmerCreditProfiles.AsNoTracking()
+        where p.StoreId == store && p.Status == FarmerCreditProfileStatus.Active && p.CreditLimit > 0
+        let balance = db.DebtAccounts.Where(a => a.StoreId == store && a.FarmerProfileId == p.FarmerProfileId)
+            .Sum(a => (decimal?)a.CurrentBalance) ?? 0m
+        let reserved = db.CreditReservations.Where(r => r.StoreId == store && r.FarmerCreditProfileId == p.Id
+                && (r.Status == CreditReservationStatus.Active || r.Status == CreditReservationStatus.PartiallyConsumed))
+            .Sum(r => (decimal?)(r.AmountReserved - r.AmountConsumed - r.AmountReleased)) ?? 0m
+        where balance + reserved >= p.CreditLimit * NearLimitShare
+        select new AlertRow
+        {
+            FarmerProfileId = p.FarmerProfileId, FullName = p.FarmerProfile.User.FullName,
+            PhoneNumber = p.FarmerProfile.User.PhoneNumber, CreditLimit = p.CreditLimit, Used = balance + reserved,
+        };
+
+    private sealed class AlertRow
+    {
+        public Guid FarmerProfileId { get; init; } public string FullName { get; init; } = ""; public string? PhoneNumber { get; init; }
+        public decimal CreditLimit { get; init; } public decimal Used { get; init; }
     }
 
     public async Task<Guid> OwnCustomerAsync(CancellationToken token)
@@ -284,9 +396,11 @@ public sealed class DebtService(IAgriSageDbContext db, IRowLockService locks, ID
         return await ActionCoreAsync(id, "DISPUTE", reason, null, null, currentUser.UserId!.Value, token);
     }
 
-    private static DebtEntryListItem Map(EntryRow e, DateOnly today) => new(e.Id, e.Number, e.FarmerId, e.FullName, e.Phone,
+    private static DebtEntryListItem Map(EntryRow e, DateOnly today, DecisionRule rule) => new(e.Id, e.Number, e.FarmerId, e.FullName, e.Phone,
         EnumText.Format(e.Source), e.OrderNumber, e.Original, e.Paid, e.Outstanding, e.Due, e.Outstanding > 0 && e.Due < today,
-        e.Outstanding > 0 ? Math.Max(0, today.DayNumber - e.Due.DayNumber) : 0, EnumText.Format(e.Status), e.CreatedAt);
+        e.Outstanding > 0 ? Math.Max(0, today.DayNumber - e.Due.DayNumber) : 0, EnumText.Format(e.Status), e.CreatedAt,
+        e.OriginSeason, e.CollectionSeason, e.OriginalDue, e.Rollovers, e.Rollovers > 0, DueState(e.Outstanding, e.Due, today),
+        rule.Applies(e));
     private static DebtTransactionResponse MapTransaction(DebtTransaction t) => new(t.Id, t.DebtEntryId, EnumText.Format(t.TransactionType),
         t.AmountDelta, t.BalanceAfter - t.AmountDelta, t.BalanceAfter, t.OccurredAt, EnumText.Format(t.Status), t.PaymentAllocationId,
         t.SalesReturnId, t.DebtEntryActionId, t.Note, t.CreatedBy);
@@ -297,5 +411,8 @@ public sealed class DebtService(IAgriSageDbContext db, IRowLockService locks, ID
         public Guid? OrderId { get; init; } public string? OrderNumber { get; init; } public DebtEntrySourceType Source { get; init; }
         public decimal Original { get; init; } public decimal Paid { get; init; } public decimal Outstanding { get; init; }
         public DateOnly Due { get; init; } public DebtEntryStatus Status { get; init; } public DateTimeOffset CreatedAt { get; init; }
+        public Guid? OriginSeasonId { get; init; } public Guid? CollectionSeasonId { get; init; } public DateOnly OriginalDue { get; init; }
+        public int Rollovers { get; init; } public DebtSeasonReference? OriginSeason { get; init; }
+        public DebtSeasonReference? CollectionSeason { get; init; }
     }
 }

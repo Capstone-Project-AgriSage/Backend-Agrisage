@@ -498,6 +498,38 @@ recorded without a code: "Trước khi áp dụng chính sách"), `oldCropSeason
 `DEBT_DUE_DATE_CHANGED`; `DEBT_ADJUST` → `DEBT_REDUCED`; `DEBT_CANCEL` → `DEBT_CANCELLED`; `DEBT_KEEP` →
 `DEBT_DISPUTE_RESOLVED`. The owner's season due-date move (8b) notifies through the same `DEBT_CHANGE_DUE_DATE`.
 
+## 8e. F3.17 — Debt by season: entries, Farmer groups, dashboard (new, 2026-11-03)
+
+Fields are only added; existing fields and routes stay. `DebtSeasonReference = { id, code, name }`.
+
+**Entries** (`GET /api/debt-entries`, `/api/customers/{id}/debt/entries`, `/api/me/debt-entries`, and the `/{id}` details)
+add `originSeason` (where the debt arose, never changes), `collectionSeason` (where it is collected now), `originalDueDate`,
+`rolloverCount`, `isRolledOver`, `dueState`, `needsDecision`. New list filters: `originSeasonId`, `collectionSeasonId`,
+`dueState`, `rolledOverOnly`, `needsDecision` (`400` on an unknown `dueState` or an empty id). The Farmer routes still
+force the caller's own customer.
+
+- `dueState` (Vietnam date): `OVERDUE` due before today; `DUE_SOON` due today up to 7 days ahead; `NOT_DUE` later; `null`
+  when nothing is left to pay.
+- `needsDecision` ("Cần quyết định"): still owed, not disputed, and either due + N5 ≤ today or `rolloverCount ≥
+  ownerReviewAfterRollovers` (both from the debt policy, defaults 30 and 2).
+- Actions add `actorName` and `actorRole` (CS-13).
+
+**Farmer debt** (`GET /api/me/debt`, also `GET /api/customers/{id}/debt`) adds `groups[]`: open debt by (collection season,
+due date), earliest first: `{ collectionSeason|null, dueDate, outstandingAmount, entryCount, dueState }`. No season = the
+credit-tier term.
+
+**Dashboard** (`GET /api/debt-entries/dashboard`) adds:
+- `currentSeason` + `currentSeasonOutstanding`: the open season collected next (earliest `paymentDueDate` not yet past)
+  and the open debt collected in it; `null` / `0` without one.
+- `dueSoonAmount`: open debt due today up to 7 days ahead.
+- `needsDecisionCount` + `needsDecision[]` (first 20 by due date, `DebtEntryListItem`).
+- `creditLimitAlertCount` + `creditLimitAlerts[]` (first 20, fullest first): active credit customers whose used credit
+  (outstanding debt + remaining active reservations) reaches 90 % of the limit:
+  `{ farmerProfileId, fullName, phoneNumber, creditLimit, usedCredit, availableCredit, state: NEAR_LIMIT|AT_LIMIT }`. The
+  owner decides: raise the limit, reduce the debt or collect part of it. Nothing changes the limit automatically.
+
+Pending in F3.17: `outstandingBySeason[]` on the debt repayment receipt (payments module).
+
 ---
 
 ## 9. Tests — must prove
