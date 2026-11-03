@@ -47,7 +47,19 @@ public sealed class StoreDebtPolicy : SoftDeletableEntity, IHasConcurrencyVersio
     // with a reason.
     public int MaxTotalExtensionDays { get; private set; }
 
+    // F3.20: the day debt reminders started for this store (T0). Null = not started: the reminder job sends nothing.
+    // Set once and never changed, so reminder milestones before it are never sent late. Not part of Update.
+    public DateOnly? RemindersStartDate { get; private set; }
+
     public long Version { get; private set; }
+
+    // Returns false (and changes nothing) when reminders already started; the first date stays.
+    public bool StartReminders(DateOnly startDate)
+    {
+        if (RemindersStartDate is not null) return false;
+        RemindersStartDate = startDate;
+        return true;
+    }
 
     public void Update(int defaultGraceDays, DebtReminderOffsets reminderOffsets, int staffRolloverLimit,
         int ownerReviewAfterRollovers, int onTimeSeasonsForLimitRaise, int? maxCreditTermDays, int maxTotalExtensionDays)

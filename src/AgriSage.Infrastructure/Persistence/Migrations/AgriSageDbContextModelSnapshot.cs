@@ -1764,6 +1764,10 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("reminder_offsets");
 
+                    b.Property<DateOnly?>("RemindersStartDate")
+                        .HasColumnType("date")
+                        .HasColumnName("reminders_start_date");
+
                     b.Property<int>("StaffRolloverLimit")
                         .HasColumnType("integer")
                         .HasDefaultValue(1)
