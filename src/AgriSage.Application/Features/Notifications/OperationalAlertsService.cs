@@ -4,6 +4,7 @@ using AgriSage.Application.Common.Interfaces;
 using AgriSage.Application.Features.Debt;
 using AgriSage.Application.Features.Inventory;
 
+using AgriSage.Domain.Features.Debt.Entities;
 using AgriSage.Domain.Features.Debt.Enums;
 using AgriSage.Domain.Features.Identity.Enums;
 using AgriSage.Domain.Features.Inventory.Enums;
@@ -27,7 +28,6 @@ public sealed class OperationalAlertsService(IAgriSageDbContext context, Notific
     public async Task DebtRemindersAsync(int batchSize, CancellationToken token)
     {
         var today = BusinessCalendar.Today(clock.UtcNow);
-        var date = today.ToString("yyyyMMdd");
         var store = await ActiveStore.GetIdAsync(context, token);
         // F3.20: nothing is sent until the owner starts reminders (T0); milestones before T0 are never sent, checked by date at
         // every run (so a debt entered or given a season after the start cannot bring an old milestone back).
@@ -95,40 +95,67 @@ public sealed class OperationalAlertsService(IAgriSageDbContext context, Notific
             if (rows.Count < batchSize) break;
         }
 
-        // The summaries count the group reminders written TODAY (not only in this run), and the per-day key keeps them to one.
-        // So a run that failed after saving the Farmer reminders but before the summaries is repaired by the next run: its
-        // Farmer reminders are already saved (nothing is sent twice), the summaries are still missing and are written then.
-        var reached = await TodaysGroupReminders(today, token);
-        if (reached["N3"] + reached["N4"] > 0)
-        {
-            var staff = await NotificationRecipients.StaffAsync(context, store, token, RoleCode.StoreOwner, RoleCode.SalesStaff);
-            if (reached["N3"] > 0)
-                await writer.AddAsync(staff, "DEBT_DUE_SOON", "Nợ đến hạn trả",
-                    $"{reached["N3"]} nhóm nợ vừa đến hạn trả nợ. Vui lòng xem danh sách công nợ.", $"debt-reminder-staff:{date}:N3", "STORE", store, token);
-            if (reached["N4"] > 0)
-                await writer.AddAsync(staff, "DEBT_OVERDUE", "Nợ quá hạn trả",
-                    $"{reached["N4"]} nhóm nợ đã quá hạn {offsets.N4} ngày. Vui lòng liên hệ nhắc nợ.", $"debt-reminder-staff:{date}:N4", "STORE", store, token);
-        }
-
-        if (reached["N5"] > 0)
-        {
-            var owners = await NotificationRecipients.StaffAsync(context, store, token, RoleCode.StoreOwner);
-            await writer.AddAsync(owners, "DEBT_OVERDUE", "Nợ quá hạn lâu cần quyết định",
-                $"{reached["N5"]} nhóm nợ đã quá hạn {offsets.N5} ngày. Vui lòng xem mục Cần quyết định.", $"debt-reminder-staff:{date}:N5", "STORE", store, token);
-        }
-
+        // The summaries are built from the group reminders SAVED per Vietnam day, not from what this run sent. Every (day,
+        // milestone) of the last SummaryRecoveryDays days that has Farmer reminders but no summary yet gets one, with the numbers
+        // of THAT day only. So a run that failed after saving the Farmer reminders but before the summaries is repaired by the
+        // next run, also on a later day: nothing is sent to a Farmer twice, a summary that exists is never written again (its key
+        // carries the day), and the recipients are the members who already existed at the end of that day.
+        await WriteMissingSummariesAsync(store, offsets, today, start, token);
         await context.SaveChangesAsync(token);
     }
 
-    // One Farmer reminder per (Farmer, due date) group and milestone: its key is debt-reminder:{farmer}:{yyyyMMdd}:N3..N5.
-    private async Task<Dictionary<string, int>> TodaysGroupReminders(DateOnly today, CancellationToken token)
+    // How far back a missing summary is still recovered (days). A value of this change — proposed, to be confirmed.
+    internal const int SummaryRecoveryDays = 14;
+
+    private async Task WriteMissingSummariesAsync(Guid store, DebtReminderOffsets offsets, DateOnly today, DateOnly start, CancellationToken token)
     {
-        var dayStart = BusinessCalendar.StartOfDay(today);
-        var keys = await context.Notifications.IgnoreQueryFilters().AsNoTracking()
-            .Where(n => n.CreatedAt >= dayStart && n.DeduplicationKey != null && n.DeduplicationKey.StartsWith("debt-reminder:")
+        var from = today.AddDays(-SummaryRecoveryDays);
+        if (start > from) from = start;
+        var counts = await GroupRemindersPerDayAsync(from, today, token);
+        if (counts.Count == 0) return;
+
+        var keys = counts.Keys.Select(k => SummaryKey(k.Day, k.Milestone)).ToList();
+        var written = (await context.Notifications.IgnoreQueryFilters().AsNoTracking()
+            .Where(n => n.DeduplicationKey != null && keys.Contains(n.DeduplicationKey)).Select(n => n.DeduplicationKey!).ToListAsync(token)).ToHashSet();
+        foreach (var ((day, milestone), count) in counts.OrderBy(c => c.Key.Day).ThenBy(c => c.Key.Milestone, StringComparer.Ordinal))
+        {
+            var key = SummaryKey(day, milestone);
+            if (written.Contains(key)) continue;
+            // Today: the members now. An earlier day: the members who were there by the end of that day.
+            var until = day == today ? (DateTimeOffset?)null : BusinessCalendar.StartOfDay(day.AddDays(1));
+            var prefix = day == today ? "" : $"Ngày {day:dd/MM/yyyy}: ";
+            if (milestone == "N5")
+            {
+                var owners = await NotificationRecipients.StaffAsync(context, store, until, token, RoleCode.StoreOwner);
+                await writer.AddAsync(owners, "DEBT_OVERDUE", "Nợ quá hạn lâu cần quyết định",
+                    $"{prefix}{count} nhóm nợ đã quá hạn {offsets.N5} ngày. Vui lòng xem mục Cần quyết định.", key, "STORE", store, token);
+                continue;
+            }
+
+            var staff = await NotificationRecipients.StaffAsync(context, store, until, token, RoleCode.StoreOwner, RoleCode.SalesStaff);
+            if (milestone == "N3")
+                await writer.AddAsync(staff, "DEBT_DUE_SOON", "Nợ đến hạn trả",
+                    $"{prefix}{count} nhóm nợ vừa đến hạn trả nợ. Vui lòng xem danh sách công nợ.", key, "STORE", store, token);
+            else
+                await writer.AddAsync(staff, "DEBT_OVERDUE", "Nợ quá hạn trả",
+                    $"{prefix}{count} nhóm nợ đã quá hạn {offsets.N4} ngày. Vui lòng liên hệ nhắc nợ.", key, "STORE", store, token);
+        }
+    }
+
+    private static string SummaryKey(DateOnly day, string milestone) => $"debt-reminder-staff:{day:yyyyMMdd}:{milestone}";
+
+    // One Farmer reminder per (Farmer, due date) group and milestone: its key is debt-reminder:{farmer}:{yyyyMMdd}:N3..N5. They
+    // are counted per Vietnam day in [start of the day, start of the next day), so a day never takes in another day's reminders.
+    private async Task<Dictionary<(DateOnly Day, string Milestone), int>> GroupRemindersPerDayAsync(DateOnly from, DateOnly to, CancellationToken token)
+    {
+        var begin = BusinessCalendar.StartOfDay(from);
+        var end = BusinessCalendar.StartOfDay(to.AddDays(1));
+        var rows = await context.Notifications.IgnoreQueryFilters().AsNoTracking()
+            .Where(n => n.CreatedAt >= begin && n.CreatedAt < end && n.DeduplicationKey != null && n.DeduplicationKey.StartsWith("debt-reminder:")
                 && (n.DeduplicationKey.EndsWith(":N3") || n.DeduplicationKey.EndsWith(":N4") || n.DeduplicationKey.EndsWith(":N5")))
-            .Select(n => n.DeduplicationKey!).ToListAsync(token);
-        return new[] { "N3", "N4", "N5" }.ToDictionary(m => m, m => keys.Count(k => k.EndsWith(":" + m, StringComparison.Ordinal)));
+            .Select(n => new { n.DeduplicationKey, n.CreatedAt }).ToListAsync(token);
+        return rows.GroupBy(r => (Day: BusinessCalendar.Today(r.CreatedAt), Milestone: r.DeduplicationKey![^2..]))
+            .ToDictionary(g => g.Key, g => g.Count());
     }
 
     private static string Money(decimal amount) => amount.ToString("N0", Vietnamese) + " đ";

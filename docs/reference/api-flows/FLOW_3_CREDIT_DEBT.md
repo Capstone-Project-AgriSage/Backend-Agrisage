@@ -631,9 +631,14 @@ for every entry due within `DebtReminderDays`; that option is removed. It sends 
 - Dates are Vietnam's (17:00 UTC = 00:00). Customers are processed in pages of `BatchSize`, saved page by page; the job only
   writes notifications and never touches the ledger.
 - Reminders sent under the old daily key (`debt:{entryId}:{yyyyMMdd}`) stay as history and do not block the new ones.
-- The summaries count the group reminders written **today** (not only those of the current run) and use a per-day key, so a run that
-  failed after saving the Farmer reminders but before the summaries is repaired by the next run: nothing is sent twice, the missing
-  summaries are written once (F3.20 review).
+- The summaries are built from the group reminders **saved** per Vietnam day (`[start of the day, start of the next day)`), not from
+  what the current run sent, and carry a per-day key (`debt-reminder-staff:{yyyyMMdd}:N3..N5`). A run that failed after saving the
+  Farmer reminders but before the summaries is repaired by a later run, **also on a later day**: for each of the last 14 days (proposed
+  value, `SummaryRecoveryDays`; never before T0) that has Farmer reminders but no summary, the summary is written once with **that
+  day's** figures, the text starts with "Ngày dd/MM/yyyy:", and the recipients are the members who already existed at the end of
+  that day. The figures are those at the time of the summary; a later reminder of the same day is not added to a summary that
+  exists. Nothing is sent to a Farmer twice. A recovered notification is created when the repair runs; its key and text carry the
+  original day (F3.20 review).
 - Rollout: enable the job after the seasons are entered; without seasons only N2–N5 apply.
 
 **Starting reminders (F3.20, new 2026-11-03) — T0.** The job sends **nothing** for a store until its owner starts reminders:

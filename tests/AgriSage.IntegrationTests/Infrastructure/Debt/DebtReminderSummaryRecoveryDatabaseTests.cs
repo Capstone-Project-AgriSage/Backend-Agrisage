@@ -8,6 +8,7 @@ using AgriSage.Domain.Features.Debt.Entities;
 using AgriSage.Domain.Features.Identity.Entities;
 using AgriSage.Domain.Features.Identity.Enums;
 using AgriSage.Domain.Features.Notifications.Entities;
+using AgriSage.Domain.Features.Stores.Entities;
 using AgriSage.Infrastructure.Persistence;
 using AgriSage.Infrastructure.Persistence.Interceptors;
 using Microsoft.EntityFrameworkCore;
@@ -67,6 +68,82 @@ public sealed class DebtReminderSummaryRecoveryDatabaseTests
                 .Where(n => n.DeduplicationKey != null && n.DeduplicationKey.StartsWith("debt-reminder"))
                 .Select(n => new { n.DeduplicationKey, n.Message }).ToListAsync(Token))
             .Select(n => (n.DeduplicationKey!, n.Message)).OrderBy(n => n.Item1, StringComparer.Ordinal).ToList();
+    }
+
+    private static async Task RunFailingAsync(CreditTestDatabase e, int batch)
+    {
+        using var scope = e.Scope();
+        var p = scope.ServiceProvider;
+        await using var context = new AgriSageDbContext(new DbContextOptionsBuilder<AgriSageDbContext>().UseNpgsql(e.ConnectionString)
+            .AddInterceptors(new SoftDeleteInterceptor(e.User, e.Clock), new AuditableEntityInterceptor(e.Clock),
+                new ConcurrencyVersionInterceptor(), new FailOnSummary()).Options);
+        var service = new OperationalAlertsService(context, new NotificationWriter(context), p.GetRequiredService<IInventoryService>(), e.Clock);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.DebtRemindersAsync(batch, Token));
+    }
+
+    private static Task RunAsync(CreditTestDatabase e) =>
+        Run(e, async sp => { await sp.GetRequiredService<OperationalAlertsService>().DebtRemindersAsync(1, Token); return 0; });
+
+    private static async Task<List<(string Key, string Message, Guid User)>> SummariesAsync(CreditTestDatabase e)
+    {
+        using var s = e.Scope();
+        return (await s.ServiceProvider.GetRequiredService<AgriSageDbContext>().Notifications.IgnoreQueryFilters().AsNoTracking()
+                .Where(n => n.DeduplicationKey != null && n.DeduplicationKey.StartsWith("debt-reminder-staff:"))
+                .Select(n => new { n.DeduplicationKey, n.Message, n.UserId }).ToListAsync(Token))
+            .Select(n => (n.DeduplicationKey!, n.Message, n.UserId)).OrderBy(n => n.Item1, StringComparer.Ordinal).ToList();
+    }
+
+    // The failed run was on day D; the next run is on D+1. The summary of D is recovered once, with D's numbers and for the members
+    // who were there on D; D+1 has its own summary with its own numbers; nothing is written twice.
+    [CreditDbFact]
+    public async Task A_summary_lost_on_day_D_is_recovered_on_day_D_plus_1_with_the_numbers_of_D()
+    {
+        await using var e = await CreditTestDatabase.StartAsync(Token);
+        var other = await SecondFarmerAsync(e);
+        using (var s = e.Scope())
+            await ReminderStartHelper.EnsureAsync(s.ServiceProvider.GetRequiredService<AgriSageDbContext>(), e.StoreId, Token);
+
+        At(e, 2026, 11, 4);                                                                  // day D: two groups reach N3
+        foreach (var farmer in new[] { e.FarmerId, other })
+            await Run(e, sp => sp.GetRequiredService<IDebtService>().ManualAsync(farmer, new(500_000m, new DateOnly(2026, 11, 4), "Nợ"), Token));
+        await RunFailingAsync(e, batch: 1);
+        Assert.Empty(await SummariesAsync(e));
+        var farmerNotices = await NoticesAsync(e);
+        Assert.Equal(2, farmerNotices.Count);
+
+        At(e, 2026, 11, 5);                                                                  // day D+1: one new group, and a new member
+        await Run(e, sp => sp.GetRequiredService<IDebtService>().ManualAsync(e.FarmerId, new(300_000m, new DateOnly(2026, 11, 5), "Nợ"), Token));
+        Guid newStaff;
+        using (var s = e.Scope())
+        {
+            var db = s.ServiceProvider.GetRequiredService<AgriSageDbContext>();
+            var sale = await db.Roles.SingleOrDefaultAsync(r => r.Code == RoleCode.SalesStaff, Token) ?? new Role(RoleCode.SalesStaff, "Sale");
+            var user = new User(sale.Id, "Staff", "hash", $"{Guid.NewGuid():N}@example.test", null);
+            if (db.Entry(sale).State == EntityState.Detached) db.Add(sale);
+            db.AddRange(user, new StoreMember(e.StoreId, user.Id));
+            await db.SaveChangesAsync(Token);
+            newStaff = user.Id;
+        }
+
+        await RunAsync(e);
+        var summaries = await SummariesAsync(e);
+        var forD = summaries.Where(n => n.Key == "debt-reminder-staff:20261104:N3").ToList();
+        var forD1 = summaries.Where(n => n.Key == "debt-reminder-staff:20261105:N3").ToList();
+        Assert.NotEmpty(forD);
+        Assert.All(forD, n => Assert.StartsWith("Ngày 04/11/2026: 2 nhóm nợ", n.Message));         // D's numbers, dated, not 3
+        Assert.DoesNotContain(forD, n => n.User == newStaff);                                  // the member who joined on D+1 was not there on D
+        Assert.NotEmpty(forD1);
+        Assert.All(forD1, n => Assert.StartsWith("1 nhóm nợ", n.Message));                     // D+1's own number, not 3
+        Assert.Contains(forD1, n => n.User == newStaff);
+        Assert.Equal(2, summaries.Select(n => n.Key).Distinct().Count());
+
+        // The Farmer reminders of D are untouched (plus D+1's one), and another run adds nothing.
+        Assert.Equal(farmerNotices, (await NoticesAsync(e)).Where(n => n.Key.StartsWith("debt-reminder:", StringComparison.Ordinal))
+            .Where(n => farmerNotices.Any(f => f.Key == n.Key)).ToList());
+        var before = await NoticesAsync(e);
+        await RunAsync(e);
+        Assert.Equal(before, await NoticesAsync(e));
+        Assert.Equal(summaries.Count, (await SummariesAsync(e)).Count);
     }
 
     [CreditDbFact]
