@@ -91,7 +91,7 @@ Cách ẩn nút: dựa vào `role` trong token (và danh sách quyền hiệu l�
 1. **Danh sách vụ mùa** (`GET /api/crop-seasons`) — cột: mã, tên, khoảng nhận đơn, thu hoạch, hạn trả, `status`, nợ phát sinh (`originated`) và nợ đang thu (`collecting`).
    Chủ có nút **Thêm vụ** (chỉ thêm sau vụ cuối: ngày bắt đầu nhận đơn được server điền, vụ đầu tiên nhập tay) và **Sửa**.
    Sửa ngày thu hoạch của vụ có thể dời vụ kế (server tự dời `orderWindowStart` của vụ sau); hộp thoại cần cảnh báo điều đó. Tuỳ chọn "áp hạn mới cho các khoản đang thu"
-   (`applyNewDueDateToCollectingDebts`, bắt buộc `reason`) chỉ dời muộn hơn, chỉ khoản còn theo hạn cũ của vụ.
+   (`applyNewDueDateToCollectingDebts`, bắt buộc `reason`) chỉ dời muộn hơn, chỉ khoản còn theo hạn cũ của vụ và **không đụng khoản đang khiếu nại** (Chủ quyết riêng).
 2. **Chính sách công nợ** (`GET/PUT /api/debt-policy`) — Chủ sửa: ân hạn mặc định, mốc nhắc N2/N4/N5, số lần nhân viên được gia hạn, số lần gia hạn thì Chủ xem lại, số vụ đúng hạn
    để gợi ý tăng hạn mức, trần kỳ hạn (để trống = tắt), tổng thời gian gia hạn tối đa. Đổi ân hạn chỉ áp cho **vụ tạo sau**.
 3. **Danh sách khoản nợ** — thêm cột **vụ phát sinh**, **vụ đang thu**, **hạn gốc**, **số lần gia hạn** (biểu tượng "đã gia hạn" khi `isRolledOver`), badge `dueState`, đánh dấu
@@ -264,7 +264,7 @@ Nông dân nhận thông báo (đã có màn thông báo; thêm các `notificati
 | `DEBT_REDUCED` | Chủ giảm nợ |
 | `DEBT_CANCELLED` | Chủ xoá nợ |
 | `DEBT_DISPUTE_RESOLVED` | cửa hàng giữ nguyên số nợ sau khiếu nại |
-| `DEBT_DUE_SOON`, `DEBT_OVERDUE` | nhắc nợ theo mốc N1–N5 (không còn nhắc mỗi ngày) |
+| `DEBT_DUE_SOON`, `DEBT_OVERDUE` | nhắc nợ theo mốc N1–N5 (không còn nhắc mỗi ngày); tin tổng hợp cho Chủ/nhân viên ghi "N nhóm nợ" (một khách có thể có nhiều nhóm theo hạn) |
 
 Nhân viên/Chủ nhận bản tóm tắt: mỗi ngày tối đa một tin cho mốc N3 và N4 (nhân viên và Chủ), một tin cho mốc N5 (chỉ Chủ).
 

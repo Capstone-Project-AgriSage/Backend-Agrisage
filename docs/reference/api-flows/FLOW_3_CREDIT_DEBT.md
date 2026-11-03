@@ -424,7 +424,9 @@ MyCurrentCropSeasonResponse {
   their origin season.
 - By default recorded debt keeps its due date (D17). `applyNewDueDateToCollectingDebts: true` (owner, `reason`
   required) moves entries collected in this season that are still on its old due date to the new one, only later,
-  each with a `CHANGE_DUE_DATE` action and audit.
+  each with a `CHANGE_DUE_DATE` action and audit. **Disputed entries are not moved** (the owner decides those), nor paid or
+  cancelled ones. It runs under the store lock and locks every Farmer concerned in id order, then reads the entries, so a
+  payment, adjustment, dispute or rollover running at that moment is never overwritten or missed (F3.20 review).
 - `MyCurrentCropSeasonResponse` is an estimate shown before ordering: the debt and its real due date are created at
   delivery. `CAPPED` = the store's optional term cap applied; `TERM_DAYS` = no season covers today, the credit-tier term
   applies; `NONE` = no credit profile.
@@ -617,9 +619,9 @@ for every entry due within `DebtReminderDays`; that option is removed. It sends 
 |---|---|---|---|
 | N1 | harvest start of the season the debt is collected in, until its N2 | the Farmer, one per (Farmer, season) | `DEBT_DUE_SOON` |
 | N2 | due date + `reminderOffsets.n2` (default −7) | the Farmer, per (Farmer, due date) | `DEBT_DUE_SOON` |
-| N3 | the due date | the Farmer; one summary to the owner and each Sale staff member per day | `DEBT_DUE_SOON`, then `DEBT_OVERDUE` after the day |
-| N4 | due date + `n4` (default 14) | the Farmer; one summary to the owner and each Sale staff member per day | `DEBT_OVERDUE` |
-| N5 | due date + `n5` (default 30) | the Farmer; one summary to the owner | `DEBT_OVERDUE` |
+| N3 | the due date | the Farmer; one summary ("N nhóm nợ", counted in debt groups) to the owner and each Sale staff member per day | `DEBT_DUE_SOON`, then `DEBT_OVERDUE` after the day |
+| N4 | due date + `n4` (default 14) | the Farmer; one summary (in debt groups) to the owner and each Sale staff member per day | `DEBT_OVERDUE` |
+| N5 | due date + `n5` (default 30) | the Farmer; one summary (in debt groups) to the owner | `DEBT_OVERDUE` |
 
 - A run sends only the latest milestone reached for each (Farmer, due date): a job that did not run for days sends one
   reminder, never the missed ones. A milestone is sent once (deduplication keys `debt-reminder:{farmerProfileId}:{seasonId}:N1`,
@@ -629,6 +631,9 @@ for every entry due within `DebtReminderDays`; that option is removed. It sends 
 - Dates are Vietnam's (17:00 UTC = 00:00). Customers are processed in pages of `BatchSize`, saved page by page; the job only
   writes notifications and never touches the ledger.
 - Reminders sent under the old daily key (`debt:{entryId}:{yyyyMMdd}`) stay as history and do not block the new ones.
+- The summaries count the group reminders written **today** (not only those of the current run) and use a per-day key, so a run that
+  failed after saving the Farmer reminders but before the summaries is repaired by the next run: nothing is sent twice, the missing
+  summaries are written once (F3.20 review).
 - Rollout: enable the job after the seasons are entered; without seasons only N2–N5 apply.
 
 **Starting reminders (F3.20, new 2026-11-03) — T0.** The job sends **nothing** for a store until its owner starts reminders:
