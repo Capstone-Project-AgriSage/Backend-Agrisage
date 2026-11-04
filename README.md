@@ -74,6 +74,42 @@ The committed default is the Supabase **Session Pooler** (port 5432, IPv4-compat
 developer on an IPv6 network may override `Database:Host` / `Database:Username` in their own User Secrets —
 do not commit personal overrides.
 
+### Redis catalog cache (Upstash)
+
+The backend optionally uses TLS Redis for category lists/trees, brand lists, active
+ingredient lists, units, the internal product list and product metadata/packagings.
+It also caches disease content, the advisory problem catalog and nonchemical care
+guidance. Public category/brand lookups use it. Product detail store activation and
+sellability, public product prices, inventory, accounts, permissions and transaction
+data continue to read the database. Authentication/authorization are unchanged;
+advisory problem reads still resolve the current Farmer before accessing shared DTOs.
+Advice recommendations still calculate current prices/stock and save their sessions.
+
+Save `Redis:Url` in .NET User Secrets for development, or set `Redis__Url` / `REDIS_URL`
+on the server. Use `rediss://default:<password>@<host>:6379`; never commit the URL.
+The provided local Upstash credential is stored in User Secrets only.
+
+Nonsecret options are `Redis:KeyPrefix`, `TtlSeconds` (default 120, bounded 10–600)
+and `TimeoutMilliseconds` (default 1500). Development/production have separate key
+prefixes; give each database/deployment a unique prefix when sharing Redis.
+
+Reads use JSON DTOs with keys that include every filter, pagination and response type.
+Catalog writes through EF invalidate the shared generation after commit, including
+category reorder, deletion, logo/image updates, packaging and ingredient-link changes,
+and disease/treatment changes. A read already in flight can only
+populate its old generation. Explicit transactions bypass shared cache and rollback
+does not invalidate. Missing Redis or a Redis outage falls back to the database;
+invalidation failures bypass local cache until the old TTL elapses. Changes made
+directly in SQL or outside this backend become visible when the TTL expires.
+
+To verify the real configured connection without changing business rows:
+
+```powershell
+dotnet run --project tools/CatalogMaintenance -- verify-cache
+```
+
+Client configuration follows [StackExchange.Redis documentation](https://seredis.dev/Configuration.html).
+
 ### EF Core migrations
 
 The EF CLI is pinned as a local tool (`dotnet-tools.json` at the repository root, same version as EF Core):

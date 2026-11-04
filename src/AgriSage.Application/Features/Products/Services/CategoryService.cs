@@ -10,7 +10,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AgriSage.Application.Features.Products.Services;
 
-public sealed class CategoryService(IAgriSageDbContext context, IDatabaseErrorClassifier databaseErrors) : ICategoryService
+public sealed class CategoryService(IAgriSageDbContext context, IDatabaseErrorClassifier databaseErrors, ICatalogReadCache? cache = null) : ICategoryService
 {
     public async Task<CategoryResponse> CreateAsync(CreateCategoryRequest request, CancellationToken cancellationToken)
     {
@@ -77,7 +77,10 @@ public sealed class CategoryService(IAgriSageDbContext context, IDatabaseErrorCl
     public async Task<CategoryResponse> GetAsync(Guid id, CancellationToken cancellationToken) =>
         ToResponse(await FindAsync(id, cancellationToken, tracking: false));
 
-    public async Task<PagedResult<CategoryResponse>> ListAsync(CategoryListRequest request, CancellationToken cancellationToken)
+    public Task<PagedResult<CategoryResponse>> ListAsync(CategoryListRequest request, CancellationToken cancellationToken) =>
+        CatalogCache.ReadAsync(cache, "categories", request, () => LoadListAsync(request, cancellationToken), cancellationToken);
+
+    private async Task<PagedResult<CategoryResponse>> LoadListAsync(CategoryListRequest request, CancellationToken cancellationToken)
     {
         var query = context.Categories.AsNoTracking().AsQueryable();
 
@@ -104,7 +107,10 @@ public sealed class CategoryService(IAgriSageDbContext context, IDatabaseErrorCl
         return new PagedResult<CategoryResponse>(items.Select(ToResponse).ToList(), request.Page, request.PageSize, total);
     }
 
-    public async Task<IReadOnlyList<CategoryTreeNode>> GetTreeAsync(bool activeOnly, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<CategoryTreeNode>> GetTreeAsync(bool activeOnly, CancellationToken cancellationToken) =>
+        CatalogCache.ReadAsync(cache, "category-tree", new { activeOnly }, () => LoadTreeAsync(activeOnly, cancellationToken), cancellationToken);
+
+    private async Task<IReadOnlyList<CategoryTreeNode>> LoadTreeAsync(bool activeOnly, CancellationToken cancellationToken)
     {
         var all = await context.Categories.AsNoTracking().ToListAsync(cancellationToken);
 

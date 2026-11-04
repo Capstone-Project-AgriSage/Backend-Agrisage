@@ -14,6 +14,7 @@
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
     <PackageReference Include="ClosedXML" />
     <PackageReference Include="payOS" />
+    <PackageReference Include="StackExchange.Redis" />
   </ItemGroup>
 
 </Project>

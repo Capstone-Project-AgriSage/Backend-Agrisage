@@ -19,8 +19,12 @@ public sealed class MyAdvisoryService(
     CurrentFarmer currentFarmer,
     AdvisoryEngine engine,
     IDateTimeProvider clock,
-    AuditTrail audit) : IMyAdvisoryService
+    AuditTrail audit,
+    ICatalogReadCache? cache = null) : IMyAdvisoryService
 {
+    private sealed record ProblemRow(Guid Id, string Code, string Name, ProblemType ProblemType,
+        string? SearchKeywords, string? Symptoms, string? Description);
+
     // V11: a later call for the same Farmer and problem inside this window updates the latest session.
     private static readonly TimeSpan SessionReuseWindow = TimeSpan.FromMinutes(30);
 
@@ -31,18 +35,21 @@ public sealed class MyAdvisoryService(
     {
         await currentFarmer.GetAsync(cancellationToken);
 
-        var query = context.Diseases.AsNoTracking().Where(d => d.IsActive && !d.IsHealthyClass);
+        // Authenticate every caller; only the shared reference DTOs are cached, never the farmer or an advice session.
+        var catalog = await CatalogCache.ReadAsync(cache, "advisory-problem-catalog", new { },
+            () => context.Diseases.AsNoTracking().Where(d => d.IsActive && !d.IsHealthyClass)
+                .Select(d => new ProblemRow(d.Id, d.Code, d.Name, d.ProblemType, d.SearchKeywords, d.Symptoms, d.Description))
+                .ToListAsync(cancellationToken), cancellationToken);
+        IEnumerable<ProblemRow> rows = catalog;
         if (EnumText.TryParse<ProblemType>(request.Type, out var type))
         {
-            query = query.Where(d => d.ProblemType == type);
+            rows = rows.Where(d => d.ProblemType == type);
         }
 
-        var rows = await query
-            .Select(d => new { d.Id, d.Code, d.Name, d.ProblemType, d.SearchKeywords, d.Symptoms, d.Description })
-            .ToListAsync(cancellationToken);
-        var byId = rows.ToDictionary(r => r.Id);
+        var filtered = rows.ToList();
+        var byId = filtered.ToDictionary(r => r.Id);
 
-        var hits = ProblemSearch.Rank(rows.Select(r => new ProblemSearch.Candidate(r.Id, r.Name, r.SearchKeywords, r.Symptoms)), request.Search);
+        var hits = ProblemSearch.Rank(filtered.Select(r => new ProblemSearch.Candidate(r.Id, r.Name, r.SearchKeywords, r.Symptoms)), request.Search);
         var items = hits
             .Skip(request.Skip)
             .Take(request.PageSize)
@@ -155,7 +162,11 @@ public sealed class MyAdvisoryService(
     }
 
     // Care and prevention guidance of the problem; its CHEMICAL treatments are replaced by the linked products.
-    private async Task<IReadOnlyList<TreatmentResponse>> CareGuidanceAsync(Guid diseaseId, CancellationToken cancellationToken) =>
+    private Task<IReadOnlyList<TreatmentResponse>> CareGuidanceAsync(Guid diseaseId, CancellationToken cancellationToken) =>
+        CatalogCache.ReadAsync(cache, "advisory-care", new { diseaseId },
+            () => LoadCareGuidanceAsync(diseaseId, cancellationToken), cancellationToken);
+
+    private async Task<IReadOnlyList<TreatmentResponse>> LoadCareGuidanceAsync(Guid diseaseId, CancellationToken cancellationToken) =>
         (await context.DiseaseTreatments.AsNoTracking()
                 .Where(t => t.DiseaseId == diseaseId && t.IsActive && t.TreatmentType != TreatmentType.Chemical)
                 .OrderByDescending(t => t.Priority).ThenBy(t => t.Title).ThenBy(t => t.Id)
