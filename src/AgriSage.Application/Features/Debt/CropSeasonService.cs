@@ -170,6 +170,10 @@ public sealed class CropSeasonService(
         // debt at that moment) is locked in a later pass, possibly with a lower id than one already held. That cannot form a
         // cycle: the only paths that lock several Farmers (the season-wide rollover) take the store lock first, which this
         // transaction holds; every other path locks one Farmer and never waits for the store lock while holding it.
+        // The loop ends: `missing` never contains a Farmer already locked, each pass locks at least one new Farmer or stops, and the
+        // Farmers with an account in the store are finite — so there are at most (Farmers with collecting entries in the season) + 1
+        // passes. In practice two: one that locks, one that finds nobody new (a new Farmer appears only if a delivery posts debt for
+        // one while this transaction waits for a lock).
         var locked = new HashSet<Guid>();
         while (true)
         {

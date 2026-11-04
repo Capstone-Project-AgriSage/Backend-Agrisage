@@ -71,6 +71,7 @@ public sealed partial class DebtReminderSummaryRecoveryDatabaseTests
         var today = summaries.Where(n => n.Key == KeyOf(e, 11, 19, "N4")).ToList();
         Assert.NotEmpty(forD);
         Assert.All(forD, n => Assert.StartsWith("Ngày 04/11/2026: 2 nhóm nợ vừa đến hạn", n.Message));
+        Assert.All(forD, n => Assert.Contains("(tổng hợp lúc 12:00 19/11/2026)", n.Message));        // when the summary was made (the figures are as of then)
         Assert.NotEmpty(today);
         Assert.All(today, n => Assert.StartsWith("2 nhóm nợ đã quá hạn 14 ngày", n.Message));   // today's own figures, not added to D's
         Assert.Equal(2, summaries.Select(n => n.Key).Distinct().Count());

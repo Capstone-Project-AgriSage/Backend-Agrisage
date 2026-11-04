@@ -118,7 +118,8 @@ public sealed class OperationalAlertsService(IAgriSageDbContext context, Notific
         await context.SaveChangesAsync(token);
     }
 
-    // Summaries recovered per run: a value of this change (implementation choice, 3 milestones x 10 days).
+    // Summaries written per run: 30 summaries (one per day and milestone N3/N4/N5, so up to three a day) — an implementation choice,
+    // configurable through BackgroundJobs:DebtSummaryBatch. It limits the work of one run; it does not by itself prove a run is light.
     public const int DefaultSummaryBatch = 30;
 
     private async Task WriteMissingSummariesAsync(Guid store, DebtReminderOffsets offsets, DateOnly today, DateOnly start, int batch, CancellationToken token)
@@ -139,21 +140,22 @@ public sealed class OperationalAlertsService(IAgriSageDbContext context, Notific
             // Today: the members now. An earlier day: the members who were there by the end of that day (and still are).
             var until = day == today ? (DateTimeOffset?)null : BusinessCalendar.StartOfDay(day.AddDays(1));
             var dated = day == today ? "" : $"Ngày {day:dd/MM/yyyy}: ";
+            var asOf = $" (tổng hợp lúc {clock.UtcNow.ToOffset(BusinessCalendar.Offset):HH:mm dd/MM/yyyy})";
             if (milestone == "N5")
             {
                 var owners = await NotificationRecipients.StaffAsync(context, store, until, token, RoleCode.StoreOwner);
                 await writer.AddAsync(owners, "DEBT_OVERDUE", "Nợ quá hạn lâu cần quyết định",
-                    $"{dated}{count} nhóm nợ đã quá hạn {offsets.N5} ngày. Vui lòng xem mục Cần quyết định.", key, "STORE", store, token);
+                    $"{dated}{count} nhóm nợ đã quá hạn {offsets.N5} ngày. Vui lòng xem mục Cần quyết định.{asOf}", key, "STORE", store, token);
                 continue;
             }
 
             var staff = await NotificationRecipients.StaffAsync(context, store, until, token, RoleCode.StoreOwner, RoleCode.SalesStaff);
             if (milestone == "N3")
                 await writer.AddAsync(staff, "DEBT_DUE_SOON", "Nợ đến hạn trả",
-                    $"{dated}{count} nhóm nợ vừa đến hạn trả nợ. Vui lòng xem danh sách công nợ.", key, "STORE", store, token);
+                    $"{dated}{count} nhóm nợ vừa đến hạn trả nợ. Vui lòng xem danh sách công nợ.{asOf}", key, "STORE", store, token);
             else
                 await writer.AddAsync(staff, "DEBT_OVERDUE", "Nợ quá hạn trả",
-                    $"{dated}{count} nhóm nợ đã quá hạn {offsets.N4} ngày. Vui lòng liên hệ nhắc nợ.", key, "STORE", store, token);
+                    $"{dated}{count} nhóm nợ đã quá hạn {offsets.N4} ngày. Vui lòng liên hệ nhắc nợ.{asOf}", key, "STORE", store, token);
         }
     }
 
