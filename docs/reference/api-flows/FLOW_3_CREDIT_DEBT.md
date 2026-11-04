@@ -639,14 +639,15 @@ for every entry due within `DebtReminderDays`; that option is removed. It sends 
   two stores never share or suppress each other's summaries. A run that failed after saving the Farmer reminders but before the
   summaries is repaired by a later run, **on any later day**: every (day, milestone) **since T0** that has Farmer reminders of this
   store but no summary of this store gets one, once, with **that day's** figures; the text starts with "Ngày dd/MM/yyyy:" for a day
-  before today. There is no limit of days. To keep a run light after a long outage, a run writes at most `DefaultSummaryBatch` = 30
-  of them (implementation choice, about ten days of N3–N5), **oldest first**; the rest is taken by the next runs — a pair already
+  before today. There is no limit of days. To bound the work of one run after a long outage, a run writes at most 30 summaries
+  (`BackgroundJobs:DebtSummaryBatch`, default 30, 1–1000; one summary per day and milestone N3/N4/N5, so up to three a day — it is a
+  count of summaries, not of days, and it limits what one run writes, it does not by itself prove the run is light), **oldest first**; the rest is taken by the next runs — a pair already
   written drops out of the candidates, so nothing is skipped and nothing is written twice. Only Farmers with a debt account in this
   store are counted (a Farmer with accounts in several stores cannot be told apart by the reminder key — single active store today).
 - Recipients of a recovered summary: members of this store who are still **active**, with an eligible role (owner and Sale staff for
   N3/N4, owner for N5), when it is written, **and** who already existed at the end of that day; a member who left or lost the role
   receives nothing, and nobody who joined after the day receives a historic summary. The figures are those at the time of the
-  summary; a later reminder of the same day is not added to a summary that exists. Nothing is sent to a Farmer twice. A recovered
+  summary (the text ends with "(tổng hợp lúc HH:mm dd/MM/yyyy)", Vietnam time); a later reminder of the same day is not added to a summary that exists. Nothing is sent to a Farmer twice. A recovered
   notification is created when the repair runs; its key and text carry the original day (F3.20 review).
 - Rollout: enable the job after the seasons are entered; without seasons only N2–N5 apply.
 

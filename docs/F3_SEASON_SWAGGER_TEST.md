@@ -9,7 +9,9 @@ Hợp đồng chi tiết: `docs/reference/api-flows/FLOW_3_CREDIT_DEBT.md` (mụ
 
 ## 0. Chuẩn bị dữ liệu
 
-Chưa có seed demo. Tạo bằng API, bằng tài khoản **Chủ**:
+**Cách nhanh (chỉ DB cục bộ):** sau khi đã chạy `--seed`, chạy lệnh bảo trì `dotnet run --project src/AgriSage.Api --no-launch-profile -- --seed-debt-demo` với biến môi trường `DebtDemo__Password` (≥ 8 ký tự, tự đặt, không in ra) và kết nối DB cục bộ (`Database__Host=localhost`). Lệnh **từ chối** nếu `Database:Host` không phải localhost/127.0.0.1/::1 hoặc môi trường là Production, và chạy lại không đổi gì. Bộ dữ liệu: Chủ `demo.owner@agrisage.demo`, nhân viên `demo.staff@agrisage.demo`; hai vụ (`DEMO-A` đang thu và đã qua hạn, `DEMO-B` đang nhận đơn); bốn khách có nợ: bình thường (3 triệu, vụ B), quá hạn (5 triệu, vụ A), đang khiếu nại (2 triệu, vụ A), đã gia hạn A→B (4 triệu). Không bắt đầu nhắc nợ và không gửi thông báo. Đăng nhập bằng mật khẩu bạn đặt.**Cách thủ công:** tạo bằng API, bằng tài khoản **Chủ**:
+
+**Cách thủ công** (nếu không dùng bộ demo): tạo bằng API, bằng tài khoản **Chủ**:
 
 1. `GET /api/debt-policy` → `isDefault: true`, `version: 0`, `defaultGraceDays: 30`. (Chưa cần lưu.)
 2. `POST /api/crop-seasons` — **vụ đầu** (phải có `orderWindowStart`). Với `T` là hôm nay:
