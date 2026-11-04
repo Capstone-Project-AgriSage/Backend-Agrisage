@@ -21,7 +21,7 @@ public sealed class DebtDemoSeederDatabaseTests
     [InlineData("127.0.0.1", false, true)]
     [InlineData("::1", false, true)]
     [InlineData("localhost", true, false)]                                       // never in Production
-    [InlineData("db.rgbgakdmyoklycepmhmc.supabase.co", false, false)]            // a shared database
+    [InlineData("db.example-project.supabase.co", false, false)]            // a shared database
     [InlineData("", false, false)]
     [InlineData(null, false, false)]
     public void The_demo_data_goes_only_to_a_local_database_outside_production(string? host, bool production, bool allowed) =>
