@@ -52,8 +52,21 @@ public sealed class OperationalAlertsService(IAgriSageDbContext context, Notific
                     && e.Status != DebtEntryStatus.Paid && e.Status != DebtEntryStatus.Cancelled)
                 .Select(e => new { e.DebtAccountId, e.CollectionCropSeasonId, e.DueDate, e.OutstandingAmount }).ToListAsync(token);
             var users = rows.Select(r => r.UserId).ToList();
+            // Only the keys this page could send are looked up (not every reminder ever sent to these customers), so the cost does
+            // not grow with the history.
+            var candidates = new HashSet<string>();
+            foreach (var row in rows)
+            {
+                var own = entries.Where(e => e.DebtAccountId == row.Id).ToList();
+                foreach (var seasonId in own.Where(e => e.CollectionCropSeasonId is { } s && seasons.ContainsKey(s)).Select(e => e.CollectionCropSeasonId!.Value).Distinct())
+                    candidates.Add(DebtReminderKeys.Season(row.FarmerProfileId, seasonId));
+                foreach (var due in own.Select(e => e.DueDate).Distinct())
+                    if (DebtReminderSchedule.Latest(due, offsets, today, start) is { } latest)
+                        candidates.Add(DebtReminderKeys.Group(row.FarmerProfileId, due, latest.Code));
+            }
+
             var sent = (await context.Notifications.IgnoreQueryFilters().AsNoTracking()
-                    .Where(n => users.Contains(n.UserId) && n.DeduplicationKey != null && n.DeduplicationKey.StartsWith("debt-reminder:"))
+                    .Where(n => users.Contains(n.UserId) && n.DeduplicationKey != null && candidates.Contains(n.DeduplicationKey))
                     .Select(n => n.DeduplicationKey!).ToListAsync(token)).ToHashSet();
 
             foreach (var row in rows)
@@ -63,7 +76,7 @@ public sealed class OperationalAlertsService(IAgriSageDbContext context, Notific
                              .GroupBy(e => e.CollectionCropSeasonId!.Value))
                 {
                     var season = seasons[group.Key];
-                    var key = $"debt-reminder:{row.FarmerProfileId}:{season.Id}:N1";
+                    var key = DebtReminderKeys.Season(row.FarmerProfileId, season.Id);
                     if (!sent.Add(key)) continue;
                     await writer.AddAsync([row.UserId], "DEBT_DUE_SOON", $"Vụ {season.Name} bắt đầu thu hoạch",
                         $"Bạn có {Money(group.Sum(e => e.OutstandingAmount))} nợ của vụ {season.Name}, hạn trả {season.PaymentDueDate:dd/MM/yyyy}.",
@@ -75,7 +88,7 @@ public sealed class OperationalAlertsService(IAgriSageDbContext context, Notific
                     var due = group.Key;
                     if (DebtReminderSchedule.Latest(due, offsets, today, start) is not { } latest) continue;
                     var milestone = latest.Code;
-                    var key = $"debt-reminder:{row.FarmerProfileId}:{due:yyyyMMdd}:{milestone}";
+                    var key = DebtReminderKeys.Group(row.FarmerProfileId, due, milestone);
                     if (!sent.Add(key)) continue;
                     var amount = Money(group.Sum(e => e.OutstandingAmount));
                     var (title, message) = milestone switch
@@ -114,7 +127,7 @@ public sealed class OperationalAlertsService(IAgriSageDbContext context, Notific
         var counts = await GroupRemindersPerDayAsync(store, start, today, token);
         if (counts.Count == 0) return;
 
-        var prefix = $"debt-reminder-staff:{store:N}:";
+        var prefix = DebtReminderKeys.SummaryPrefix(store);
         var written = (await context.Notifications.IgnoreQueryFilters().AsNoTracking()
             .Where(n => n.CreatedAt >= begin && n.DeduplicationKey != null && n.DeduplicationKey.StartsWith(prefix))
             .Select(n => n.DeduplicationKey!).Distinct().ToListAsync(token)).ToHashSet();
@@ -145,7 +158,7 @@ public sealed class OperationalAlertsService(IAgriSageDbContext context, Notific
     }
 
     // The store is part of the key: two stores never share (or suppress) each other's summaries.
-    private static string SummaryKey(Guid store, DateOnly day, string milestone) => $"debt-reminder-staff:{store:N}:{day:yyyyMMdd}:{milestone}";
+    private static string SummaryKey(Guid store, DateOnly day, string milestone) => DebtReminderKeys.Summary(store, day, milestone);
 
     // One Farmer reminder per (Farmer, due date) group and milestone: its key is debt-reminder:{farmer}:{yyyyMMdd}:N3..N5. Only those
     // of Farmers with a debt account in THIS store are counted, per Vietnam day in [start of the day, start of the next day), so a day
