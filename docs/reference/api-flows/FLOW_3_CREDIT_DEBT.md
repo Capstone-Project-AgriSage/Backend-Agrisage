@@ -427,6 +427,9 @@ MyCurrentCropSeasonResponse {
   each with a `CHANGE_DUE_DATE` action and audit. **Disputed entries are not moved** (the owner decides those), nor paid or
   cancelled ones. It runs under the store lock and locks every Farmer concerned in id order, then reads the entries, so a
   payment, adjustment, dispute or rollover running at that moment is never overwritten or missed (F3.20 review).
+  The `200` response of that update carries `debtExtension: { moved, skippedDisputed }` (only then; `null` otherwise, and on a plain
+  read): how many entries got the new date and how many disputed ones were left on the old date for the owner to decide. The audit
+  `CROP_SEASON_UPDATED` records both numbers (`debtsMovedToNewDueDate`, `debtsLeftBecauseDisputed`).
 - `MyCurrentCropSeasonResponse` is an estimate shown before ordering: the debt and its real due date are created at
   delivery. `CAPPED` = the store's optional term cap applied; `TERM_DAYS` = no season covers today, the credit-tier term
   applies; `NONE` = no credit profile.
@@ -559,7 +562,7 @@ CropSeasonRolloverResponse {
 - The qualifying entries move in one transaction; the store is locked first, then every Farmer in `farmerProfileId` order
   (the order the credit and customer services use), so it runs safely beside payments. A second call skips what already
   moved.
-- `dryRun: true` returns the same result and writes nothing (no lock, no audit, no notification).
+- `dryRun: true` returns the same result and writes nothing (no lock, no audit, no notification). It is a preview: it reads without the store and Farmer locks, so if debts change between the preview and the real run (a payment, a dispute, a season being closed), the real run — which checks again under the locks — can differ or be refused. Show it as "what would happen now".
 - Each moved entry gets a `ROLLOVER` action, a `DEBT_ROLLOVER` audit and a Farmer notification (`DEBT_DUE_DATE_CHANGED`);
   the run is audited once as `CROP_SEASON_DEBT_ROLLOVER` on the source season.
 

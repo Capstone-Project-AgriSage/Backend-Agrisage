@@ -80,7 +80,9 @@ public sealed class CropSeasonExtendDebtDatabaseTests
         await Run(e, sp => sp.GetRequiredService<IDebtService>().ActionAsync(disputed, "DISPUTE", "Khách không đồng ý", null, null, null, Token));
         Assert.Equal((OldDue, "Disputed"), await StateAsync(e, disputed));
 
-        await ExtendAsync(e, dx, version);
+        var result = await ExtendAsync(e, dx, version);
+        Assert.Equal(new DebtExtensionResult(1, 1), result.DebtExtension);                 // one moved, one disputed left on the old date
+        Assert.Null((await Run(e, sp => sp.GetRequiredService<ICropSeasonService>().GetAsync(dx, Token))).DebtExtension);   // only an update reports it
         Assert.Equal(NewDue, (await StateAsync(e, open)).Due);
         Assert.Equal((OldDue, "Disputed"), await StateAsync(e, disputed));
         using var s = e.Scope();

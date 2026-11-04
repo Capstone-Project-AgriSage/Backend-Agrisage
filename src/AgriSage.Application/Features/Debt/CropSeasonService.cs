@@ -112,7 +112,7 @@ public sealed class CropSeasonService(
         if (next is not null && next.OrderWindowStart != season.HarvestStart) next.MoveOrderWindowStart(season.HarvestStart);
         SeasonCalendar.ValidateSequence(seasons);
 
-        var moved = 0;
+        DebtExtensionResult? extension = null;
         if (request.ApplyNewDueDateToCollectingDebts && season.PaymentDueDate != oldDue)
         {
             if (season.PaymentDueDate < oldDue)
@@ -120,14 +120,14 @@ public sealed class CropSeasonService(
                 throw new BusinessRuleException("Recorded debt can only be given a later due date, never an earlier one.");
             }
 
-            moved = await ExtendCollectingDebtAsync(season, oldDue, request.Reason!.Trim(), actor, token);
+            extension = await ExtendCollectingDebtAsync(season, oldDue, request.Reason!.Trim(), actor, token);
         }
 
         audit.Record("CROP_SEASON_UPDATED", "CROP_SEASON", season.Id, store, before,
-            new { season = Snapshot(season), debtsMovedToNewDueDate = moved }, request.Reason?.Trim());
+            new { season = Snapshot(season), debtsMovedToNewDueDate = extension?.Moved ?? 0, debtsLeftBecauseDisputed = extension?.SkippedDisputed ?? 0 }, request.Reason?.Trim());
         await db.SaveChangesAsync(token);
         await tx.CommitAsync(token);
-        return await GetAsync(season.Id, token);
+        return (await GetAsync(season.Id, token)) with { DebtExtension = extension };
     }
 
     public async Task<MyCurrentCropSeasonResponse> MyCurrentAsync(CancellationToken token)
@@ -160,7 +160,7 @@ public sealed class CropSeasonService(
     // decides those). Runs under the store lock; every Farmer concerned is locked too, in id order (as the season-wide rollover
     // does), and the entries are read AFTER the locks, so a payment, an adjustment, a dispute or a rollover that was running
     // is seen as committed — never overwritten, never missed.
-    private async Task<int> ExtendCollectingDebtAsync(CropSeason season, DateOnly oldDue, string reason, Guid actor, CancellationToken token)
+    private async Task<DebtExtensionResult> ExtendCollectingDebtAsync(CropSeason season, DateOnly oldDue, string reason, Guid actor, CancellationToken token)
     {
         IQueryable<DebtEntry> Candidates() => db.DebtEntries.Where(e => e.CollectionCropSeasonId == season.Id && e.DueDate == oldDue
             && e.OutstandingAmount > 0 && e.Status != DebtEntryStatus.Paid && e.Status != DebtEntryStatus.Cancelled
@@ -192,7 +192,9 @@ public sealed class CropSeasonService(
                 new { dueDate = oldDue }, new { dueDate = season.PaymentDueDate, cropSeasonId = season.Id, actionId = action.Id }, reason);
         }
 
-        return entries.Count;
+        var skipped = await db.DebtEntries.CountAsync(e => e.CollectionCropSeasonId == season.Id && e.DueDate == oldDue
+            && e.OutstandingAmount > 0 && e.Status == DebtEntryStatus.Disputed, token);
+        return new DebtExtensionResult(entries.Count, skipped);
     }
 
     private async Task RequireSeasonalRuleAsync(Guid store, Guid? seasonalRuleId, CancellationToken token)

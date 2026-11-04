@@ -91,7 +91,7 @@ Cách ẩn nút: dựa vào `role` trong token (và danh sách quyền hiệu l�
 1. **Danh sách vụ mùa** (`GET /api/crop-seasons`) — cột: mã, tên, khoảng nhận đơn, thu hoạch, hạn trả, `status`, nợ phát sinh (`originated`) và nợ đang thu (`collecting`).
    Chủ có nút **Thêm vụ** (chỉ thêm sau vụ cuối: ngày bắt đầu nhận đơn được server điền, vụ đầu tiên nhập tay) và **Sửa**.
    Sửa ngày thu hoạch của vụ có thể dời vụ kế (server tự dời `orderWindowStart` của vụ sau); hộp thoại cần cảnh báo điều đó. Tuỳ chọn "áp hạn mới cho các khoản đang thu"
-   (`applyNewDueDateToCollectingDebts`, bắt buộc `reason`) chỉ dời muộn hơn, chỉ khoản còn theo hạn cũ của vụ và **không đụng khoản đang khiếu nại** (Chủ quyết riêng).
+   (`applyNewDueDateToCollectingDebts`, bắt buộc `reason`) chỉ dời muộn hơn, chỉ khoản còn theo hạn cũ của vụ và **không đụng khoản đang khiếu nại** (Chủ quyết riêng). Phản hồi `200` của lần cập nhật đó có `debtExtension: { moved, skippedDisputed }` — hiển thị "đã dời N khoản; M khoản đang khiếu nại giữ hạn cũ, cần Chủ quyết".
 2. **Chính sách công nợ** (`GET/PUT /api/debt-policy`) — Chủ sửa: ân hạn mặc định, mốc nhắc N2/N4/N5, số lần nhân viên được gia hạn, số lần gia hạn thì Chủ xem lại, số vụ đúng hạn
    để gợi ý tăng hạn mức, trần kỳ hạn (để trống = tắt), tổng thời gian gia hạn tối đa. Đổi ân hạn chỉ áp cho **vụ tạo sau**.
 3. **Danh sách khoản nợ** — thêm cột **vụ phát sinh**, **vụ đang thu**, **hạn gốc**, **số lần gia hạn** (biểu tượng "đã gia hạn" khi `isRolledOver`), badge `dueState`, đánh dấu
@@ -325,6 +325,7 @@ interface CropSeason {
   orderWindowStart: string; harvestStart: string; harvestEnd: string; graceDays: number;
   paymentDueDate: string; status: SeasonStatus; seasonalRuleId: string | null; closedAt: string | null;
   version: number; originated: DebtFigures; collecting: DebtFigures;
+  debtExtension?: { moved: number; skippedDisputed: number } | null;   // chỉ có ở phản hồi PUT có applyNewDueDateToCollectingDebts
 }
 
 interface DebtEntryListItem {

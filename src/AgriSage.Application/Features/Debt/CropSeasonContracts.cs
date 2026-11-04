@@ -32,7 +32,12 @@ public sealed record CropSeasonResponse(
     DateTimeOffset? ClosedAt,
     long Version,
     CropSeasonDebtFigures Originated,
-    CropSeasonDebtFigures Collecting);
+    CropSeasonDebtFigures Collecting,
+    DebtExtensionResult? DebtExtension = null);
+
+// Only on the response of an update that asked to apply the new due date to the debts being collected: how many entries moved
+// and how many disputed ones were left on the old date (the owner decides those).
+public sealed record DebtExtensionResult(int Moved, int SkippedDisputed);
 
 // OrderWindowStart is only given for the store's first season; later seasons open on the previous harvest start (D3).
 // GraceDays defaults to the store debt policy (30 when the store has none).
