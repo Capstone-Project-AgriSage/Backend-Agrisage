@@ -20,7 +20,7 @@ namespace AgriSage.IntegrationTests.Infrastructure.Debt;
 // F3.20 review finding 3: the Farmer reminders are saved page by page and the staff/owner summaries last. A failure in between
 // must not lose the summaries for good: the next run finds the Farmer reminders already saved (so sends none again) and writes
 // the missing summaries (the per-day key keeps them to one). The summaries say "N nhóm nợ" — they count debt groups.
-public sealed class DebtReminderSummaryRecoveryDatabaseTests
+public sealed partial class DebtReminderSummaryRecoveryDatabaseTests
 {
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
@@ -81,8 +81,8 @@ public sealed class DebtReminderSummaryRecoveryDatabaseTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.DebtRemindersAsync(batch, Token));
     }
 
-    private static Task RunAsync(CreditTestDatabase e) =>
-        Run(e, async sp => { await sp.GetRequiredService<OperationalAlertsService>().DebtRemindersAsync(1, Token); return 0; });
+    private static Task RunAsync(CreditTestDatabase e, int summaryBatch = OperationalAlertsService.DefaultSummaryBatch) =>
+        Run(e, async sp => { await sp.GetRequiredService<OperationalAlertsService>().DebtRemindersAsync(1, Token, summaryBatch); return 0; });
 
     private static async Task<List<(string Key, string Message, Guid User)>> SummariesAsync(CreditTestDatabase e)
     {
@@ -127,8 +127,8 @@ public sealed class DebtReminderSummaryRecoveryDatabaseTests
 
         await RunAsync(e);
         var summaries = await SummariesAsync(e);
-        var forD = summaries.Where(n => n.Key == "debt-reminder-staff:20261104:N3").ToList();
-        var forD1 = summaries.Where(n => n.Key == "debt-reminder-staff:20261105:N3").ToList();
+        var forD = summaries.Where(n => n.Key == $"debt-reminder-staff:{e.StoreId:N}:20261104:N3").ToList();
+        var forD1 = summaries.Where(n => n.Key == $"debt-reminder-staff:{e.StoreId:N}:20261105:N3").ToList();
         Assert.NotEmpty(forD);
         Assert.All(forD, n => Assert.StartsWith("Ngày 04/11/2026: 2 nhóm nợ", n.Message));         // D's numbers, dated, not 3
         Assert.DoesNotContain(forD, n => n.User == newStaff);                                  // the member who joined on D+1 was not there on D
@@ -180,7 +180,7 @@ public sealed class DebtReminderSummaryRecoveryDatabaseTests
         Assert.Equal(afterFailure, repaired.Where(n => n.Key.StartsWith("debt-reminder:", StringComparison.Ordinal)).ToList());
         var summaries = repaired.Where(n => n.Key.StartsWith("debt-reminder-staff:", StringComparison.Ordinal)).ToList();
         Assert.NotEmpty(summaries);
-        Assert.All(summaries, n => Assert.Equal("debt-reminder-staff:20261104:N3", n.Key));
+        Assert.All(summaries, n => Assert.Equal($"debt-reminder-staff:{e.StoreId:N}:20261104:N3", n.Key));
         Assert.All(summaries, n => Assert.Contains("2 nhóm nợ", n.Message));
         Assert.DoesNotContain(summaries, n => n.Message.Contains("khách", StringComparison.OrdinalIgnoreCase));
 

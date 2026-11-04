@@ -76,7 +76,7 @@ public sealed class DebtReminderStartDatabaseTests
         var keys = await ReminderKeysAsync(e);
         Assert.Equal(2, keys.Count);
         Assert.Contains($"debt-reminder:{e.FarmerId}:20261006:N5", keys);
-        Assert.Contains("debt-reminder-staff:20261105:N5", keys);                                 // the owner's summary of that one group
+        Assert.Contains($"debt-reminder-staff:{e.StoreId:N}:20261105:N5", keys);                                 // the owner's summary of that one group
         Assert.DoesNotContain(keys, k => k.Contains("20260920", StringComparison.Ordinal));      // the October-overdue debt is never reminded
 
         // The skipped debts are untouched and still counted on the screens.

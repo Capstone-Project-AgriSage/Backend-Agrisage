@@ -98,11 +98,11 @@ public sealed class DebtReminderDatabaseTests
         Assert.Equal("DEBT_OVERDUE", notices.Single(n => n.Key.EndsWith("N4")).Type);
         Assert.Equal("DEBT_OVERDUE", notices.Single(n => n.Key.EndsWith("N5")).Type);
 
-        Assert.Equal(new[] { $"debt-reminder-staff:{Due:yyyyMMdd}:N3", $"debt-reminder-staff:{Due.AddDays(14):yyyyMMdd}:N4" }, await KeysAsync(e, sales));
+        Assert.Equal(new[] { $"debt-reminder-staff:{e.StoreId:N}:{Due:yyyyMMdd}:N3", $"debt-reminder-staff:{e.StoreId:N}:{Due.AddDays(14):yyyyMMdd}:N4" }, await KeysAsync(e, sales));
         Assert.Equal(new[]
         {
-            $"debt-reminder-staff:{Due:yyyyMMdd}:N3", $"debt-reminder-staff:{Due.AddDays(14):yyyyMMdd}:N4",
-            $"debt-reminder-staff:{Due.AddDays(30):yyyyMMdd}:N5",
+            $"debt-reminder-staff:{e.StoreId:N}:{Due:yyyyMMdd}:N3", $"debt-reminder-staff:{e.StoreId:N}:{Due.AddDays(14):yyyyMMdd}:N4",
+            $"debt-reminder-staff:{e.StoreId:N}:{Due.AddDays(30):yyyyMMdd}:N5",
         }, await KeysAsync(e, e.User.UserId!.Value));
         Assert.Equal(ledger, await LedgerAsync(e));
     }

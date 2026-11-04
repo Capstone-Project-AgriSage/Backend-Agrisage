@@ -172,8 +172,8 @@ public sealed class NotificationCoverageDatabaseTests
         await service.DebtRemindersAsync(1, Token);
         var notices = await e.Context.Notifications.Where(n => n.NotificationType == "DEBT_OVERDUE" || n.NotificationType == "DEBT_DUE_SOON").ToListAsync(Token);
         Assert.Equal(5, notices.Count);
-        Assert.Equal($"debt-reminder-staff:{today:yyyyMMdd}:N3", Assert.Single(notices, n => n.UserId == owner.User.Id).DeduplicationKey);
-        Assert.Equal($"debt-reminder-staff:{today:yyyyMMdd}:N3", Assert.Single(notices, n => n.UserId == sales.User.Id).DeduplicationKey);
+        Assert.Equal($"debt-reminder-staff:{e.Store.Id:N}:{today:yyyyMMdd}:N3", Assert.Single(notices, n => n.UserId == owner.User.Id).DeduplicationKey);
+        Assert.Equal($"debt-reminder-staff:{e.Store.Id:N}:{today:yyyyMMdd}:N3", Assert.Single(notices, n => n.UserId == sales.User.Id).DeduplicationKey);
         var farmer = notices.Where(n => n.UserId == e.User.Id).Select(n => (n.NotificationType, n.DeduplicationKey!)).OrderBy(n => n.Item2).ToList();
         Assert.Equal(new[]
         {

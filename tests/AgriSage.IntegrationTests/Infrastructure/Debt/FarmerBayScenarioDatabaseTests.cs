@@ -152,8 +152,8 @@ public sealed class FarmerBayScenarioDatabaseTests
         var farmerKeys = await ReminderKeysAsync(e, e.FarmerUserId);
         Assert.Contains($"debt-reminder:{e.FarmerId}:20270414:N2", farmerKeys);
         Assert.Contains($"debt-reminder:{e.FarmerId}:20270414:N3", farmerKeys);
-        Assert.Contains("debt-reminder-staff:20270414:N3", await ReminderKeysAsync(e, owner));
-        Assert.Contains("debt-reminder-staff:20270414:N3", await ReminderKeysAsync(e, sales.UserId));
+        Assert.Contains($"debt-reminder-staff:{e.StoreId:N}:20270414:N3", await ReminderKeysAsync(e, owner));
+        Assert.Contains($"debt-reminder-staff:{e.StoreId:N}:20270414:N3", await ReminderKeysAsync(e, sales.UserId));
         Assert.Equal("DUE_SOON", (await EntryAsync(e, a)).DueState);
 
         // 15/04/2027: one day overdue, and the Farmer can still buy on credit within the remaining limit (CS-10).
