@@ -247,7 +247,7 @@ public sealed class DebtRolloverDatabaseTests
         var disputed = await DebtAsync(e, 2);
         var cancelled = await DebtAsync(e, 3);
         await Run(e, sp => sp.GetRequiredService<IDebtService>().ActionAsync(disputed, "DISPUTE", "Sai số lượng", null, null, Token));
-        await Run(e, sp => sp.GetRequiredService<IDebtService>().ActionAsync(cancelled, "CANCEL", "Miễn nợ", null, null, Token));
+        await Run(e, sp => sp.GetRequiredService<IDebtService>().ActionAsync(cancelled, "CANCEL", "Miễn nợ", null, null, "KHAC", Token));
 
         await Assert.ThrowsAsync<DomainException>(() => Rollover(e, disputed, Request()));
         await Assert.ThrowsAsync<DomainException>(() => Rollover(e, cancelled, Request()));
@@ -310,7 +310,15 @@ public sealed class DebtRolloverDatabaseTests
         var adjust = await Act(adjusted, "ADJUST", 500_000m, null, "TRI_AN");
         var cancel = await Act(cancelled, "CANCEL", null, null, "KHONG_THU_HOI");
         var change = await Act(moved, "CHANGE_DUE_DATE", null, new DateOnly(2026, 12, 1), "SAI_SOT");
-        var old = await Act(legacy, "CHANGE_DUE_DATE", null, new DateOnly(2026, 12, 1), null);
+        // A change recorded before the policy has no code: simulate it by clearing the code of an action made today (A1: a new
+        // change can no longer be made without one).
+        await Act(legacy, "CHANGE_DUE_DATE", null, new DateOnly(2026, 12, 1), "KHAC");
+        using (var s = e.Scope())
+        {
+            await s.ServiceProvider.GetRequiredService<AgriSageDbContext>().Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE debt_entry_actions SET reason_code = NULL WHERE debt_entry_id = {legacy}", Token);
+        }
+        var old = await Run(e, sp => sp.GetRequiredService<IDebtService>().EntryAsync(legacy, Token));
         await Assert.ThrowsAsync<BusinessRuleException>(() => Act(legacy, "ADJUST", 1_000m, null, "BOGUS"));
 
         Assert.Equal(("TRI_AN", false), (Assert.Single(adjust.Actions).ReasonCode, adjust.Actions[0].IsPrePolicy));
@@ -322,6 +330,25 @@ public sealed class DebtRolloverDatabaseTests
         // A dispute is the Farmer's, not a debt change: it is never "pre-policy".
         var dispute = await Run(e, sp => sp.GetRequiredService<IDebtService>().ActionAsync(legacy, "DISPUTE", "Sai", null, null, Token));
         Assert.False(dispute.Actions.Single(a => a.ActionType == "DISPUTE").IsPrePolicy);
+    }
+
+    // A1: adjust, cancel and change-due-date need a reason code; without one (or with an unknown one) nothing is written.
+    [CreditDbFact]
+    public async Task A_debt_change_without_a_reason_code_is_refused_and_writes_nothing()
+    {
+        await using var e = await CreditTestDatabase.StartAsync(Token);
+        var id = await DebtAsync(e);
+        Task<DebtEntryResponse> Act(string action, string? code) => Run(e, sp => sp.GetRequiredService<IDebtService>()
+            .ActionAsync(id, action, "Ghi chú của chủ", action == "ADJUST" ? 1_000m : null, action == "CHANGE_DUE_DATE" ? new DateOnly(2027, 12, 1) : null, code, Token));
+
+        foreach (var action in new[] { "ADJUST", "CANCEL", "CHANGE_DUE_DATE" })
+        {
+            await Assert.ThrowsAsync<BusinessRuleException>(() => Act(action, null));
+            await Assert.ThrowsAsync<BusinessRuleException>(() => Act(action, "BOGUS"));
+        }
+
+        var entry = await EntryAsync(e, id);
+        Assert.Empty(entry.Actions);
     }
 
     // §1.1: changing the due date directly never goes to the past and does not count as a rollover; going past the total

@@ -102,14 +102,14 @@ public sealed class OwnerOnlyDebtDatabaseTests
             await Assert.ThrowsAsync<ForbiddenException>(() => act(s.ServiceProvider)).WaitAsync(Token);
             Assert.True(before == await SnapshotAsync(e, paymentId), $"Data changed after the refused action: {what}");
         }
-        await Refused(p => p.GetRequiredService<IDebtService>().ActionAsync(entryId, "ADJUST", "reason", 100, null, Token), "adjust");
-        await Refused(p => p.GetRequiredService<IDebtService>().ActionAsync(entryId, "CANCEL", "reason", null, null, Token), "cancel");
+        await Refused(p => p.GetRequiredService<IDebtService>().ActionAsync(entryId, "ADJUST", "reason", 100, null, "KHAC", Token), "adjust");
+        await Refused(p => p.GetRequiredService<IDebtService>().ActionAsync(entryId, "CANCEL", "reason", null, null, "KHAC", Token), "cancel");
         await Refused(p => p.GetRequiredService<IDebtService>().ManualAsync(e.FarmerId, new(500_000, new DateOnly(2026, 12, 1), "reason"), Token), "manual entry");
         await Refused(p => p.GetRequiredService<IBankDebtPaymentService>().ConfirmAsync(paymentId, Token), "bank confirm");
         await Refused(p => p.GetRequiredService<IBankDebtPaymentService>().RejectAsync(paymentId, new("reason"), Token), "bank reject");
         await Refused(p => p.GetRequiredService<ICustomerCreditService>().StatusAsync(e.FarmerId, "SUSPENDED", new("reason"), Token), "credit suspend");
         await Refused(p => p.GetRequiredService<ICustomerCreditService>().StatusAsync(e.FarmerId, "BLOCKED", new("reason"), Token), "credit block");
-        await Refused(p => p.GetRequiredService<IDebtService>().ActionAsync(entryId, "CHANGE_DUE_DATE", "reason", null, new DateOnly(2099, 12, 1), Token), "change due date");
+        await Refused(p => p.GetRequiredService<IDebtService>().ActionAsync(entryId, "CHANGE_DUE_DATE", "reason", null, new DateOnly(2099, 12, 1), "KHAC", Token), "change due date");
 
         // Indirect path: the customer form suspends credit when AllowCreditPurchase is switched off.
         await Refused(p => UpdateCustomerAsync(p, allowCredit: false), "credit suspend through the customer form");
@@ -190,8 +190,8 @@ public sealed class OwnerOnlyDebtDatabaseTests
         await bank.ConfirmAsync(confirmed.Id, Token);
         await bank.RejectAsync(rejected.Id, new("Wrong reference"), Token);
         await debt.ManualAsync(e.FarmerId, new(200_000, new DateOnly(2026, 12, 1), "Old balance"), Token);
-        await debt.ActionAsync(entryId, "ADJUST", "Price correction", 100_000, null, Token);
-        await debt.ActionAsync(entryId, "CHANGE_DUE_DATE", "Harvest delayed", null, new DateOnly(2099, 12, 1), Token);
+        await debt.ActionAsync(entryId, "ADJUST", "Price correction", 100_000, null, "KHAC", Token);
+        await debt.ActionAsync(entryId, "CHANGE_DUE_DATE", "Harvest delayed", null, new DateOnly(2099, 12, 1), "KHAC", Token);
         var credit = s.ServiceProvider.GetRequiredService<ICustomerCreditService>();
         await credit.StatusAsync(e.FarmerId, "SUSPENDED", new("Late payer"), Token);
         Assert.Equal(FarmerCreditProfileStatus.Suspended, (await db.FarmerCreditProfiles.AsNoTracking().SingleAsync(Token)).Status);
@@ -226,7 +226,7 @@ public sealed class OwnerOnlyDebtDatabaseTests
 
         using (var s = e.Scope())
         {
-            await Assert.ThrowsAsync<ForbiddenException>(() => s.ServiceProvider.GetRequiredService<IDebtService>().ActionAsync(entryId, "ADJUST", "reason", 100, null, Token));
+            await Assert.ThrowsAsync<ForbiddenException>(() => s.ServiceProvider.GetRequiredService<IDebtService>().ActionAsync(entryId, "ADJUST", "reason", 100, null, "KHAC", Token));
             await Assert.ThrowsAsync<ForbiddenException>(() => s.ServiceProvider.GetRequiredService<IBankDebtPaymentService>().ConfirmAsync(paymentId, Token));
             await Assert.ThrowsAsync<ForbiddenException>(() => s.ServiceProvider.GetRequiredService<ICustomerCreditService>().StatusAsync(e.FarmerId, "BLOCKED", new("reason"), Token));
         }
@@ -252,8 +252,8 @@ public sealed class OwnerOnlyDebtDatabaseTests
         using (var s = e.Scope())
         {
             var debt = s.ServiceProvider.GetRequiredService<IDebtService>();
-            await Assert.ThrowsAsync<NotFoundException>(() => debt.ActionAsync(foreignId, "ADJUST", "reason", 10, null, Token));
-            await Assert.ThrowsAsync<NotFoundException>(() => debt.ActionAsync(foreignId, "CANCEL", "reason", null, null, Token));
+            await Assert.ThrowsAsync<NotFoundException>(() => debt.ActionAsync(foreignId, "ADJUST", "reason", 10, null, "KHAC", Token));
+            await Assert.ThrowsAsync<NotFoundException>(() => debt.ActionAsync(foreignId, "CANCEL", "reason", null, null, "KHAC", Token));
         }
         using var verify = e.Scope(); var check = verify.ServiceProvider.GetRequiredService<AgriSageDbContext>();
         var foreign = await check.DebtEntries.IgnoreQueryFilters().AsNoTracking().SingleAsync(x => x.Id == foreignId, Token);

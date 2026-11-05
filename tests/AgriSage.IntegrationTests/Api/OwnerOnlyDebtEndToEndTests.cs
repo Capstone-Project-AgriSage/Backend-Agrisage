@@ -76,22 +76,22 @@ public sealed class OwnerOnlyDebtEndToEndTests(StaffHttpTests.StaffApiFactory fa
         // Sale staff holding every owner-only permission by delegation: refused on each route, and nothing changed.
         using (var client = await AsAsync(staff.UserId, "SALES_STAFF"))
         {
-            Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync($"/api/debt-entries/{entryId}/adjust", new { amount = 100, reason = "r" }, token)).StatusCode);
-            Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync($"/api/debt-entries/{entryId}/cancel", new { reason = "r" }, token)).StatusCode);
-            Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync($"/api/customers/{e.FarmerId}/debt/manual-entries", new { amount = 100, dueDate = "2026-12-01", reason = "r" }, token)).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync($"/api/debt-entries/{entryId}/adjust", new { amount = 100, reason = "r", reasonCode = "KHAC" }, token)).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync($"/api/debt-entries/{entryId}/cancel", new { reason = "r", reasonCode = "KHAC" }, token)).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync($"/api/customers/{e.FarmerId}/debt/manual-entries", new { amount = 100, dueDate = "2026-12-01", reason = "r", reasonCode = "KHAC" }, token)).StatusCode);
             Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsync($"/api/payments/{paymentId}/confirm", null, token)).StatusCode);
-            Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync($"/api/payments/{paymentId}/reject", new { reason = "r" }, token)).StatusCode);
-            Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync($"/api/customers/{e.FarmerId}/credit/suspend", new { reason = "r" }, token)).StatusCode);
-            Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync($"/api/customers/{e.FarmerId}/credit/block", new { reason = "r" }, token)).StatusCode);
-            Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync($"/api/customers/{e.FarmerId}/credit/activate", new { reason = "r" }, token)).StatusCode);
-            Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync($"/api/debt-entries/{entryId}/change-due-date", new { newDueDate = "2099-12-01", reason = "r" }, token)).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync($"/api/payments/{paymentId}/reject", new { reason = "r", reasonCode = "KHAC" }, token)).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync($"/api/customers/{e.FarmerId}/credit/suspend", new { reason = "r", reasonCode = "KHAC" }, token)).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync($"/api/customers/{e.FarmerId}/credit/block", new { reason = "r", reasonCode = "KHAC" }, token)).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync($"/api/customers/{e.FarmerId}/credit/activate", new { reason = "r", reasonCode = "KHAC" }, token)).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync($"/api/debt-entries/{entryId}/change-due-date", new { newDueDate = "2099-12-01", reason = "r", reasonCode = "KHAC" }, token)).StatusCode);
         }
         Assert.Equal(before, await OwnerOnlyDebtDatabaseTests.SnapshotAsync(e, paymentId));
 
         // The owner of the store passes the same gates and the change is written.
         using (var client = await AsAsync(ownerId, "STORE_OWNER"))
         {
-            Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync($"/api/debt-entries/{entryId}/adjust", new { amount = 100, reason = "Price correction" }, token)).StatusCode);
+            Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync($"/api/debt-entries/{entryId}/adjust", new { amount = 100, reason = "Price correction", reasonCode = "KHAC" }, token)).StatusCode);
             Assert.Equal(HttpStatusCode.OK, (await client.PostAsync($"/api/payments/{paymentId}/confirm", null, token)).StatusCode);
         }
         using var verify = e.Scope(); var db = verify.ServiceProvider.GetRequiredService<AgriSageDbContext>();

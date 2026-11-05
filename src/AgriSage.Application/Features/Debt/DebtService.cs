@@ -242,8 +242,9 @@ public sealed class DebtService(IAgriSageDbContext db, IRowLockService locks, ID
             "CHANGE_DUE_DATE" => await access.OwnerActorAsync("DEBT.DUE_DATE", token),
             _ => access.Actor(),
         };
-        // D7: the code is stored with the debt changes; it stays optional until it becomes mandatory (F3.22).
-        var code = action is "ADJUST" or "CANCEL" or "CHANGE_DUE_DATE" ? DebtReasonCodeText.Parse(reasonCode) : null;
+        // D7 (A1, F3.22): every debt change carries one of the 7 reason codes, so a change recorded without a code is a change made
+        // before the policy (IsPrePolicy is derived from that).
+        var code = action is "ADJUST" or "CANCEL" or "CHANGE_DUE_DATE" ? (DebtReasonCode?)DebtReasonCodeText.Require(reasonCode) : null;
         return await ActionCoreAsync(id, action, reason, amount, dueDate, actor, token, code);
     }
 

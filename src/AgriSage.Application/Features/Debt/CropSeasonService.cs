@@ -120,7 +120,7 @@ public sealed class CropSeasonService(
                 throw new BusinessRuleException("Recorded debt can only be given a later due date, never an earlier one.");
             }
 
-            extension = await ExtendCollectingDebtAsync(season, oldDue, request.Reason!.Trim(), actor, token);
+            extension = await ExtendCollectingDebtAsync(season, oldDue, request.Reason!.Trim(), actor, DebtReasonCodeText.Require(request.ReasonCode), token);
         }
 
         audit.Record("CROP_SEASON_UPDATED", "CROP_SEASON", season.Id, store, before,
@@ -160,7 +160,7 @@ public sealed class CropSeasonService(
     // decides those). Runs under the store lock; every Farmer concerned is locked too, in id order (as the season-wide rollover
     // does), and the entries are read AFTER the locks, so a payment, an adjustment, a dispute or a rollover that was running
     // is seen as committed — never overwritten, never missed.
-    private async Task<DebtExtensionResult> ExtendCollectingDebtAsync(CropSeason season, DateOnly oldDue, string reason, Guid actor, CancellationToken token)
+    private async Task<DebtExtensionResult> ExtendCollectingDebtAsync(CropSeason season, DateOnly oldDue, string reason, Guid actor, DebtReasonCode code, CancellationToken token)
     {
         IQueryable<DebtEntry> Candidates() => db.DebtEntries.Where(e => e.CollectionCropSeasonId == season.Id && e.DueDate == oldDue
             && e.OutstandingAmount > 0 && e.Status != DebtEntryStatus.Paid && e.Status != DebtEntryStatus.Cancelled
@@ -191,9 +191,9 @@ public sealed class CropSeasonService(
         var entries = await Candidates().Include(e => e.Actions).ToListAsync(token);
         foreach (var entry in entries)
         {
-            var action = entry.ChangeDueDate(season.PaymentDueDate, reason, actor);
+            var action = entry.ChangeDueDate(season.PaymentDueDate, reason, actor, code);
             audit.Record("DEBT_CHANGE_DUE_DATE", "DEBT_ENTRY", entry.Id, season.StoreId,
-                new { dueDate = oldDue }, new { dueDate = season.PaymentDueDate, cropSeasonId = season.Id, actionId = action.Id }, reason);
+                new { dueDate = oldDue }, new { dueDate = season.PaymentDueDate, cropSeasonId = season.Id, actionId = action.Id, reasonCode = EnumText.Format(code) }, reason);
         }
 
         var skipped = await db.DebtEntries.CountAsync(e => e.CollectionCropSeasonId == season.Id && e.DueDate == oldDue

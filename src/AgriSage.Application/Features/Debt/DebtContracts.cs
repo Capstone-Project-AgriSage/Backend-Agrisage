@@ -40,7 +40,7 @@ public sealed record DebtTransactionListRequest : PaginationRequest
     public DateOnly? ToDate { get; init; }
 }
 public sealed record DebtReasonRequest(string Reason);
-// ReasonCode (D7, CS-11): optional until it becomes mandatory; a code that is sent must be one of the 7 codes.
+// ReasonCode (D7, CS-11, A1): required, one of the 7 codes.
 public sealed record DebtAdjustmentRequest(decimal Amount, string Reason, string? ReasonCode = null);
 public sealed record DebtCancelRequest(string Reason, string? ReasonCode = null);
 public sealed record DebtDueDateRequest(DateOnly NewDueDate, string Reason, string? ReasonCode = null);
@@ -148,7 +148,7 @@ public sealed class DebtAdjustmentRequestValidator : AbstractValidator<DebtAdjus
     {
         RuleFor(r => r.Amount).Must(a => a > 0 && Credit.CreditMoney.Valid(a));
         RuleFor(r => r.Reason).NotEmpty().MaximumLength(1000);
-        RuleFor(r => r.ReasonCode).Must(DebtReasonCodeText.IsKnown).When(r => r.ReasonCode is not null).WithMessage(DebtReasonCodeText.Unknown);
+        RuleFor(r => r.ReasonCode).NotEmpty().Must(DebtReasonCodeText.IsKnown).WithMessage(DebtReasonCodeText.Unknown);
     }
 }
 public sealed class ManualDebtEntryRequestValidator : AbstractValidator<ManualDebtEntryRequest>
@@ -167,7 +167,7 @@ public sealed class DebtDueDateRequestValidator : AbstractValidator<DebtDueDateR
     public DebtDueDateRequestValidator()
     {
         RuleFor(r => r.Reason).NotEmpty().MaximumLength(1000); RuleFor(r => r.NewDueDate).NotEmpty();
-        RuleFor(r => r.ReasonCode).Must(DebtReasonCodeText.IsKnown).When(r => r.ReasonCode is not null).WithMessage(DebtReasonCodeText.Unknown);
+        RuleFor(r => r.ReasonCode).NotEmpty().Must(DebtReasonCodeText.IsKnown).WithMessage(DebtReasonCodeText.Unknown);
     }
 }
 public sealed class DebtCancelRequestValidator : AbstractValidator<DebtCancelRequest>
@@ -175,7 +175,7 @@ public sealed class DebtCancelRequestValidator : AbstractValidator<DebtCancelReq
     public DebtCancelRequestValidator()
     {
         RuleFor(r => r.Reason).NotEmpty().MaximumLength(1000);
-        RuleFor(r => r.ReasonCode).Must(DebtReasonCodeText.IsKnown).When(r => r.ReasonCode is not null).WithMessage(DebtReasonCodeText.Unknown);
+        RuleFor(r => r.ReasonCode).NotEmpty().Must(DebtReasonCodeText.IsKnown).WithMessage(DebtReasonCodeText.Unknown);
     }
 }
 
@@ -186,7 +186,10 @@ public static class DebtReasonCodeText
 
     public static bool IsKnown(string? text) => EnumText.TryParse<DebtReasonCode>(text, out _);
 
-    // Null when no code was sent; an unknown code is refused (the request validators refuse it first with 400).
+    // A change needs a code: a missing or unknown one is refused (the request validators refuse it first with 400).
+    public static DebtReasonCode Require(string? text) => Parse(text) ?? throw new Common.Exceptions.BusinessRuleException("A reason code is required. " + Unknown);
+
+    // Null when no code was sent; an unknown code is refused.
     public static DebtReasonCode? Parse(string? text) => text is null ? null
         : EnumText.TryParse<DebtReasonCode>(text, out var code) ? code
         : throw new Common.Exceptions.BusinessRuleException(Unknown);

@@ -119,11 +119,11 @@ public sealed class CropSeasonDatabaseTests
         Assert.Equal(new DateOnly(2027, 4, 14), await DueAsync(e, followsId));
 
         await Assert.ThrowsAsync<BusinessRuleException>(() => Run(e, s => s.UpdateAsync(dx.Id,
-            new("Đông Xuân", new DateOnly(2027, 2, 15), new DateOnly(2027, 3, 10), 30, kept.Version, ApplyNewDueDateToCollectingDebts: true, Reason: "Earlier"), Token)));
+            new("Đông Xuân", new DateOnly(2027, 2, 15), new DateOnly(2027, 3, 10), 30, kept.Version, ApplyNewDueDateToCollectingDebts: true, Reason: "Earlier", ReasonCode: "KHO_KHAN"), Token)));
 
         // The season due date is now 24/04; entries still on it move together with the next change.
         await Run(e, s => s.UpdateAsync(dx.Id, new("Đông Xuân", new DateOnly(2027, 2, 15), new DateOnly(2027, 3, 25), 40, kept.Version,
-            ApplyNewDueDateToCollectingDebts: true, Reason: "Lũ làm trễ thu hoạch"), Token));
+            ApplyNewDueDateToCollectingDebts: true, Reason: "Lũ làm trễ thu hoạch", ReasonCode: "KHO_KHAN"), Token));
         Assert.Equal(new DateOnly(2027, 4, 14), await DueAsync(e, followsId)); // it was on the old 14/04, not on 24/04
 
         using (var s = e.Scope())
@@ -133,7 +133,7 @@ public sealed class CropSeasonDatabaseTests
         }
         var current = await Run(e, s => s.GetAsync(dx.Id, Token));
         await Run(e, s => s.UpdateAsync(dx.Id, new("Đông Xuân", new DateOnly(2027, 2, 15), new DateOnly(2027, 3, 25), 60, current.Version,
-            ApplyNewDueDateToCollectingDebts: true, Reason: "Lũ làm trễ thu hoạch"), Token));
+            ApplyNewDueDateToCollectingDebts: true, Reason: "Lũ làm trễ thu hoạch", ReasonCode: "KHO_KHAN"), Token));
         Assert.Equal(new DateOnly(2027, 5, 24), await DueAsync(e, followsId));
         Assert.Equal(new DateOnly(2027, 2, 1), await DueAsync(e, ownId));
         using var verify = e.Scope();

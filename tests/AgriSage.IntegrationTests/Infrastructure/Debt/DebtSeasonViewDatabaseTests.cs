@@ -212,7 +212,7 @@ public sealed class DebtSeasonViewDatabaseTests
         var paid = await DebtAsync(e);
         await SetAsync(e, a, new DateOnly(2027, 4, 14), dx.Id);
         await SetAsync(e, b, new DateOnly(2027, 4, 14), dx.Id);
-        await Debts(e, d => d.ActionAsync(paid, "CANCEL", "Miễn nợ", null, null, Token));
+        await Debts(e, d => d.ActionAsync(paid, "CANCEL", "Miễn nợ", null, null, "KHAC", Token));
 
         Guid otherEntry;
         using (var s = e.Scope())

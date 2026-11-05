@@ -62,7 +62,8 @@ public sealed record UpdateCropSeasonRequest(
     long Version,
     Guid? SeasonalRuleId = null,
     bool ApplyNewDueDateToCollectingDebts = false,
-    string? Reason = null);
+    string? Reason = null,
+    string? ReasonCode = null);
 
 // The season a Farmer's credit order placed today would belong to, with its due date. Only an estimate: debt is created
 // on delivery (D15). DueRule: SEASON, CAPPED (store term cap), TERM_DAYS (credit-tier term, no season) or NONE (no credit).
@@ -122,5 +123,6 @@ public sealed class UpdateCropSeasonRequestValidator : AbstractValidator<UpdateC
         RuleFor(r => r.Version).GreaterThanOrEqualTo(0);
         RuleFor(r => r.SeasonalRuleId).NotEqual(Guid.Empty).When(r => r.SeasonalRuleId.HasValue);
         RuleFor(r => r.Reason).NotEmpty().MaximumLength(1000).When(r => r.ApplyNewDueDateToCollectingDebts);
+        RuleFor(r => r.ReasonCode).NotEmpty().Must(DebtReasonCodeText.IsKnown).WithMessage(DebtReasonCodeText.Unknown).When(r => r.ApplyNewDueDateToCollectingDebts);
     }
 }

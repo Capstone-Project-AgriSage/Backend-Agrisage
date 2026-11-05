@@ -43,7 +43,7 @@ public sealed class CropSeasonExtendDebtDatabaseTests
     private static Task<CropSeasonResponse> ExtendAsync(CreditTestDatabase e, Guid dx, long version) =>
         Run(e, sp => sp.GetRequiredService<ICropSeasonService>().UpdateAsync(dx,
             new("Đông Xuân", new DateOnly(2027, 2, 15), new DateOnly(2027, 3, 15), 60, version,
-                ApplyNewDueDateToCollectingDebts: true, Reason: "Lũ làm trễ thu hoạch"), Token));
+                ApplyNewDueDateToCollectingDebts: true, Reason: "Lũ làm trễ thu hoạch", ReasonCode: "KHO_KHAN"), Token));
 
     private static async Task<Guid> DebtAsync(CreditTestDatabase e, Guid farmer, Guid season, decimal amount = 1_000_000m) =>
         (await Run(e, sp => sp.GetRequiredService<IDebtService>().ManualAsync(farmer, new(amount, null, "Nợ vụ", season), Token))).Id;
@@ -66,6 +66,32 @@ public sealed class CropSeasonExtendDebtDatabaseTests
         using var s = e.Scope();
         var row = await s.ServiceProvider.GetRequiredService<AgriSageDbContext>().DebtEntries.AsNoTracking().SingleAsync(x => x.Id == entry, Token);
         return (row.DueDate, row.Status.ToString());
+    }
+
+    // A1: applying the new date to the debts is a due-date change of each entry, so it needs a reason code; without one nothing
+    // changes (the season keeps its dates too), with one every moved action stores it (so none shows as "before the policy").
+    [CreditDbFact]
+    public async Task Applying_the_new_date_needs_a_reason_code_and_stores_it_on_each_moved_entry()
+    {
+        await using var e = await CreditTestDatabase.StartAsync(Token);
+        var (dx, version) = await SeasonsAsync(e);
+        var entry = await DebtAsync(e, e.FarmerId, dx);
+
+        Task<CropSeasonResponse> Update(string? code) => Run(e, sp => sp.GetRequiredService<ICropSeasonService>().UpdateAsync(dx,
+            new("Đông Xuân", new DateOnly(2027, 2, 15), new DateOnly(2027, 3, 15), 60, version,
+                ApplyNewDueDateToCollectingDebts: true, Reason: "Lũ làm trễ thu hoạch", ReasonCode: code), Token));
+
+        await Assert.ThrowsAsync<BusinessRuleException>(() => Update(null));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => Update("BOGUS"));
+        Assert.Equal(OldDue, (await StateAsync(e, entry)).Due);
+        Assert.Equal(30, (await Run(e, sp => sp.GetRequiredService<ICropSeasonService>().GetAsync(dx, Token))).GraceDays);
+
+        await Update("KHO_KHAN");
+        Assert.Equal(NewDue, (await StateAsync(e, entry)).Due);
+        using var s = e.Scope();
+        var action = await s.ServiceProvider.GetRequiredService<AgriSageDbContext>().DebtEntryActions.AsNoTracking()
+            .SingleAsync(a => a.DebtEntryId == entry && a.ActionType == DebtEntryActionType.ChangeDueDate, Token);
+        Assert.Equal(DebtReasonCode.KhoKhan, action.ReasonCode);
     }
 
     // Disputed entries wait for the owner's decision: the season's new date does not move them. Everything else that is still

@@ -167,8 +167,8 @@ public sealed class DelegatedCustomerPermissionDatabaseTests
         Task<int> LedgerAsync() => db.DebtTransactions.AsNoTracking().CountAsync(t => t.DebtEntryId == entry.Id || t.DebtEntryId == cancelled.Id, Token);
         var ledgerBefore = await LedgerAsync();
         await Assert.ThrowsAsync<ForbiddenException>(() => env.Debt.ManualAsync(env.Farmer.Id, new(50, due, "Staff debt"), Token));
-        await Assert.ThrowsAsync<ForbiddenException>(() => env.Debt.ActionAsync(entry.Id, "ADJUST", "Correction", 50, null, Token));
-        await Assert.ThrowsAsync<ForbiddenException>(() => env.Debt.ActionAsync(cancelled.Id, "CANCEL", "Cancel erroneous debt", null, null, Token));
+        await Assert.ThrowsAsync<ForbiddenException>(() => env.Debt.ActionAsync(entry.Id, "ADJUST", "Correction", 50, null, "KHAC", Token));
+        await Assert.ThrowsAsync<ForbiddenException>(() => env.Debt.ActionAsync(cancelled.Id, "CANCEL", "Cancel erroneous debt", null, null, "KHAC", Token));
         await Assert.ThrowsAsync<ForbiddenException>(() => env.Bank.RejectAsync(payment.Id, new("Declined bank receipt"), Token));
         await Assert.ThrowsAsync<ForbiddenException>(() => env.Bank.ConfirmAsync(confirmed.Id, Token));
         db.ChangeTracker.Clear();
@@ -176,11 +176,11 @@ public sealed class DelegatedCustomerPermissionDatabaseTests
         Assert.Equal(300, (await env.Debt.EntryAsync(entry.Id, Token)).OutstandingAmount);
 
         env.As(env.Owner);
-        Assert.Equal(250, (await env.Debt.ActionAsync(entry.Id, "ADJUST", "Correction", 50, null, Token)).OutstandingAmount);
+        Assert.Equal(250, (await env.Debt.ActionAsync(entry.Id, "ADJUST", "Correction", 50, null, "KHAC", Token)).OutstandingAmount);
         Assert.Equal("FAILED", (await env.Bank.RejectAsync(payment.Id, new("Declined bank receipt"), Token)).Status);
         Assert.Equal("PAID", (await env.Bank.ConfirmAsync(confirmed.Id, Token)).Status);
         Assert.Equal(150, (await env.Debt.EntryAsync(entry.Id, Token)).OutstandingAmount);
-        Assert.Equal("CANCELLED", (await env.Debt.ActionAsync(cancelled.Id, "CANCEL", "Cancel erroneous debt", null, null, Token)).Status);
+        Assert.Equal("CANCELLED", (await env.Debt.ActionAsync(cancelled.Id, "CANCEL", "Cancel erroneous debt", null, null, "KHAC", Token)).Status);
         Assert.True(await db.DebtTransactions.AsNoTracking().CountAsync(t => t.DebtEntryId == entry.Id, Token) >= 3);
     }
 }
