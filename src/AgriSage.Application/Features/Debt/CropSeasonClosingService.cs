@@ -89,9 +89,13 @@ public sealed class CropSeasonClosingService(
         return new(items, request.Page, request.PageSize, total);
     }
 
-    // D12 / CS-14: the customers whose every debt that arose in each of the last N closed seasons (N from the debt policy)
-    // was paid by real payments on or before its original due date, never rolled over, moved, reduced, forgiven or returned.
-    public async Task<LimitSuggestionsResponse> LimitSuggestionsAsync(Guid seasonId, CancellationToken token)
+    // D12 / CS-14 (rule agreed with the Lead on 05/11; the details marked [assumption] are "de xuat - cho duyet"): a season in
+    // which the customer owed nothing is skipped when counting. The customer is suggested when the season being closed holds
+    // debt of theirs [assumption: the suggestion is about customers who bought on credit this season] and their last N seasons
+    // with debt (N from the debt policy), counted back from it, were all on time: every debt that arose in the season was paid
+    // by real payments on or before its original due date, never rolled over, moved, reduced, forgiven or returned.
+    // Ordered by the number of consecutive on-time seasons with debt, most first, then by name; paged (20 by default).
+    public async Task<LimitSuggestionsResponse> LimitSuggestionsAsync(Guid seasonId, LimitSuggestionsRequest request, CancellationToken token)
     {
         var store = await ActiveStore.GetIdAsync(db, token);
         var chain = await db.CropSeasons.AsNoTracking().Where(s => s.StoreId == store).OrderBy(s => s.HarvestStart).ToListAsync(token);
@@ -101,13 +105,15 @@ public sealed class CropSeasonClosingService(
         var policy = await db.StoreDebtPolicies.AsNoTracking().SingleOrDefaultAsync(p => p.StoreId == store, token)
             ?? new StoreDebtPolicy(store);
         var required = policy.OnTimeSeasonsForLimitRaise;
-        var window = index + 1 >= required ? chain.GetRange(index + 1 - required, required) : [];
-        if (window.Count == 0 || window.Any(s => !s.IsClosed)) return new(seasonId, required, [], []);
+        // The seasons up to this one that are closed, oldest first; the reference window is the last N of them.
+        var closed = chain.Take(index + 1).Where(s => s.IsClosed).ToList();
+        if (closed.Count < required) return new(seasonId, required, [], [], request.Page, request.PageSize, 0);
+        var reference = closed.GetRange(closed.Count - required, required).Select(s => new DebtSeasonReference(s.Id, s.Code, s.Name)).ToList();
 
-        var windowIds = window.Select(s => s.Id).ToList();
+        var closedIds = closed.Select(s => s.Id).ToList();
         var entries = await (from e in db.DebtEntries.AsNoTracking()
                              join a in db.DebtAccounts.AsNoTracking() on e.DebtAccountId equals a.Id
-                             where a.StoreId == store && e.OriginCropSeasonId != null && windowIds.Contains(e.OriginCropSeasonId.Value)
+                             where a.StoreId == store && e.OriginCropSeasonId != null && closedIds.Contains(e.OriginCropSeasonId.Value)
                              select new
                              {
                                  e.Id, Season = e.OriginCropSeasonId!.Value, a.FarmerProfileId, e.Status, e.RolloverCount, e.DueDate,
@@ -130,20 +136,31 @@ public sealed class CropSeasonClosingService(
                 && BusinessCalendar.Today(payments.Max(m => m.OccurredAt)) <= original;
         }
 
-        var qualified = entries.GroupBy(e => e.FarmerProfileId)
-            .Where(g => windowIds.All(season => g.Any(e => e.Season == season))
-                && g.All(e => OnTime(e.Id, e.Status, e.RolloverCount, e.DueDate, e.OriginalDueDate)))
-            .ToDictionary(g => g.Key, g => (Paid: g.Sum(e => e.OriginalAmount),
-                Last: BusinessCalendar.Today(g.SelectMany(e => byEntry[e.Id]).Max(m => m.OccurredAt))));
+        var position = closed.Select((s, i) => (s.Id, i)).ToDictionary(x => x.Id, x => x.i);
+        var qualified = new Dictionary<Guid, (int OnTimeSeasons, decimal Paid, DateOnly Last)>();
+        foreach (var farmer in entries.GroupBy(e => e.FarmerProfileId))
+        {
+            // The seasons with debt of this customer, newest first. The season being closed must be the newest.
+            var seasons = farmer.GroupBy(e => e.Season).OrderByDescending(g => position[g.Key]).ToList();
+            if (seasons[0].Key != seasonId) continue;
+            var streak = seasons.TakeWhile(g => g.All(e => OnTime(e.Id, e.Status, e.RolloverCount, e.DueDate, e.OriginalDueDate))).ToList();
+            if (streak.Count < required) continue;
+            var counted = streak.Take(required).SelectMany(g => g).ToList();
+            qualified[farmer.Key] = (streak.Count, counted.Sum(e => e.OriginalAmount),
+                BusinessCalendar.Today(counted.SelectMany(e => byEntry[e.Id]).Max(m => m.OccurredAt)));
+        }
+
         var farmers = qualified.Keys.ToList();
         var profiles = await db.FarmerCreditProfiles.AsNoTracking()
             .Where(p => p.StoreId == store && farmers.Contains(p.FarmerProfileId))
             .Select(p => new { p.FarmerProfileId, p.FarmerProfile.User.FullName, p.FarmerProfile.User.PhoneNumber, p.CreditLimit, p.Status })
             .ToListAsync(token);
-        return new(seasonId, required, window.Select(s => new DebtSeasonReference(s.Id, s.Code, s.Name)).ToList(),
-            profiles.OrderBy(p => p.FullName).ThenBy(p => p.FarmerProfileId)
-                .Select(p => new LimitSuggestionItem(p.FarmerProfileId, p.FullName, p.PhoneNumber, p.CreditLimit, EnumText.Format(p.Status),
-                    qualified[p.FarmerProfileId].Paid, qualified[p.FarmerProfileId].Last)).ToList());
+        var ordered = profiles.OrderByDescending(p => qualified[p.FarmerProfileId].OnTimeSeasons)
+            .ThenBy(p => p.FullName, StringComparer.CurrentCultureIgnoreCase).ThenBy(p => p.FarmerProfileId).ToList();
+        var items = ordered.Skip(request.Skip).Take(request.PageSize)
+            .Select(p => new LimitSuggestionItem(p.FarmerProfileId, p.FullName, p.PhoneNumber, p.CreditLimit, EnumText.Format(p.Status),
+                qualified[p.FarmerProfileId].Paid, qualified[p.FarmerProfileId].Last, qualified[p.FarmerProfileId].OnTimeSeasons)).ToList();
+        return new(seasonId, required, reference, items, request.Page, request.PageSize, ordered.Count);
     }
 
     // D11: a collecting season with no debt still collected in it (disputed included) and no unfinished credit order of it.

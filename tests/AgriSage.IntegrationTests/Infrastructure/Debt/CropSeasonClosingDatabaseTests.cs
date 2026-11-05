@@ -377,6 +377,62 @@ public sealed class CropSeasonClosingDatabaseTests
         Assert.Equal((2L, "HT-2027"), (page.TotalCount, Assert.Single(page.Items).Season.Code));
     }
 
+    // D12 (Lead, 05/11): a season without debt is skipped when counting the last N seasons; the season being closed must hold
+    // debt of the customer; ordered by consecutive on-time seasons (most first) then name; paged.
+    [CreditDbFact]
+    public async Task Limit_suggestions_skip_seasons_without_debt_and_are_ordered_and_paged()
+    {
+        await using var e = await CreditTestDatabase.StartAsync(Token);
+        var (dx, ht) = await SeasonsAsync(e);
+        var dx2Due = new DateOnly(2028, 4, 14);
+        var dx2 = await Run(e, sp => sp.GetRequiredService<ICropSeasonService>().CreateAsync(
+            new("DX-2027", "Đông Xuân 2027–2028", new DateOnly(2028, 2, 15), new DateOnly(2028, 3, 15), 30), Token));
+        var steady = await FarmerAsync(e, "Bình Đều");
+        var skipper = await FarmerAsync(e, "An Nghỉ Vụ");
+        var lateFirst = await FarmerAsync(e, "Dũng Trễ Đầu");
+        var onlyThis = await FarmerAsync(e, "Chỉ Vụ Này");
+        var notThis = await FarmerAsync(e, "Không Nợ Vụ Này");
+        var plain = e.FarmerId;                                                       // "Farmer Test": Đông Xuân and Đông Xuân 2
+
+        At(e, 2026, 12, 1);
+        foreach (var f in new[] { plain, steady, skipper, lateFirst, notThis }) await DebtAsync(e, f, 1_000_000m, dx.Id, DxDue);
+        At(e, 2027, 4, 14);
+        foreach (var f in new[] { plain, steady, skipper, notThis }) await PayAsync(e, f, 1_000_000m);
+        At(e, 2027, 4, 20);                                                          // six days late
+        await PayAsync(e, lateFirst, 1_000_000m);
+        At(e, 2027, 4, 28);
+        await CloseAsync(e, dx.Id);
+
+        At(e, 2027, 5, 1);                                                           // Hè Thu: skipper and plain owe nothing
+        foreach (var f in new[] { steady, lateFirst, notThis }) await DebtAsync(e, f, 2_000_000m, ht.Id, HtDue);
+        At(e, 2027, 9, 10);
+        foreach (var f in new[] { steady, lateFirst, notThis }) await PayAsync(e, f, 2_000_000m);
+        At(e, 2027, 9, 30);
+        await CloseAsync(e, ht.Id);
+
+        At(e, 2027, 11, 1);                                                          // Đông Xuân 2: notThis owes nothing
+        foreach (var f in new[] { plain, steady, skipper, lateFirst, onlyThis }) await DebtAsync(e, f, 500_000m, dx2.Id, dx2Due);
+        At(e, 2028, 4, 1);
+        foreach (var f in new[] { plain, steady, skipper, lateFirst, onlyThis }) await PayAsync(e, f, 500_000m);
+        At(e, 2028, 4, 20);
+        await CloseAsync(e, dx2.Id);
+
+        // N = 2: the last two seasons WITH debt, whichever they are. Streak: steady 3, then name order among 2.
+        var all = await Closing(e, x => x.LimitSuggestionsAsync(dx2.Id, new(), Token));
+        Assert.Equal([steady, skipper, lateFirst, plain], all.Items.Select(i => i.FarmerProfileId).ToList());
+        Assert.Equal([3, 2, 2, 2], all.Items.Select(i => i.OnTimeSeasons).ToList());
+        Assert.Equal(4, all.TotalCount);
+        // lateFirst is late in Đông Xuân, but its last two seasons with debt (Hè Thu, Đông Xuân 2) were on time: 500k + 2M.
+        Assert.Equal(2_500_000m, all.Items.Single(i => i.FarmerProfileId == lateFirst).PaidAmount);
+        Assert.DoesNotContain(all.Items, i => i.FarmerProfileId == onlyThis || i.FarmerProfileId == notThis);
+
+        var page1 = await Closing(e, x => x.LimitSuggestionsAsync(dx2.Id, new() { Page = 1, PageSize = 2 }, Token));
+        var page2 = await Closing(e, x => x.LimitSuggestionsAsync(dx2.Id, new() { Page = 2, PageSize = 2 }, Token));
+        Assert.Equal([steady, skipper], page1.Items.Select(i => i.FarmerProfileId).ToList());
+        Assert.Equal([lateFirst, plain], page2.Items.Select(i => i.FarmerProfileId).ToList());
+        Assert.Equal((4, 4), (page1.TotalCount, page2.TotalCount));
+    }
+
     // D12 / CS-14: every debt of the customer that arose in each of the last N closed seasons (policy, default 2) was paid by
     // real payments on or before its original due date, never rolled over, moved, reduced or forgiven.
     [CreditDbFact]
@@ -412,14 +468,14 @@ public sealed class CropSeasonClosingDatabaseTests
         await PayAsync(e, late, 2_000_000m);
 
         // An open season gives no suggestion; Đông Xuân alone is not two seasons yet.
-        await Assert.ThrowsAsync<BusinessRuleException>(() => Closing(e, x => x.LimitSuggestionsAsync(ht.Id, Token)));
-        var first = await Closing(e, x => x.LimitSuggestionsAsync(dx.Id, Token));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => Closing(e, x => x.LimitSuggestionsAsync(ht.Id, new(), Token)));
+        var first = await Closing(e, x => x.LimitSuggestionsAsync(dx.Id, new(), Token));
         Assert.Equal((2, 0), (first.RequiredSeasons, first.Items.Count));
         Assert.Empty(first.Seasons);
 
         At(e, 2027, 9, 30);
         await CloseAsync(e, ht.Id);
-        var suggestions = await Closing(e, x => x.LimitSuggestionsAsync(ht.Id, Token));
+        var suggestions = await Closing(e, x => x.LimitSuggestionsAsync(ht.Id, new(), Token));
         Assert.Equal(["DX-2026", "HT-2027"], suggestions.Seasons.Select(s => s.Code).ToList());
         var item = Assert.Single(suggestions.Items);
         Assert.Equal((onTime, "Farmer Test", 20_000_000m, "ACTIVE", 3_000_000m, new DateOnly(2027, 9, 10)),
@@ -434,9 +490,9 @@ public sealed class CropSeasonClosingDatabaseTests
             db.StoreDebtPolicies.Add(policy);
             await db.SaveChangesAsync(Token);
         }
-        var one = await Closing(e, x => x.LimitSuggestionsAsync(dx.Id, Token));
+        var one = await Closing(e, x => x.LimitSuggestionsAsync(dx.Id, new(), Token));
         Assert.Equal(new[] { onTime, late, reduced }.Order(), one.Items.Select(i => i.FarmerProfileId).Order());
-        var htOnly = await Closing(e, x => x.LimitSuggestionsAsync(ht.Id, Token));
+        var htOnly = await Closing(e, x => x.LimitSuggestionsAsync(ht.Id, new(), Token));
         Assert.Equal(new[] { onTime, onlyHt }.Order(), htOnly.Items.Select(i => i.FarmerProfileId).Order());
         // Nothing changed any credit limit.
         using var verify = e.Scope();

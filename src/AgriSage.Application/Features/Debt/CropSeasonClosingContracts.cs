@@ -65,7 +65,8 @@ public sealed record LimitSuggestionItem(
     decimal CreditLimit,
     string CreditStatus,
     decimal PaidAmount,
-    DateOnly LastPaidOn);
+    DateOnly LastPaidOn,
+    int OnTimeSeasons = 0);
 
 // Seasons: the closed seasons checked (empty when fewer than RequiredSeasons exist up to this one). Read-only: the owner
 // raises a limit through the existing credit-limit API.
@@ -73,13 +74,18 @@ public sealed record LimitSuggestionsResponse(
     Guid SeasonId,
     int RequiredSeasons,
     IReadOnlyList<DebtSeasonReference> Seasons,
-    IReadOnlyList<LimitSuggestionItem> Items);
+    IReadOnlyList<LimitSuggestionItem> Items,
+    int Page = 1,
+    int PageSize = 20,
+    long TotalCount = 0);
+
+public sealed record LimitSuggestionsRequest : PaginationRequest;
 
 public interface ICropSeasonClosingService
 {
     Task<CropSeasonClosingCheckResponse> ClosingCheckAsync(Guid seasonId, CancellationToken token);
     Task<CropSeasonResponse> CloseAsync(Guid seasonId, CloseCropSeasonRequest request, CancellationToken token);
-    Task<LimitSuggestionsResponse> LimitSuggestionsAsync(Guid seasonId, CancellationToken token);
+    Task<LimitSuggestionsResponse> LimitSuggestionsAsync(Guid seasonId, LimitSuggestionsRequest request, CancellationToken token);
     Task<PagedResult<DebtBySeasonItem>> ReportAsync(DebtBySeasonRequest request, CancellationToken token);
 }
 
@@ -99,4 +105,9 @@ public sealed class DebtBySeasonRequestValidator : AbstractValidator<DebtBySeaso
         Include(new Common.Validators.PaginationRequestValidator());
         RuleFor(r => r.Year).InclusiveBetween(2000, 2100).When(r => r.Year.HasValue);
     }
+}
+
+public sealed class LimitSuggestionsRequestValidator : AbstractValidator<LimitSuggestionsRequest>
+{
+    public LimitSuggestionsRequestValidator() => Include(new Common.Validators.PaginationRequestValidator());
 }

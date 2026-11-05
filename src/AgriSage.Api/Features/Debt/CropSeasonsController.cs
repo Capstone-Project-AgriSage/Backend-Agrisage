@@ -52,5 +52,6 @@ public sealed class CropSeasonsController(ICropSeasonService service, IDebtRollo
     // F3.19: customers on time in the last closed seasons (D12); read-only, the limit is changed through the credit API.
     [HttpGet("{id:guid}/limit-suggestions")]
     [Authorize(Roles = ApiRoles.Manage)]
-    public Task<LimitSuggestionsResponse> LimitSuggestions(Guid id, CancellationToken token) => closing.LimitSuggestionsAsync(id, token);
+    public Task<LimitSuggestionsResponse> LimitSuggestions(Guid id, [FromQuery] LimitSuggestionsRequest request, CancellationToken token) =>
+        closing.LimitSuggestionsAsync(id, request, token);
 }
