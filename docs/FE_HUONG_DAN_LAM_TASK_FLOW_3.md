@@ -81,7 +81,7 @@ Chi tiết màn hình, route, kiểu dữ liệu, lỗi: xem `FE_GUIDE_FLOW_3.md
 **Bước 0 — chuẩn bị (0,5 ngày):** dựng BE cục bộ (mục 2–3), đăng nhập bằng Swagger, đọc `FE_GUIDE_FLOW_3.md` mục 0–2.
 
 **Bước 1 — ưu tiên P0 (làm trước, độc lập nhau):**
-- **M1 `RolesPage`** (Management-Webs): hiện đang gửi **toàn bộ** danh sách quyền của vai trò. Sau migration, 9 mã chỉ-Chủ không còn cấp được cho nhân viên. Sửa để chỉ gửi mã nằm trong danh sách cấp được (như `MemberPermissionEditor` đang làm với `grantablePermissions`); mã chỉ-Chủ hiển thị khóa/ẩn. *Thử:* lưu vai trò Sale không báo lỗi `403/422`. *Lưu ý triển khai:* phải lên **sát ngay sau BE** khi phát hành.
+- **M1 `RolesPage`** (Management-Webs): FE `main` đã lọc theo `allowedRoles`, nên chỉ cần **xác nhận bằng một lần thử trình duyệt** sau khi BE mới chạy: lưu vai trò Sale không báo `403/422`, mã chỉ-Chủ hiển thị khóa/ẩn. Chỉ sửa nếu lần thử này lỗi.
 - **M2 ẩn nút chỉ-Chủ với nhân viên:** giảm/xóa nợ, ghi nợ thủ công, đổi hạn (trước đây nhân viên được, nay chỉ Chủ), xác nhận/từ chối chuyển khoản trả nợ, tạm ngưng/khóa/mở lại tín dụng, đổi `allowCreditPurchase`. *Thử:* đăng nhập `demo.staff@…` không thấy các nút; gọi API trực tiếp bằng tài khoản này nhận `403`.
 - **F1 (Flutter) kiểm tra mã hiện có:** liệt kê màn/hàm gọi `adjust`, `cancel`, `change-due-date`, `credit/activate|suspend|block`, xác nhận/từ chối chuyển khoản trả nợ, `manual-entries`, kèm vai trò người dùng của màn đó. Gửi bảng cho owner L3 (trả lời câu C: có ứng dụng/cửa hàng thật đang dùng không). Nếu app không có thì ghi rõ "không có".
 

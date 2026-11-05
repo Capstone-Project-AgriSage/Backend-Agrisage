@@ -228,7 +228,7 @@ Khoản nợ cũ đã qua mốc N5 trước ngày bắt đầu sẽ không đư�
 ```
 
 Lý do bỏ qua (`skipped[].reason`): `NOT_FOUND`, `NOT_IN_SEASON`, `NOTHING_OWED`, `DISPUTED` (đang khiếu nại), `NOT_LATER`, `NEEDS_OWNER` (nhân viên hết lượt, cần Chủ),
-`EXCEEDS_TOTAL_EXTENSION`. Gọi lần hai thì các khoản đã chuyển nằm trong `skipped` với `NOT_IN_SEASON`. `dryRun: true` không ghi gì.
+`EXCEEDS_TOTAL_EXTENSION`. Gọi lần hai (không truyền `entryIds`) thì cả `rolledOver` và `skipped` rỗng vì vụ nguồn không còn khoản nào đang thu; `NOT_IN_SEASON` chỉ có khi truyền `entryIds` chứa khoản không thuộc vụ nguồn. `dryRun: true` không ghi gì.
 
 ### 4.7 Báo cáo
 
@@ -276,8 +276,7 @@ Nhân viên/Chủ nhận bản tóm tắt: mỗi ngày tối đa một tin cho m
    Trước đây `change-due-date` cho nhân viên; nay chỉ Chủ.
 2. **`Management-Webs/src/api/debtApi.ts`** (`changeDueDate`, `adjust`, `cancel`, `createManualEntry`): thêm `reasonCode` và chọn mã lý do trên giao diện. Hiện server nhận không có mã,
    nhưng sẽ bắt buộc sau (§8).
-3. **Màn phân quyền**: các mã chỉ-Chủ không còn cấp được cho nhân viên; màn `MemberPermissionEditor` chỉ gửi mã trong `grantablePermissions` nên không cần đổi. **`RolesPage` gửi toàn bộ danh sách
-   quyền của vai trò: phải triển khai cùng lúc với backend và migration**, nếu không sẽ bị 403/422 khi lưu.
+3. **Màn phân quyền**: các mã chỉ-Chủ không còn cấp được cho nhân viên. `MemberPermissionEditor` chỉ gửi mã trong `grantablePermissions` nên không cần đổi; `RolesPage` trên FE `main` đã lọc theo `allowedRoles` nên cũng không cần đổi (chưa kiểm bằng trình duyệt: thử một lần lưu vai trò Sale, không được báo 403/422).
 4. **Bỏ nhãn "Quá hạn nên bị chặn mua chịu"** nếu có: nợ quá hạn không chặn mua chịu (chỉ báo `hasOverdueDebt`).
 5. **`Management-Webs/src/api/cropSeasonsApi.ts`** là hợp đồng đề xuất cũ: đổi `outstandingAmount`/`openEntryCount` thành nhóm `originated` và `collecting`, đổi
    `applyNewDueDateToDebts` thành `applyNewDueDateToCollectingDebts`, và dùng `originSeason`/`collectionSeason` ở khoản nợ.

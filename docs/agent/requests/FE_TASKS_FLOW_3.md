@@ -10,7 +10,7 @@ Chạy thử: dữ liệu demo bằng `--seed-debt-demo` (DB cục bộ) và `do
 
 | Ưu tiên | Việc | Lý do |
 |---|---|---|
-| **P0** | M1 màn phân quyền `RolesPage` (và ẩn nút chỉ-Chủ M2) | Liên quan trực tiếp migration: FE cũ lưu vai trò sẽ lỗi 403/422 ngay sau khi migration chạy. Phải sẵn sàng **trước** hoặc **cùng lúc** triển khai BE |
+| **P1** | M1 xác nhận màn phân quyền `RolesPage` (và ẩn nút chỉ-Chủ M2) | FE `main` đã lọc theo `allowedRoles`; chỉ cần một lần thử trình duyệt sau khi BE mới chạy, không phải cùng lúc triển khai |
 | **P0** | F1 kiểm tra việc Flutter có gọi API nợ không | Trả lời một phần câu C (bắt buộc mã lý do), rẻ, chặn quyết định BE |
 | P1 | M3 vụ mùa, M4 chính sách (kèm bắt đầu nhắc nợ), M5 danh sách + chi tiết khoản nợ | Nền cho mọi màn khác |
 | P2 | M6 gia hạn một khoản/cả vụ, M7 "Cần quyết định" + bảng điều khiển, M8 đóng vụ + báo cáo + gợi ý hạn mức, M9 tạo đơn chịu | |
@@ -21,7 +21,7 @@ Chạy thử: dữ liệu demo bằng `--seed-debt-demo` (DB cục bộ) và `do
 
 | Mã | Task | API chính (FE_GUIDE) | Trạng thái | Ghi chú / tiêu chí chấp nhận |
 |---|---|---|---|---|
-| **M1** | **`RolesPage`: không gửi mã chỉ-Chủ** | màn phân quyền hiện có; `grantablePermissions` | Sẵn sàng — **P0** | Hiện gửi toàn bộ danh sách quyền của vai trò. Sau migration, 9 mã (`DEBT.ADJUST`, `DEBT.CANCEL`, `DEBT.MANUAL`, `DEBT.DUE_DATE`, `BANK_PAYMENTS.CONFIRM`, `BANK_PAYMENTS.REJECT`, `CREDIT.SUSPEND`, `CREDIT.BLOCK`, `CREDIT.ACTIVATE`) không cấp được cho nhân viên → chỉ gửi mã trong danh sách cấp được (như `MemberPermissionEditor`). Kiểm: lưu vai trò Sale không còn lỗi; mã chỉ-Chủ hiển thị khóa/ẩn; **kiểm cả trước và sau khi chạy migration trên môi trường thử** |
+| **M1** | **`RolesPage`: không gửi mã chỉ-Chủ** | màn phân quyền hiện có; `grantablePermissions` | Sẵn sàng — **P1** (xác nhận) | Hiện gửi toàn bộ danh sách quyền của vai trò. Sau migration, 9 mã (`DEBT.ADJUST`, `DEBT.CANCEL`, `DEBT.MANUAL`, `DEBT.DUE_DATE`, `BANK_PAYMENTS.CONFIRM`, `BANK_PAYMENTS.REJECT`, `CREDIT.SUSPEND`, `CREDIT.BLOCK`, `CREDIT.ACTIVATE`) không cấp được cho nhân viên → chỉ gửi mã trong danh sách cấp được (như `MemberPermissionEditor`). Kiểm: lưu vai trò Sale không còn lỗi; mã chỉ-Chủ hiển thị khóa/ẩn; **kiểm cả trước và sau khi chạy migration trên môi trường thử** |
 | **M2** | Ẩn/vô hiệu nút chỉ-Chủ với nhân viên | §2 | Sẵn sàng — P0 | Giảm/xóa nợ, ghi nợ thủ công, đổi hạn (trước đây nhân viên được), xác nhận/từ chối chuyển khoản trả nợ, tạm ngưng/khóa/mở lại tín dụng, đổi `allowCreditPurchase`. Server vẫn trả 403 nếu lách; FE chỉ cải thiện trải nghiệm |
 | M3 | Danh sách + tạo/sửa vụ mùa; hộp thoại cảnh báo sửa ngày dời vụ kế | §4.1 | Sẵn sàng | Vụ đầu nhập `orderWindowStart`, vụ sau do server điền. Tùy chọn "áp hạn mới cho khoản đang thu" cần `reason`. **Sau khi lưu có `applyNewDueDateToCollectingDebts`, hiển thị `debtExtension.moved` và `debtExtension.skippedDisputed`** ("Đã dời N khoản; M khoản đang khiếu nại giữ hạn cũ — cần Chủ quyết"); **chịu được `debtExtension = null`** ở các lần đọc thường và khi không chọn tùy chọn. Cập nhật `cropSeasonsApi.ts` theo §7 mục 5 |
 | M4 | Màn chính sách công nợ + **Bắt đầu nhắc nợ** | §4.2 | Sẵn sàng | Các trường chính sách và luật kiểm (`ownerReviewAfterRollovers ≥ max(staffRolloverLimit, 1)`). Hiện cảnh báo "Nhắc nợ chưa bắt đầu" khi `remindersStartDate = null`; nút **Bắt đầu nhắc nợ** (chỉ Chủ): gọi `dryRun: true` → hộp xác nhận với `startDate`, `skippedTotal`, chi tiết `skipped.N1…N5`, `groupsWithLaterMilestones` → Chủ đồng ý → `dryRun: false`. Ẩn nút khi đã có `remindersStartDate`. Ghi rõ "đặt một lần, không đổi được" |
@@ -50,8 +50,8 @@ Chạy thử: dữ liệu demo bằng `--seed-debt-demo` (DB cục bộ) và `do
 
 ## D. Thứ tự và phối hợp với triển khai
 
-1. Làm **M1, M2, F1** trước; trên môi trường thử kiểm `RolesPage` cả trước và sau migration.
-2. Triển khai FE `RolesPage` **sát ngay sau** BE (kế hoạch ở `F3_REVIEW_PACKAGE.md` mục 9).
+1. Làm **M2, F1** trước; thử `RolesPage` một lần trên trình duyệt sau khi BE mới chạy (M1).
+2. Không cần triển khai FE `RolesPage` cùng lúc với BE (xem `F3_REVIEW_PACKAGE.md` mục 9).
 3. M3–M9 và W1–W3 song song, đối chiếu với dữ liệu demo.
 4. M10 chỉ khung; hoàn tất sau khi có kết luận câu C và câu E.
 

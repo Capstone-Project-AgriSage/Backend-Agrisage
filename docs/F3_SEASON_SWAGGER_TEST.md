@@ -72,7 +72,7 @@ Muốn thấy, tạo một vụ cũ đã qua hạn rồi giao đơn thuộc vụ
 ```
 
 `200` liệt kê `rolledOver[]` (sẽ chuyển) và `skipped[]` (bị bỏ qua + `reason`). Kiểm tra: khoản đang khiếu nại → `DISPUTED`. Sau đó gọi lại với `"dryRun": false`:
-các khoản chuyển sang HT; gọi lần nữa → mọi khoản nằm trong `skipped` với `NOT_IN_SEASON`.
+các khoản chuyển sang HT; gọi lần nữa (không truyền `entryIds`) → `rolledOver` và `skipped` đều rỗng, vì không còn khoản nào đang thu ở vụ nguồn. `NOT_IN_SEASON` chỉ xuất hiện khi truyền `entryIds` có khoản không thuộc vụ nguồn.
 
 ## 4. Đóng vụ và báo cáo
 

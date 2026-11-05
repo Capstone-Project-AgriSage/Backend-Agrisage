@@ -14,7 +14,7 @@ Soạn 2026-11-04 bởi owner L3 (người dùng) cùng trợ lý. **Đây là g
 - Vai trò theo `docs/reference/api-flows/README.md` §3: **L1 = Lead**, L2 = Teammate 2, L3 = Teammate 3 (owner L3), L4 = Teammate 4.
   Chưa có tên người cụ thể cho L1/L2/L4 trong tài liệu hay CODEOWNERS (repo không có) → **chưa gán tên**.
 - Đã kiểm thử trên code cuối: build 0 lỗi/0 cảnh báo; unit 799; integration trên Postgres cục bộ đạt hết (3 test bỏ qua vì cần Supabase
-  Storage), chạy 2 lần; chạy thường 1099 đạt. **Chưa chạy trên Supabase hay dữ liệu thật.**
+  Storage), chạy 2 lần; chạy thường 1107 đạt, 456 bỏ qua (test công nợ trên DB thật tự bỏ qua nếu thiếu `AGRISAGE_CREDIT_TEST_CONNECTION_STRING`). **Chưa chạy trên Supabase hay dữ liệu thật.**
 
 ## 1. L1 (Lead) — đơn hàng: gắn vụ khi xác nhận đơn chịu — file `01-L1-orders.patch`
 
@@ -39,7 +39,7 @@ Vì sao: log Postgres cho thấy vòng chờ — gia hạn nợ (khóa cửa hà
 có khóa ngoại tới `stores`, bị `FOR UPDATE` chặn) chờ nhau; Postgres hủy một yêu cầu (40P01). Test V2 đỏ xác định, kể cả trước các sửa gần đây.
 `FOR NO KEY UPDATE` vẫn loại trừ mọi lần khóa cửa hàng khác nhưng không chặn việc chỉ chèn bản ghi có khóa ngoại.
 
-**Mọi nơi gọi `LockStoreAsync` (21 chỗ, 11 file)** — đều nằm ở Customers, Credit, Debt; đều là bên tự khóa cửa hàng; L1 (Orders, Payments) và L4 không gọi:
+**Mọi nơi gọi `LockStoreAsync` (19 chỗ gọi, 9 file)** — đều nằm ở Customers, Credit, Debt; đều là bên tự khóa cửa hàng; L1 (Orders, Payments) và L4 không gọi:
 `Customers/CustomerService` (4), `Customers/CustomerGroupService` (4), `Credit/CustomerCreditService` (3), `Debt/{CropSeasonService (2), CropSeasonClosingService,
 DebtPolicyService, DebtRolloverService (2), DebtReminderStartService, DebtService (ManualAsync)}`.
 Không nơi nào dựa vào việc khóa cửa hàng chặn **người khác** chèn bản ghi con (cửa hàng không bị xóa hay đổi khóa).
@@ -56,7 +56,7 @@ Cần kết luận (L1 và L2 mỗi bên): đồng ý đổi mức khóa; không
 | `20261103161207_DebtReminderStartDate` | cột `store_debt_policies.reminders_start_date date NULL` | Một `ADD COLUMN` |
 
 Điểm cần Lead xem (4 điểm trong `F3_21_PART2_LOCK_DELEGATION_SQL.md` mục 8 cho migration 1) và: thứ tự chạy, kế hoạch sao lưu/khôi phục (mục 8),
-**`RolesPage` gửi toàn bộ danh sách quyền của vai trò → nếu FE cũ còn chạy sau migration, lưu vai trò sẽ lỗi 403/422** → FE phải triển khai sát BE.
+**`RolesPage`**: FE `main` đã lọc theo `allowedRoles` và BE từ chối mã không được phép, nên không cần triển khai FE cùng lúc; chỉ cần một lần thử trình duyệt (lưu vai trò Sale không báo 403/422). Một bản FE cũ gửi cả danh sách sẽ nhận 403/422.
 Câu SQL chỉ-đọc để đếm quy mô trên Supabase nằm trong `F3_21_PART2_LOCK_DELEGATION_SQL.md` mục 4 và `F3_20_REMINDER_START_MIGRATION_PROPOSAL.md` mục 7.
 
 ## 4. Lead / nhóm nghiệp vụ — các câu cần trả lời trước khi mở F3.14 phần còn lại và B1
@@ -128,6 +128,6 @@ Tiêu chí tối thiểu để phát hành (đề xuất — chờ duyệt): m�
 1. **Thử 4 migration trên một bản sao hoặc DB thử** bằng script `03-migrations.sql`; đối chiếu số dòng bị đổi với câu đếm chỉ-đọc (mục 3). Chạy thử `Down()` ở DB thử nếu cần biết đường lui.
 2. Sao lưu DB đang dùng (Lead). Ghi giờ bắt đầu cửa sổ triển khai.
 3. Áp 4 migration theo thứ tự. Migration 2–4 chỉ **thêm** bảng/cột/dòng (BE cũ vẫn chạy được trên schema mới); migration 1 đổi dữ liệu quyền (không hoàn tác bằng `Down()`).
-4. Triển khai BE mới. 5. Triển khai FE (Management-Webs, đặc biệt `RolesPage`) **ngay sau BE**; FE cũ lưu vai trò sẽ lỗi 403/422 trong khoảng giữa. 6. Smoke test theo `docs/F3_SEASON_SWAGGER_TEST.md`.
+4. Triển khai BE mới. 5. Triển khai FE (Management-Webs); thử `RolesPage` một lần (không phải triển khai sát BE). 6. Smoke test theo `docs/F3_SEASON_SWAGGER_TEST.md`.
 7. Nhập các vụ mùa. 8. Chủ gọi `POST /api/debt-reminders/initialize` với `dryRun` để xem số liệu, rồi chạy thật — **bước cuối**; từ lúc này job nhắc nợ mới gửi thông báo.
 - Đường lui: khôi phục từ bản sao lưu (migration 1 và 2 không có `Down()` an toàn trên dữ liệu thật). Cần Lead xác nhận.
