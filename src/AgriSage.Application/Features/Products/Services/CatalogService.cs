@@ -14,16 +14,22 @@ namespace AgriSage.Application.Features.Products.Services;
 
 // Public catalog: only the store's ACTIVE and sellable products of ACTIVE products; nothing internal is exposed.
 // Prices come from the ACTIVE walk-in default price list valid now (FLOW_1 §3).
-public sealed class CatalogService(IAgriSageDbContext context, IDateTimeProvider clock) : ICatalogService
+public sealed class CatalogService(IAgriSageDbContext context, IDateTimeProvider clock, ICatalogReadCache? cache = null) : ICatalogService
 {
-    public async Task<IReadOnlyList<CategoryTreeNode>> GetCategoriesAsync(CancellationToken cancellationToken)
+    public Task<IReadOnlyList<CategoryTreeNode>> GetCategoriesAsync(CancellationToken cancellationToken) =>
+        CatalogCache.ReadAsync(cache, "public-categories", new { activeOnly = true }, () => LoadCategoriesAsync(cancellationToken), cancellationToken);
+
+    private async Task<IReadOnlyList<CategoryTreeNode>> LoadCategoriesAsync(CancellationToken cancellationToken)
     {
         var all = await context.Categories.AsNoTracking().ToListAsync(cancellationToken);
 
         return CatalogRules.BuildTree(all.Select(CategoryService.ToResponse).ToList(), activeOnly: true);
     }
 
-    public async Task<PagedResult<PublicBrand>> GetBrandsAsync(PaginationRequest request, CancellationToken cancellationToken)
+    public Task<PagedResult<PublicBrand>> GetBrandsAsync(PaginationRequest request, CancellationToken cancellationToken) =>
+        CatalogCache.ReadAsync(cache, "public-brands", request, () => LoadBrandsAsync(request, cancellationToken), cancellationToken);
+
+    private async Task<PagedResult<PublicBrand>> LoadBrandsAsync(PaginationRequest request, CancellationToken cancellationToken)
     {
         var query = context.Brands.AsNoTracking().Where(b => b.IsActive);
         var total = await query.LongCountAsync(cancellationToken);

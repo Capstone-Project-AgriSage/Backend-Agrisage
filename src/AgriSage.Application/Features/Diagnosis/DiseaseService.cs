@@ -10,9 +10,12 @@ namespace AgriSage.Application.Features.Diagnosis;
 
 // Disease content and treatment guidance shown to Farmers after a verified diagnosis (AI_DIAGNOSIS.md section 10).
 // The five diseases are seeded; their code and healthy flag never change. Treatments are deactivated, never removed.
-public sealed class DiseaseService(IAgriSageDbContext context, AuditTrail? audit = null) : IDiseaseService
+public sealed class DiseaseService(IAgriSageDbContext context, AuditTrail? audit = null, ICatalogReadCache? cache = null) : IDiseaseService
 {
-    public async Task<IReadOnlyList<DiseaseResponse>> ListAsync(bool? isActive, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<DiseaseResponse>> ListAsync(bool? isActive, CancellationToken cancellationToken) =>
+        CatalogCache.ReadAsync(cache, "diseases", new { isActive }, () => LoadListAsync(isActive, cancellationToken), cancellationToken);
+
+    private async Task<IReadOnlyList<DiseaseResponse>> LoadListAsync(bool? isActive, CancellationToken cancellationToken)
     {
         var query = context.Diseases.AsNoTracking().AsQueryable();
         if (isActive is { } active)
