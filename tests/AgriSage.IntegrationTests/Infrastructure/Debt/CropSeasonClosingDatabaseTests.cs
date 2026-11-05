@@ -272,6 +272,44 @@ public sealed class CropSeasonClosingDatabaseTests
         Assert.Empty(await s.ServiceProvider.GetRequiredService<AgriSageDbContext>().DebtEntries.AsNoTracking().ToListAsync(Token));
     }
 
+    // Review finding (closing check order): a delivery does not take the store lock, so it can commit between the two reads of
+    // the check. The check reads the unfinished orders first and the debt after, so the debt the delivery creates is seen and the
+    // season is not closed. (With the reads the other way round, both came back clean and the season closed over an open entry.)
+    [CreditDbFact]
+    public async Task A_delivery_committed_between_the_two_reads_of_the_closing_check_does_not_let_the_season_close()
+    {
+        await using var e = await CreditTestDatabase.StartAsync(Token);
+        var (dx, _) = await SeasonsAsync(e);
+        var order = await e.OrderAsync(1, Token);
+        await Run(e, sp => sp.GetRequiredService<IOrderConfirmationService>().ConfirmAsync(order.Id, Token));
+        using (var s = e.Scope())
+        {
+            await s.ServiceProvider.GetRequiredService<AgriSageDbContext>().Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE orders SET crop_season_id = {dx.Id} WHERE id = {order.Id}", Token);
+        }
+        At(e, 2027, 4, 28); // Đông Xuân is collecting
+
+        // The first read of the check (orders or debt entries, whichever comes first) is followed by the delivery.
+        var delivered = false;
+        e.CommandHook.When = sql =>
+            (sql.Contains("FROM orders", StringComparison.Ordinal) && sql.Contains("o.status", StringComparison.Ordinal))
+            || (sql.Contains("FROM debt_entries", StringComparison.Ordinal) && sql.Contains("debt_accounts", StringComparison.Ordinal));
+        e.CommandHook.Then = async () =>
+        {
+            await Run(e, sp => sp.GetRequiredService<IOrderPickupService>()
+                .PickupAsync(order.Id, new([new(order.Items.Single().Id, [new(e.LotId, 1)])]), Token).WaitAsync(TimeSpan.FromSeconds(20), Token));
+            delivered = true;
+        };
+
+        await Assert.ThrowsAsync<BusinessRuleException>(() => CloseAsync(e, dx.Id));
+
+        Assert.True(delivered, "the delivery must have run between the reads");
+        using var check = e.Scope();
+        var db = check.ServiceProvider.GetRequiredService<AgriSageDbContext>();
+        Assert.False((await db.CropSeasons.AsNoTracking().SingleAsync(x => x.Id == dx.Id, Token)).IsClosed);
+        Assert.Equal(1_000_000m, (await db.DebtEntries.AsNoTracking().SingleAsync(Token)).OutstandingAmount);
+    }
+
     // The season-wide rollover locks the store too: a rollover into a season being closed waits, then is refused.
     [CreditDbFact]
     public async Task A_season_rollover_into_a_season_being_closed_waits_and_is_refused()

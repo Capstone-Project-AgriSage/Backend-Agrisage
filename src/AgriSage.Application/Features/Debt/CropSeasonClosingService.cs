@@ -154,17 +154,20 @@ public sealed class CropSeasonClosingService(
         if (season.IsClosed) reasons.Add("ALREADY_CLOSED");
         else if (phase != CropSeasonPhase.Collecting) reasons.Add("HARVEST_NOT_ENDED");
 
+        // Order matters (READ COMMITTED, deliveries do not take the store lock): read the unfinished orders FIRST, the debt after.
+        // A delivery that commits between the two reads turns an order we no longer see as open into a debt entry that the
+        // later read does see. In the opposite order both reads could come back clean while the entry is open.
+        var openOrders = db.Orders.AsNoTracking()
+            .Where(o => o.StoreId == store && o.CropSeasonId == season.Id && OpenOrderStatuses.Contains(o.Status));
+        var orderCount = await openOrders.CountAsync(token);
+        var orderList = await openOrders.OrderBy(o => o.OrderNumber).Take(ListLimit)
+            .Select(o => new { o.Id, o.OrderNumber, o.Status }).ToListAsync(token);
         var openEntries = from e in db.DebtEntries.AsNoTracking()
                           join a in db.DebtAccounts.AsNoTracking() on e.DebtAccountId equals a.Id
                           where a.StoreId == store && e.CollectionCropSeasonId == season.Id && e.OutstandingAmount > 0
                           select new { e.Id, e.EntryNumber, a.FarmerProfileId, a.FarmerProfile.User.FullName, e.OutstandingAmount, e.Status };
         var entryCount = await openEntries.CountAsync(token);
         var entryList = await openEntries.OrderBy(e => e.EntryNumber).Take(ListLimit).ToListAsync(token);
-        var openOrders = db.Orders.AsNoTracking()
-            .Where(o => o.StoreId == store && o.CropSeasonId == season.Id && OpenOrderStatuses.Contains(o.Status));
-        var orderCount = await openOrders.CountAsync(token);
-        var orderList = await openOrders.OrderBy(o => o.OrderNumber).Take(ListLimit)
-            .Select(o => new { o.Id, o.OrderNumber, o.Status }).ToListAsync(token);
         if (!season.IsClosed && entryCount > 0) reasons.Add("OPEN_ENTRIES");
         if (!season.IsClosed && orderCount > 0) reasons.Add("OPEN_CREDIT_ORDERS");
 

@@ -17,6 +17,8 @@ using AgriSage.Domain.Features.Stores.Entities;
 using AgriSage.Infrastructure.Persistence;
 using AgriSage.Infrastructure.Persistence.Interceptors;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using System.Data.Common;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 
@@ -44,6 +46,25 @@ internal sealed class CreditTestDatabase : IAsyncDisposable
     { public DateTimeOffset UtcNow { get; set; } = new(2026, 10, 4, 17, 30, 0, TimeSpan.Zero); }
     public UserContext User { get; } = new();
     public TestClock Clock { get; } = new();
+    // Lets a test run code right after a SQL command of any scope of this database (for example to commit another transaction
+    // between the two reads of one use case). Runs once: it disarms itself before the callback, which may use the database.
+    public sealed class CommandHookInterceptor : DbCommandInterceptor
+    {
+        public Func<string, bool>? When { get; set; }
+        public Func<Task>? Then { get; set; }
+        private async Task FireAsync(DbCommand command)
+        {
+            var (when, then) = (When, Then);
+            if (when is null || then is null || !when(command.CommandText)) return;
+            When = null; Then = null;
+            await then();
+        }
+        public override async ValueTask<object?> ScalarExecutedAsync(DbCommand command, CommandExecutedEventData eventData, object? result, CancellationToken cancellationToken = default)
+        { await FireAsync(command); return result; }
+        public override async ValueTask<DbDataReader> ReaderExecutedAsync(DbCommand command, CommandExecutedEventData eventData, DbDataReader result, CancellationToken cancellationToken = default)
+        { await FireAsync(command); return result; }
+    }
+    public CommandHookInterceptor CommandHook { get; } = new();
     public Guid StoreId { get; private set; }
     public Guid FarmerId { get; private set; }
     public Guid FarmerUserId { get; private set; }
@@ -81,7 +102,7 @@ internal sealed class CreditTestDatabase : IAsyncDisposable
         // OrderPaymentCancellation (flow 2, F2.4) closes payOS links through the gateway; tests never reach payOS.
         s.AddSingleton<IPaymentGateway, AgriSage.IntegrationTests.Infrastructure.Payments.FakePaymentGateway>();
         s.AddDbContext<AgriSageDbContext>(o => o.UseNpgsql(connection).AddInterceptors(new SoftDeleteInterceptor(User, Clock),
-            new AuditableEntityInterceptor(Clock), new ConcurrencyVersionInterceptor()));
+            new AuditableEntityInterceptor(Clock), new ConcurrencyVersionInterceptor(), CommandHook));
         s.AddScoped<IAgriSageDbContext>(p => p.GetRequiredService<AgriSageDbContext>());
         s.AddScoped<IRowLockService, RowLockService>();
         s.AddSingleton<IPaymentGateway, AgriSage.IntegrationTests.Infrastructure.Payments.FakePaymentGateway>();
