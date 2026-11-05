@@ -346,6 +346,8 @@ public interface IOrderSettlementGuard
     // FULL_PAYMENT: PAID order payments (IOrderPrepaymentLedger) must cover the order total (decision D3).
     // CREDIT: ACTIVE credit profile and debt account, required credit = total − paid ≤ available credit,
     //   credit reservation created; returns the credit term (days) of the profile's tier (decision B-D4).
+    //   F3.13: also returns the crop season the order joins (kept on the order, orders.crop_season_id); none open that day → null.
+    //   F3.13: also returns the crop season the order joins (kept on the order, orders.crop_season_id); no season open that day → null.
     // Throws BusinessRuleException when the order cannot be confirmed.
     Task<SettlementResult> EnsureCanConfirmAsync(Order order, Guid actorId, CancellationToken cancellationToken);
 
@@ -353,7 +355,7 @@ public interface IOrderSettlementGuard
     Task ReleaseAsync(Order order, Guid actorId, string? reason, CancellationToken cancellationToken);
 }
 
-public sealed record SettlementResult(int? CreditTermDays);   // set for CREDIT orders only
+public sealed record SettlementResult(int? CreditTermDays, Guid? CropSeasonId = null);   // set for CREDIT orders only (F3.13: the crop season open for orders on the Vietnam day of the confirmation, null when none)
 ```
 
 ### 4.5 `ICreditReservationAdjuster` — owner F3.3
@@ -489,3 +491,28 @@ waiting for the other flow.
 | F-D6 | Lots are marked EXPIRED by `POST /api/inventory/lots/expire-due` (Manage); every reservation/sale check still uses the expiry date itself, so an unmarked expired lot is never sold |
 | F-D7 | Excel import (F4.3) uses ClosedXML 0.105.1 (MIT, approved 2026-10-03) only inside `Infrastructure/Spreadsheets`; the lead implemented F4.3 so the import is available now |
 | F-D8 | A 422 may carry `errors` (`BusinessRuleException(message, errors)`) when several items fail, e.g. the rows of an Excel import or the short lines of a confirmation |
+| F-D9 | Debt by crop season (L3, reopens F-D2, 2026-11-03, decided by the L3 owner; mentor approval as reported by the owner; **lead review pending**): separate `crop_seasons` and `store_debt_policies` tables, a credit order joins the season open on its confirmation day, debt due date follows the season, rollover keeps the origin season and the first due date. Design `DATABASE_DESIGN.md` §35.23, rules `BUSINESS_RULES.md` 67–74, decisions `DECISIONS.md`, contract `FLOW_3_CREDIT_DEBT.md` §8b–8i |
+| F-D10 | Nine debt/credit operations are owner-only and not delegable (F3.21); the system never locks credit by itself |
+| F-D11 | `IRowLockService.LockStoreAsync` takes `FOR NO KEY UPDATE` (F3.20): an existing method of a shared file changes its lock mode (see §3.1 "append only") — **awaiting L1 and L2 review** |
+
+---
+
+## 8. Tasks F3.7–F3.22 (debt by crop season) — status on 2026-11-04
+
+All on the branch `feature/f3-21-debt-permission-lock`, not merged to `main`; the migrations are not applied to a shared database. Details and the open list: `docs/agent/requests/DEBT_BY_CROP_SEASON_BE_TASKS.md`, `F3_REVIEW_PACKAGE.md`.
+
+| Task | What | Status |
+|---|---|---|
+| F3.7 | Decisions, traceability, API contract | contract in FLOW_3 done; decisions / design / rules written in this change; BR-D source and Word table still to be matched by the document owner |
+| F3.8–F3.10 | Domain, tables and migrations, permissions | done; lead review of the 4 migrations pending |
+| F3.11, F3.12 | Season API, policy API | done |
+| F3.13 | Order joins the season; debt due date by season | done; **touches L1/L2 code (`a9b2db5`) — awaiting L1 review** |
+| F3.14 | Rollover of one entry, reason codes | main part done; reason code still optional (waits for question C and the lead's lists) |
+| F3.15 | Rollover of a whole season | done |
+| F3.16 | Farmer's request for an extension | dropped |
+| F3.17 | Read views, "needs a decision" | main part done; the receipt per season (`outstandingBySeason[]`, touches `Payments`) waits for L1's agreement |
+| F3.18 | Reminders N1–N5, start of reminders (T0) | done |
+| F3.19 | Close a season, report, limit suggestions | done (suggestion rule D12 to be clarified) |
+| F3.20 | Complete test and review | tests and reviews done; waits for the reviews above |
+| F3.21 | Owner-only permissions | done |
+| F3.22 | Check real use and clients | waiting for the team (question C) |
