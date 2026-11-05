@@ -44,8 +44,8 @@ Nguồn sự thật: code trên nhánh `feature/f3-21-debt-permission-lock` củ
 9. **Vụ đã đóng không sửa, không mở lại, không nhận nợ mới.** Đóng vụ chỉ làm được khi vụ đã hết thu hoạch, không còn khoản nợ nào (kể cả đang khiếu nại) đang thu trong vụ,
    và không còn đơn chịu chưa xong của vụ. Gọi `closing-check` trước để biết còn vướng gì.
 10. **`version` bắt buộc khi sửa hoặc đóng vụ và khi sửa chính sách** (`409` nếu có người khác vừa sửa → tải lại). Chính sách chưa lưu lần nào trả `isDefault: true, version: 0`.
-11. **Mã lý do** (7 mã) đang **tuỳ chọn** khi giảm/xoá/đổi hạn và **bắt buộc** khi gia hạn (4 mã khó khăn). Sẽ bắt buộc cho cả ba thao tác còn lại sau khi nhóm chốt (§8);
-    **FE nên gửi sẵn** để không phải sửa lần nữa. Lịch sử cũ không có mã hiện `isPrePolicy: true`.
+11. **Mã lý do** (7 mã) **bắt buộc** khi giảm/xoá/đổi hạn (từ 05/11) và khi lưu vụ có "áp hạn mới cho các khoản đang thu"; **bắt buộc** cả khi gia hạn (4 mã khó khăn). Thiếu → `400`.
+    Lịch sử cũ không có mã hiện `isPrePolicy: true`; hành động mới luôn có mã nên không bao giờ hiện nhãn này.
 12. **Ngày** là ngày theo giờ Việt Nam, dạng `yyyy-MM-dd`; **thời điểm** trả về là UTC.
 
 ---
@@ -107,7 +107,7 @@ Cách ẩn nút: dựa vào `role` trong token (và danh sách quyền hiệu l�
 8. **Báo cáo nợ theo vụ** (`GET /api/reports/debt-by-season`) — mỗi vụ hai khối: **theo vụ phát sinh** (phát sinh, đã thu, trả hàng, giảm, xoá, **chuyển sang vụ sau**, còn nợ; luôn
    thoả phát sinh − thu − trả hàng − giảm − xoá = còn nợ) và **theo vụ đang thu** (nợ chuyển đến, còn phải thu). Vụ đã đóng (`isFrozen`) hiện số liệu lúc đóng; chú thích
    "số liệu chốt khi đóng vụ".
-9. **Gợi ý tăng hạn mức** (`GET /api/crop-seasons/{id}/limit-suggestions`, vụ đã đóng) — danh sách khách đúng hạn liên tiếp; nút dẫn sang màn sửa hạn mức **hiện có**
+9. **Gợi ý tăng hạn mức** (`GET /api/crop-seasons/{id}/limit-suggestions`, vụ đã đóng) — danh sách khách đúng hạn liên tiếp (bỏ qua vụ khách không nợ; xếp theo số vụ đúng hạn liên tiếp `onTimeSeasons` giảm dần rồi tên; phân trang `page`/`pageSize`, mặc định 20); nút dẫn sang màn sửa hạn mức **hiện có**
    (API hạn mức cũ). Server không tự đổi hạn mức.
 10. **Bảng điều khiển công nợ** (`GET /api/debt-entries/dashboard`) — thêm: vụ hiện tại và nợ đang thu trong vụ, tổng nợ đến hạn trong 7 ngày, danh sách "Cần quyết định",
     **khách sắp/đã hết hạn mức** (`creditLimitAlerts`, `NEAR_LIMIT` từ 90% hạn mức, `AT_LIMIT` khi hết). Với khách hết hạn mức Chủ chọn: nâng hạn mức, giảm/xoá nợ, hoặc thu một phần.
@@ -139,7 +139,7 @@ Tất cả đường dẫn bắt đầu bằng `/api`. "Quản lý" = ADMIN, STO
 | GET | `/crop-seasons?year=&status=&page=&pageSize=` | nhân viên trở lên | `status`: `PLANNED`, `OPEN`, `HARVESTING`, `COLLECTING`, `CLOSED` |
 | GET | `/crop-seasons/{id}` | nhân viên trở lên | |
 | POST | `/crop-seasons` | **Chủ** | `{ code, name, harvestStart, harvestEnd, graceDays?, orderWindowStart?, cropType?, seasonalRuleId? }`; `orderWindowStart` chỉ cho vụ đầu |
-| PUT | `/crop-seasons/{id}` | **Chủ** | `{ name, harvestStart, harvestEnd, graceDays, version, seasonalRuleId?, applyNewDueDateToCollectingDebts?, reason? }` |
+| PUT | `/crop-seasons/{id}` | **Chủ** | `{ name, harvestStart, harvestEnd, graceDays, version, seasonalRuleId?, applyNewDueDateToCollectingDebts?, reason?, reasonCode? }` (`reasonCode` bắt buộc khi `applyNewDueDateToCollectingDebts`) |
 | GET | `/crop-seasons/{id}/closing-check` | nhân viên trở lên | `{ canClose, reasons[], openEntryCount, openEntries[], openCreditOrderCount, openCreditOrders[] }` |
 | POST | `/crop-seasons/{id}/close` | **Chủ** | `{ version, note? }` → vụ với `status: "CLOSED"` |
 | GET | `/crop-seasons/{id}/limit-suggestions` | quản lý | `422` nếu vụ chưa đóng |
@@ -192,9 +192,9 @@ Khoản nợ cũ đã qua mốc N5 trước ngày bắt đầu sẽ không đư�
 | GET | `/customers/{id}/debt` | thêm `groups[]` |
 | GET | `/debt-entries/dashboard` | thêm `currentSeason`, `currentSeasonOutstanding`, `dueSoonAmount`, `needsDecisionCount`, `needsDecision[]`, `creditLimitAlertCount`, `creditLimitAlerts[]` |
 | POST | `/debt-entries/{id}/rollover` | `{ reasonCode, note, targetCropSeasonId?, overrideExtensionLimit? }` |
-| POST | `/debt-entries/{id}/adjust` | **Chủ**, `{ amount, reason, reasonCode? }` |
-| POST | `/debt-entries/{id}/cancel` | **Chủ**, `{ reason, reasonCode? }` |
-| POST | `/debt-entries/{id}/change-due-date` | **Chủ**, `{ newDueDate, reason, reasonCode? }`; không lùi về quá khứ; không tính là gia hạn |
+| POST | `/debt-entries/{id}/adjust` | **Chủ**, `{ amount, reason, reasonCode }` (bắt buộc) |
+| POST | `/debt-entries/{id}/cancel` | **Chủ**, `{ reason, reasonCode }` (bắt buộc) |
+| POST | `/debt-entries/{id}/change-due-date` | **Chủ**, `{ newDueDate, reason, reasonCode }` (bắt buộc); không lùi về quá khứ; không tính là gia hạn |
 | POST | `/customers/{id}/debt/manual-entries` | **Chủ**, `{ amount, dueDate?, reason, cropSeasonId? }`; có `cropSeasonId` thì có thể bỏ `dueDate` (lấy hạn vụ) |
 
 ### 4.4 Khoản nợ (nông dân)
@@ -274,8 +274,8 @@ Nhân viên/Chủ nhận bản tóm tắt: mỗi ngày tối đa một tin cho m
 
 1. **Ẩn nút chỉ-Chủ với nhân viên** (§2): giảm/xoá nợ, ghi nợ thủ công, đổi hạn, xác nhận/từ chối chuyển khoản trả nợ, tạm ngưng/khoá/mở lại tín dụng, đổi `allowCreditPurchase`.
    Trước đây `change-due-date` cho nhân viên; nay chỉ Chủ.
-2. **`Management-Webs/src/api/debtApi.ts`** (`changeDueDate`, `adjust`, `cancel`, `createManualEntry`): thêm `reasonCode` và chọn mã lý do trên giao diện. Hiện server nhận không có mã,
-   nhưng sẽ bắt buộc sau (§8).
+2. **`Management-Webs/src/api/debtApi.ts`** (`changeDueDate`, `adjust`, `cancel`) và form lưu vụ mùa có "áp hạn mới": thêm `reasonCode` và chọn mã lý do trên giao diện. **Server từ chối nếu thiếu mã (400)**;
+   ghi nợ thủ công không cần mã.
 3. **Màn phân quyền**: các mã chỉ-Chủ không còn cấp được cho nhân viên. `MemberPermissionEditor` chỉ gửi mã trong `grantablePermissions` nên không cần đổi; `RolesPage` trên FE `main` đã lọc theo `allowedRoles` nên cũng không cần đổi (chưa kiểm bằng trình duyệt: thử một lần lưu vai trò Sale, không được báo 403/422).
 4. **Bỏ nhãn "Quá hạn nên bị chặn mua chịu"** nếu có: nợ quá hạn không chặn mua chịu (chỉ báo `hasOverdueDebt`).
 5. **`Management-Webs/src/api/cropSeasonsApi.ts`** là hợp đồng đề xuất cũ: đổi `outstandingAmount`/`openEntryCount` thành nhóm `originated` và `collecting`, đổi
@@ -287,7 +287,7 @@ Nhân viên/Chủ nhận bản tóm tắt: mỗi ngày tối đa một tin cho m
 ## 8. Chưa có hoặc chưa chốt
 
 - **Biên nhận thanh toán theo vụ** (`outstandingBySeason[]` trên chi tiết thanh toán trả nợ): chưa có, chờ phối hợp với luồng thanh toán.
-- **Mã lý do bắt buộc** khi giảm/xoá/đổi hạn: chờ nhóm xác nhận cửa hàng dùng thật và ứng dụng Flutter. Cho tới lúc đó là tuỳ chọn.
+- **Mã lý do bắt buộc** khi giảm/xoá/đổi hạn và khi lưu vụ có áp hạn mới (từ 05/11, lead đã đồng ý bắt buộc nếu form web đổi cùng đợt; Flutter không gọi các API này theo lời lead, chưa kiểm). Gửi thiếu mã → `400`.
 - **Yêu cầu xin gia hạn của nông dân:** bỏ ở giai đoạn này.
 - Hai danh sách mã lý do (7 mã, và 4 mã cho gia hạn) đang chờ lead duyệt; nếu đổi sẽ báo FE.
 - Triển khai: 4 migration mới phải chạy **cùng lúc** với code backend. **Bắt đầu nhắc nợ là bước cuối**, sau khi cửa hàng đã nhập vụ (xem mục "Bắt đầu nhắc nợ").

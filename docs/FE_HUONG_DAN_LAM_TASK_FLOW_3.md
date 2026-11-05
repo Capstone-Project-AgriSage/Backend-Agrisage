@@ -93,7 +93,7 @@ Chi tiết màn hình, route, kiểu dữ liệu, lỗi: xem `FE_GUIDE_FLOW_3.md
 **Bước 3 — thao tác (P2):** M6 gia hạn một khoản / cả vụ (cả vụ: **xem trước rồi xác nhận**, ghi chú rằng xem trước có thể khác kết quả thật); M7 "Cần quyết định" + bảng điều khiển; M8 đóng vụ, báo cáo nợ theo vụ, gợi ý hạn mức; M9 tạo đơn chịu (hạn dự kiến). **Farmer-Web:** W1 nợ của tôi, W2 khoản nợ + lịch sử hạn, W3 hạn dự kiến + khiếu nại + thông báo.
 
 **Làm khung, chưa hoàn tất (chờ hợp đồng):**
-- **M10 form mã lý do:** làm trường chọn mã **tùy chọn**, danh sách mã lấy từ **một hằng/cấu hình duy nhất**. **Không** đặt bắt buộc, **không** tự thêm/bớt mã — Lead chưa duyệt danh sách (7 mã giảm/xóa/đổi hạn, 4 mã gia hạn) và nhóm chưa trả lời có bắt buộc không.
+- **M10 form mã lý do (BE đã bắt buộc từ 05/11):** giảm, xóa, đổi hạn, và form lưu vụ mùa có "áp hạn mới cho các khoản đang thu" phải gửi `reasonCode` (7 mã). Danh sách mã lấy từ **một hằng/cấu hình duy nhất**; không tự thêm/bớt mã — Lead chưa duyệt chính thức danh sách. Thiếu mã → `400`. Ghi nợ thủ công không cần mã.
 - **M11 biên nhận theo vụ:** BE chưa làm; ẩn đi.
 
 ## 6. Quy tắc khi làm

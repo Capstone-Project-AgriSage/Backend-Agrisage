@@ -507,12 +507,12 @@ All on the branch `feature/f3-21-debt-permission-lock`, not merged to `main`; th
 | F3.8–F3.10 | Domain, tables and migrations, permissions | done; lead review of the 4 migrations pending |
 | F3.11, F3.12 | Season API, policy API | done |
 | F3.13 | Order joins the season; debt due date by season | done; **touches L1/L2 code (`a9b2db5`) — awaiting L1 review** |
-| F3.14 | Rollover of one entry, reason codes | main part done; reason code still optional (waits for question C and the lead's lists) |
+| F3.14 | Rollover of one entry, reason codes | done: reason code mandatory on adjust, cancel, change-due-date and applying a season date (2026-11-05); the lead still has to approve the code lists |
 | F3.15 | Rollover of a whole season | done |
 | F3.16 | Farmer's request for an extension | dropped |
 | F3.17 | Read views, "needs a decision" | main part done; the receipt per season (`outstandingBySeason[]`, touches `Payments`) waits for L1's agreement |
 | F3.18 | Reminders N1–N5, start of reminders (T0) | done |
-| F3.19 | Close a season, report, limit suggestions | done (suggestion rule D12 to be clarified) |
+| F3.19 | Close a season, report, limit suggestions | done (D12 rule of 05/11: seasons without debt skipped, ordered, paged; "debt in the closing season" detail awaits approval) |
 | F3.20 | Complete test and review | tests and reviews done; waits for the reviews above |
 | F3.21 | Owner-only permissions | done |
 | F3.22 | Check real use and clients | waiting for the team (question C) |

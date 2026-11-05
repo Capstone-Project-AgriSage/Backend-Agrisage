@@ -268,9 +268,9 @@ release the same amount of the order's unused credit reservation (design §XVI-D
 | GET | `/api/debt-entries/{id}` | Operate | — | `200 DebtEntryResponse` |
 | POST | `/api/debt-entries/{id}/dispute` | Operate | `{ reason }` | `200 DebtEntryResponse` |
 | POST | `/api/debt-entries/{id}/keep` | Operate | `{ reason }` | `200 DebtEntryResponse` |
-| POST | `/api/debt-entries/{id}/change-due-date` | Manage (owner-only, not delegable; was Operate until 2026-11-03) | `{ newDueDate, reason, reasonCode? }` (F3.14) | `200 DebtEntryResponse` |
-| POST | `/api/debt-entries/{id}/adjust` | Manage | `{ amount, reason, reasonCode? }` (F3.14) | `200 DebtEntryResponse` |
-| POST | `/api/debt-entries/{id}/cancel` | Manage | `{ reason, reasonCode? }` (F3.14) | `200 DebtEntryResponse` |
+| POST | `/api/debt-entries/{id}/change-due-date` | Manage (owner-only, not delegable; was Operate until 2026-11-03) | `{ newDueDate, reason, reasonCode }` (F3.14; reasonCode required since A1, 2026-11-05) | `200 DebtEntryResponse` |
+| POST | `/api/debt-entries/{id}/adjust` | Manage | `{ amount, reason, reasonCode }` (F3.14; reasonCode required) | `200 DebtEntryResponse` |
+| POST | `/api/debt-entries/{id}/cancel` | Manage | `{ reason, reasonCode }` (F3.14; reasonCode required) | `200 DebtEntryResponse` |
 | GET | `/api/me/debt` | FARMER | — | `200 DebtAccountResponse` |
 | GET | `/api/me/debt-entries` (+ `/{id}`) | FARMER | query: `status`, paging | own entries only |
 | POST | `/api/me/debt-entries/{id}/dispute` | FARMER | `{ reason }` | `200 DebtEntryResponse` |
@@ -491,13 +491,14 @@ ledger, the origin season and the original due date stay; `rolloverCount` grows 
 - Audited as `DEBT_ROLLOVER` (old and new due date and season, `rolloverCount`, `originalDueDate`, `reasonCode`,
   `overrideExtensionLimit`).
 
-**Reason codes on the owner actions (D7).** `adjust`, `cancel` and `change-due-date` take an optional `reasonCode` (the 7
-codes: `MAT_MUA`, `THIEN_TAI`, `KHO_KHAN`, `TRI_AN`, `SAI_SOT`, `KHONG_THU_HOI`, `KHAC`); an unknown code → `400`. It
-becomes mandatory once F3.22 decides when (pending). `change-due-date` stays owner-only, never in the past, does not
+**Reason codes on the owner actions (D7, A1 - mandatory since 2026-11-05).** `adjust`, `cancel` and `change-due-date` require a
+`reasonCode` (the 7 codes: `MAT_MUA`, `THIEN_TAI`, `KHO_KHAN`, `TRI_AN`, `SAI_SOT`, `KHONG_THU_HOI`, `KHAC`); missing or unknown
+-> `400` (and `422` when the service is called without one). `PUT /api/crop-seasons/{id}` with `applyNewDueDateToCollectingDebts: true`
+also requires `reasonCode` (it changes the due date of each entry); every moved entry stores it. `change-due-date` stays owner-only, never in the past, does not
 count as a rollover, and records `exceedsTotalExtension` in its audit when it goes past the limit.
 
 `DebtActionResponse` adds `reasonCode`, `isPrePolicy` (a debt change, i.e. adjust, cancel, due date or rollover,
-recorded without a code: "Trước khi áp dụng chính sách"), `oldCropSeasonId`, `newCropSeasonId`.
+recorded without a code: "Trước khi áp dụng chính sách"; since the code is mandatory, only changes made before 2026-11-05 show it), `oldCropSeasonId`, `newCropSeasonId`.
 
 **Farmer notifications** (once per action, through the audit outbox): `DEBT_ROLLOVER` and `DEBT_CHANGE_DUE_DATE` →
 `DEBT_DUE_DATE_CHANGED`; `DEBT_ADJUST` → `DEBT_REDUCED`; `DEBT_CANCEL` → `DEBT_CANCELLED`; `DEBT_KEEP` →
@@ -592,7 +593,8 @@ DebtBySeasonItem {
 LimitSuggestionsResponse {
   "seasonId": "uuid", "requiredSeasons": 2, "seasons": [ { "id": "uuid", "code": "DX-2026", "name": "…" }, … ],
   "items": [ { "farmerProfileId": "uuid", "fullName": "…", "phoneNumber": "…", "creditLimit": 20000000,
-               "creditStatus": "ACTIVE", "paidAmount": 3000000, "lastPaidOn": "2027-09-10" } ]
+               "creditStatus": "ACTIVE", "paidAmount": 3000000, "lastPaidOn": "2027-09-10", "onTimeSeasons": 3 } ],
+  "page": 1, "pageSize": 20, "totalCount": 1
 }
 ```
 
@@ -607,10 +609,7 @@ LimitSuggestionsResponse {
   `carriedOver` = the part of `outstanding` now collected in a later season. `collection`: debt collected in the season
   now; `carriedIn` = the part that arose elsewhere (or had no season). A closed season shows its `closed_summary`
   (`isFrozen: true`); later payments on carried-over debt appear under the season that collects it.
-- **Limit suggestions (D12, CS-14).** For a closed season and the closed seasons just before it (`requiredSeasons` =
-  `onTimeSeasonsForLimitRaise`, default 2): customers with debt arising in each of them, all of it paid by real payments on
-  or before the original due date, never rolled over, moved, reduced, forgiven or returned. Fewer seasons → empty `seasons`
-  and `items`. Read-only: the owner changes the limit through the existing credit-limit API.
+- **Limit suggestions (D12, CS-14; rule of 05/11 agreed with the Lead).** `GET /api/crop-seasons/{id}/limit-suggestions?page=&pageSize=` (20 by default). A season where the customer owed nothing is skipped when counting. A customer is suggested when the season being closed holds debt of theirs [assumption, pending approval: the customer must have bought on credit this season] and their last `requiredSeasons` (`onTimeSeasonsForLimitRaise`, default 2) seasons with debt were all on time: all the debt that arose in each paid by real payments on or before the original due date, never rolled over, moved, reduced, forgiven or returned. `items[].onTimeSeasons` = consecutive on-time seasons with debt; the list is ordered by it (most first), then by name. `seasons` is a reference (the last N closed seasons up to this one; empty when fewer exist). Read-only: the owner changes the limit through the existing credit-limit API.
 
 ## 8h. F3.18 — Debt reminders at fixed milestones (new, 2026-11-03)
 

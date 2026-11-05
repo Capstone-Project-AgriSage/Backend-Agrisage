@@ -84,7 +84,7 @@ các khoản chuyển sang HT; gọi lần nữa (không truyền `entryIds`) �
 4. `GET /api/reports/debt-by-season` (Chủ): `origin` thoả `originatedAmount − collectedAmount − returnedAmount − reducedAmount − cancelledAmount = outstandingAmount`;
    khoản đã gia hạn vẫn nằm trong `origin` của vụ phát sinh (`carriedOverAmount`) và trong `collection` của vụ đang thu (`carriedInAmount`). Vụ đã đóng có `isFrozen: true`
    và số liệu không đổi dù sau đó có thu thêm.
-5. `GET /api/crop-seasons/{id}/limit-suggestions` — chỉ cho vụ đã đóng (`422` nếu chưa); trả khách đúng hạn liên tiếp `requiredSeasons` vụ đã đóng. Chỉ đọc.
+5. `GET /api/crop-seasons/{id}/limit-suggestions` — chỉ cho vụ đã đóng (`422` nếu chưa); trả khách đúng hạn liên tiếp `requiredSeasons` vụ có nợ (bỏ qua vụ không nợ), xếp theo số vụ đúng hạn rồi tên, phân trang 20. Chỉ đọc.
 
 ## 4b. Bắt đầu nhắc nợ (T0) — làm sau cùng
 
@@ -134,4 +134,4 @@ Bằng token **nông dân**:
 ## 8. Mã lý do (Chủ)
 
 `POST /api/debt-entries/{id}/adjust` `{ "amount": 100000, "reason": "Tri ân", "reasonCode": "TRI_AN" }` → `200`; trong `actions` có `reasonCode: "TRI_AN"`.
-`reasonCode: "BOGUS"` → `400`. Bỏ `reasonCode` vẫn được (tuỳ chọn tạm thời); action cũ không có mã hiện `isPrePolicy: true`.
+`reasonCode: "BOGUS"` → `400`. Bỏ `reasonCode` → `400` (bắt buộc từ 05/11); action cũ (trước đó) không có mã hiện `isPrePolicy: true`.

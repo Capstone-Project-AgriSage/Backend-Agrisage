@@ -42,7 +42,7 @@ setup documentation
   `20261102203458_CropSeasonsAndDebtPolicy`, `20261102205426_CropSeasonDebtPermissions`, `20261103161207_DebtReminderStartDate`) must be applied together with the code;
   the model now has 82 tables (historical baseline 67). Contract: `docs/reference/api-flows/FLOW_3_CREDIT_DEBT.md` sections 8b–8i;
   FE guide `docs/FE_GUIDE_FLOW_3.md`; manual test `docs/F3_SEASON_SWAGGER_TEST.md`. Still open: the receipt per season
-  (`outstandingBySeason`), mandatory reason codes (waits for the team's answer on real usage and the Flutter app), the L1/L2 review
+  (`outstandingBySeason`), the L1/L2 review
   of the order-confirmation change, and the lead's review of the migrations and reason-code lists.
 
 - Implemented — User-requested Auth P0 + in-app notifications + scheduled operations + audit-history APIs

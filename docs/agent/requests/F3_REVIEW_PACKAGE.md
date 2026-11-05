@@ -110,7 +110,7 @@ Chạm: `Payments/PaymentContracts.cs`, `PaymentQueries.cs` (read-only), test. C
 
 | Mục | Trạng thái ghi đúng | Phần còn lại | Là tiêu chí phát hành hay hoãn? |
 |---|---|---|---|
-| F3.14 gia hạn một khoản | **Đã xong phần chính**; còn bắt buộc mã lý do khi giảm/xóa/đổi hạn | Câu C + E; nếu bật bắt buộc: cách chuyển đổi client cũ | *Đề xuất — chờ duyệt:* hoãn sang bản sau nếu chưa có trả lời; mã lý do vẫn tùy chọn |
+| F3.14 gia hạn một khoản | **Đã xong**: mã lý do bắt buộc khi giảm/xóa/đổi hạn và khi lưu vụ có "áp hạn mới" (05/11, A1) | Lead duyệt 2 danh sách mã; FE web gửi mã cùng đợt (Flutter không gọi theo lời lead, chưa kiểm) | Cập nhật theo quyết định của chủ L3 |
 | F3.17 xem nợ | **Đã xong phần chính** (cột vụ, trạng thái hạn, "Cần quyết định", cảnh báo hạn mức); còn `outstandingBySeason[]` trên biên nhận | L1 đồng ý phạm vi (mục 5) | *Đề xuất — chờ duyệt:* hoãn nếu L1 chưa đồng ý; FE ẩn mục này |
 | B2 gợi ý hạn mức | Chạy được theo quy tắc hiện tại, tải hết dữ liệu vào bộ nhớ | D12-1, D12-2 | Hoãn |
 | B1, B6, B7, B11 | Xem mục 4, 7 | | Hoãn / đã chốt |
