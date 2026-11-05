@@ -534,7 +534,7 @@ credit-tier term.
   `{ farmerProfileId, fullName, phoneNumber, creditLimit, usedCredit, availableCredit, state: NEAR_LIMIT|AT_LIMIT }`. The
   owner decides: raise the limit, reduce the debt or collect part of it. Nothing changes the limit automatically.
 
-Pending in F3.17: `outstandingBySeason[]` on the debt repayment receipt (payments module).
+F3.17 receipt (2026-11-06): the payment detail of a `DEBT_REPAYMENT` payment (`GET /api/payments/{id}`, `/api/me/payments/{id}`, the receipt returned by cash / bank debt payments) has `outstandingBySeason[]`: `{ seasonId, seasonCode, seasonName, paidAmount, outstandingAmount }` per season that now collects debt this payment paid or the customer still owes (a null season = debt of no season, last). `paidAmount` = what this payment allocated (active allocations); `outstandingAmount` = what the customer owes there at the time of the read. `null` on other payments. Read-only, no schema change.
 
 ## 8f. F3.15 — Roll a whole season over (new, 2026-11-03)
 

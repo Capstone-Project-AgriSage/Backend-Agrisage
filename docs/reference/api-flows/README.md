@@ -510,7 +510,7 @@ All on the branch `feature/f3-21-debt-permission-lock`, not merged to `main`; th
 | F3.14 | Rollover of one entry, reason codes | done: reason code mandatory on adjust, cancel, change-due-date and applying a season date (2026-11-05); the lead still has to approve the code lists |
 | F3.15 | Rollover of a whole season | done |
 | F3.16 | Farmer's request for an extension | dropped |
-| F3.17 | Read views, "needs a decision" | main part done; the receipt per season (`outstandingBySeason[]`, touches `Payments`) waits for L1's agreement |
+| F3.17 | Read views, "needs a decision" | done, including the receipt per season (`outstandingBySeason[]`, touches `Payments`; separate commit for L1 review) |
 | F3.18 | Reminders N1–N5, start of reminders (T0) | done |
 | F3.19 | Close a season, report, limit suggestions | done (D12 rule of 05/11: seasons without debt skipped, ordered, paged; "debt in the closing season" detail awaits approval) |
 | F3.20 | Complete test and review | tests and reviews done; waits for the reviews above |

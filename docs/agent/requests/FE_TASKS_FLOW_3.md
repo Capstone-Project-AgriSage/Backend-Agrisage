@@ -31,7 +31,7 @@ Chạy thử: dữ liệu demo bằng `--seed-debt-demo` (DB cục bộ) và `do
 | M8 | Đóng vụ (`closing-check`), báo cáo nợ theo vụ, gợi ý tăng hạn mức | §4.1, §4.7 | Sẵn sàng (gợi ý hạn mức: chạy theo quy tắc hiện tại, **chờ làm rõ D12** — mục E) | Gợi ý chỉ đọc; nút dẫn sang màn hạn mức cũ |
 | M9 | Tạo đơn chịu: `credit-eligibility` hiện hạn dự kiến; chi tiết đơn hiện `originSeason`, `expectedDueDate` | §3.1 mục 11, 12 | Sẵn sàng | Bỏ mọi nhãn "quá hạn nên bị chặn mua chịu"; không còn lý do `OVERDUE_DEBT` |
 | M10 | **Form mã lý do** (giảm / xóa / đổi hạn; form lưu vụ có "áp hạn mới") | §7 mục 2 | Sẵn sàng — **P0 (BE đã bắt buộc từ 05/11)** | Trường chọn mã **bắt buộc**, danh sách mã lấy từ một hằng/cấu hình duy nhất để đổi một chỗ. Thiếu mã → `400`. Không tự thêm/bớt mã cho tới khi Lead duyệt (câu E). Ghi nợ thủ công không cần mã |
-| M11 | Biên nhận thanh toán trả nợ theo vụ (`outstandingBySeason[]`) | — | **Chờ hợp đồng** (BE chưa làm: cần L1 đồng ý sửa Payments) | Ẩn; làm sau |
+| M11 | Biên nhận thanh toán trả nợ theo vụ (`outstandingBySeason[]`) | §7 | Sẵn sàng (BE xong, chờ L1 review) | Hiện bảng theo vụ trên chi tiết thanh toán `DEBT_REPAYMENT`; `null` thì ẩn |
 
 ## B. Farmer-Web (nông dân)
 
