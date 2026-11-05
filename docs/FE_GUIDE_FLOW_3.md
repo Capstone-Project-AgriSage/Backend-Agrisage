@@ -286,7 +286,7 @@ Nhân viên/Chủ nhận bản tóm tắt: mỗi ngày tối đa một tin cho m
 
 ## 8. Chưa có hoặc chưa chốt
 
-- **Biên nhận thanh toán theo vụ**: chi tiết thanh toán trả nợ (`DEBT_REPAYMENT`) có `outstandingBySeason[]` = `{ seasonId, seasonCode, seasonName, paidAmount, outstandingAmount }` mỗi vụ đang thu (vụ null = nợ không thuộc vụ nào, xếp cuối). `paidAmount` = lần trả này đã trả cho vụ đó; `outstandingAmount` = khách còn nợ ở vụ đó **tại lúc đọc**. Thanh toán loại khác: `null`.
+- **Biên nhận thanh toán theo vụ**: chi tiết thanh toán trả nợ (`DEBT_REPAYMENT`) có `outstandingBySeason[]` = `{ seasonId, seasonCode, seasonName, paidAmount, outstandingNow }` mỗi vụ đang thu (vụ null = nợ không thuộc vụ nào, xếp cuối). `paidAmount` = lần trả này đã trả cho vụ đó; `outstandingNow` = khách còn nợ ở vụ đó **tại lúc đọc (không phải ngay sau lần trả)**. Thanh toán loại khác: `null`.
 - **Mã lý do bắt buộc** khi giảm/xoá/đổi hạn và khi lưu vụ có áp hạn mới (từ 05/11, lead đã đồng ý bắt buộc nếu form web đổi cùng đợt; Flutter không gọi các API này theo lời lead, chưa kiểm). Gửi thiếu mã → `400`.
 - **Yêu cầu xin gia hạn của nông dân:** bỏ ở giai đoạn này.
 - Hai danh sách mã lý do (7 mã, và 4 mã cho gia hạn) đang chờ lead duyệt; nếu đổi sẽ báo FE.

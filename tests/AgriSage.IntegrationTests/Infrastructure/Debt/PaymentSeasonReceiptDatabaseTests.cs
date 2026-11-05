@@ -67,7 +67,7 @@ public sealed class PaymentSeasonReceiptDatabaseTests
         Assert.NotNull(receipt.OutstandingBySeason);
         Assert.Equal(
             [("DX-2026", 1_000_000m, 0m), ("HT-2027", 500_000m, 1_500_000m), ((string?)null, 0m, 250_000m)],
-            receipt.OutstandingBySeason!.Select(s => (s.SeasonCode, s.PaidAmount, s.OutstandingAmount)).ToList());
+            receipt.OutstandingBySeason!.Select(s => (s.SeasonCode, s.PaidAmount, s.OutstandingNow)).ToList());
         Assert.Equal(receipt.Amount - receipt.UnallocatedAmount, receipt.OutstandingBySeason!.Sum(s => s.PaidAmount));
 
         // The same receipt read again, and by the customer (own payments only), has the same figures.

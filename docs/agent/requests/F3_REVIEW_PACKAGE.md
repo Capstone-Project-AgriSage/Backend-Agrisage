@@ -85,15 +85,15 @@ Chạm: `Payments/PaymentContracts.cs`, `PaymentQueries.cs` (read-only), test. C
 
 | Mục | Người (theo vai trò) | Kết luận (đồng ý / sửa thế nào / từ chối) | Ngày | Ghi chú |
 |---|---|---|---|---|
-| 1. Đơn hàng `a9b2db5` + B4 | L1 — Lead | | | |
-| 2. Đổi mức khóa cửa hàng | L1 — Lead | | | |
-| 2. Đổi mức khóa cửa hàng | L2 — Teammate 2 | | | |
-| 3. 4 migration + thứ tự + sao lưu | Lead | | | |
-| 4. Câu C | Lead / nhóm | | | |
-| 4. Danh sách mã lý do (E) | Lead | | | |
+| 1. Đơn hàng `a9b2db5` + B4 | L1 — Lead | Đồng ý có điều kiện: giữ hành vi khi cửa hàng chưa có vụ, đơn không mua chịu không gắn vụ; B4 để nguyên | 06/11 | theo lời chủ L3 báo lại, chưa có văn bản. Test bổ sung: `OrderSeasonAssignmentDatabaseTests` |
+| 2. Đổi mức khóa cửa hàng | L1 — Lead | Đồng ý | 06/11 | theo lời chủ L3 báo lại, chưa có văn bản |
+| 2. Đổi mức khóa cửa hàng | L2 — Teammate 2 | | | chưa phản hồi |
+| 3. 4 migration + thứ tự + sao lưu | Lead | Đồng ý theo gợi ý (đọc SQL, thử DB thử, sao lưu, thứ tự DB → BE → FE) | 06/11 | theo lời chủ L3 báo lại, chưa có văn bản; việc áp migration chưa làm |
+| 4. Câu C | Lead / nhóm | Lead trả lời theo gợi ý (kiểm repo Flutter) | 06/11 | theo lời chủ L3 báo lại, chưa có văn bản; nội dung kiểm tra UNCONFIRMED |
+| 4. Danh sách mã lý do (E) | Lead | Đồng ý theo gợi ý | 06/11 | theo lời chủ L3 báo lại, chưa có văn bản |
 | 4. D12-1, D12-2 | Người soạn tài liệu + owner L3 | | | |
-| 4. Nguồn BR-D | Người soạn tài liệu | | | |
-| 5. Phạm vi sửa Payments (F3.17) | L1 — Lead | | | |
+| 4. Nguồn BR-D | Người soạn tài liệu | | | chưa có |
+| 5. Phạm vi sửa Payments (F3.17) | L1 — Lead | Đồng ý, kèm yêu cầu đổi tên `outstandingAmount` → `outstandingNow` (đã làm) | 06/11 | theo lời chủ L3 báo lại, chưa có văn bản |
 
 ## 7. Các lựa chọn đã chốt (owner L3, 2026-11-04) — để người review biết
 
