@@ -57,6 +57,11 @@ public sealed record PaymentAllocationResponse(
     string Status,
     DateTimeOffset AllocatedAt);
 
+// F3.17 receipt of a debt repayment, per collecting season: PaidAmount = what THIS payment allocated to debt now collected in that
+// season; OutstandingAmount = what the customer still owes in that season at the time of the read (not at the time of the payment).
+// A null season is debt that belongs to no season. Only on DEBT_REPAYMENT payments (null otherwise).
+public sealed record PaymentSeasonBalance(Guid? SeasonId, string? SeasonCode, string? SeasonName, decimal PaidAmount, decimal OutstandingAmount);
+
 public sealed record PaymentResponse(
     Guid Id,
     string PaymentNumber,
@@ -77,7 +82,8 @@ public sealed record PaymentResponse(
     DateTimeOffset? CancelledAt,
     string? Note,
     decimal UnallocatedAmount,
-    IReadOnlyList<PaymentAllocationResponse> Allocations, string? Reference = null);
+    IReadOnlyList<PaymentAllocationResponse> Allocations, string? Reference = null,
+    IReadOnlyList<PaymentSeasonBalance>? OutstandingBySeason = null);
 
 public sealed record PaymentListItem(
     Guid Id,

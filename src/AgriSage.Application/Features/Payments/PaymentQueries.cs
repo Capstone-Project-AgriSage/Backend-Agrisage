@@ -80,7 +80,38 @@ public sealed class PaymentQueries(IAgriSageDbContext context)
                 a.AllocatedAmount,
                 a.PrepaymentConsumedAmount,
                 EnumText.Format(a.Status),
-                a.AllocatedAt)).ToList(), payment.ProviderTransactionId);
+                a.AllocatedAt)).ToList(), payment.ProviderTransactionId,
+            payment.PaymentContext == PaymentContext.DebtRepayment ? await SeasonBalancesAsync(payment, allocations, storeId, cancellationToken) : null);
+    }
+
+    // Guid.Empty stands for "no season" (a null key cannot go into a dictionary).
+    private async Task<IReadOnlyList<PaymentSeasonBalance>> SeasonBalancesAsync(
+        Payment payment, List<PaymentAllocation> allocations, Guid storeId, CancellationToken cancellationToken)
+    {
+        var active = allocations.Where(a => a.IsActive && a.DebtEntryId is not null).ToList();
+        var paidEntryIds = active.Select(a => a.DebtEntryId!.Value).Distinct().ToList();
+        var seasonOfEntry = (await context.DebtEntries.AsNoTracking().Where(e => paidEntryIds.Contains(e.Id))
+            .Select(e => new { e.Id, e.CollectionCropSeasonId }).ToListAsync(cancellationToken))
+            .ToDictionary(e => e.Id, e => e.CollectionCropSeasonId ?? Guid.Empty);
+        var paid = active.GroupBy(a => seasonOfEntry[a.DebtEntryId!.Value]).ToDictionary(g => g.Key, g => g.Sum(a => a.AllocatedAmount));
+
+        var owed = new Dictionary<Guid, decimal>();
+        if (payment.PayerFarmerProfileId is { } farmer)
+        {
+            var rows = await (from e in context.DebtEntries.AsNoTracking()
+                              join a in context.DebtAccounts.AsNoTracking() on e.DebtAccountId equals a.Id
+                              where a.StoreId == storeId && a.FarmerProfileId == farmer && e.OutstandingAmount > 0
+                              group e by e.CollectionCropSeasonId into g
+                              select new { Season = g.Key, Amount = g.Sum(x => x.OutstandingAmount) }).ToListAsync(cancellationToken);
+            owed = rows.ToDictionary(r => r.Season ?? Guid.Empty, r => r.Amount);
+        }
+
+        var ids = paid.Keys.Concat(owed.Keys).Distinct().ToList();
+        var seasons = await context.CropSeasons.AsNoTracking().Where(s => ids.Contains(s.Id))
+            .ToDictionaryAsync(s => s.Id, s => new { s.Code, s.Name, s.HarvestStart }, cancellationToken);
+        return ids.OrderBy(id => id == Guid.Empty ? 1 : 0).ThenBy(id => id == Guid.Empty ? default : seasons[id].HarvestStart)
+            .Select(id => new PaymentSeasonBalance(id == Guid.Empty ? null : id, id == Guid.Empty ? null : seasons[id].Code,
+                id == Guid.Empty ? null : seasons[id].Name, paid.GetValueOrDefault(id), owed.GetValueOrDefault(id))).ToList();
     }
 
     public async Task<PagedResult<PaymentListItem>> ListAsync(
