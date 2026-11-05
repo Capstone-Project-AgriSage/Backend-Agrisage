@@ -34,7 +34,11 @@ public class InitialCreateMigrationTests
                 "20261020030801_PermissionOverrideInheritance",
                 "20261027143255_EventDrivenRealtime",
                 "20261101232318_AdvisoryProblemProducts",
-                "20261102090829_InventoryReplenishment"
+                "20261102090829_InventoryReplenishment",
+                "20261102193332_LockDebtPermissionDelegation",
+                "20261102203458_CropSeasonsAndDebtPolicy",
+                "20261102205426_CropSeasonDebtPermissions",
+                "20261103161207_DebtReminderStartDate"
             ],
             context.Database.GetMigrations());
     }

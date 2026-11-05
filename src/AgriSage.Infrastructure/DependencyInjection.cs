@@ -114,6 +114,7 @@ public static class DependencyInjection
 
         services.AddOptions<SeedStoreOptions>().Bind(configuration.GetSection(SeedStoreOptions.SectionName));
         services.AddScoped<DatabaseSeeder>();
+        services.AddScoped<DebtDemoSeeder>();
 
         // Object storage (Supabase); nothing connects at startup and a missing configuration fails only on use.
         services.AddOptions<StorageOptions>().Bind(configuration.GetSection(StorageOptions.SectionName));

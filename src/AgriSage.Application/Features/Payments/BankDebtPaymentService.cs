@@ -71,7 +71,7 @@ public sealed class BankDebtPaymentService(IAgriSageDbContext db, IRowLockServic
 
     private async Task<PaymentResponse> MutateAsync(Guid id, string? rejectReason, CancellationToken token)
     {
-        var actor = await access.ActorAsync(rejectReason is null ? "BANK_PAYMENTS.CONFIRM" : "BANK_PAYMENTS.REJECT", token, manage: true);
+        var actor = await access.OwnerActorAsync(rejectReason is null ? "BANK_PAYMENTS.CONFIRM" : "BANK_PAYMENTS.REJECT", token);
         var store = await ActiveStore.GetIdAsync(db, token);
         await using var tx = await db.BeginTransactionAsync(token);
         await locks.LockPaymentAsync(id, token);

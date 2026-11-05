@@ -22,12 +22,16 @@ internal sealed class DebtEntryConfiguration : EntityConfiguration<DebtEntry>
         builder.Property(entry => entry.OriginalAmount).IsMoney();
         builder.Property(entry => entry.OutstandingAmount).IsMoney();
         builder.Property(entry => entry.Status).HasMaxLength(30);
+        builder.Property(entry => entry.RolloverCount).HasDbDefault(0);
+        builder.Property(entry => entry.DueBasis).IsJson();
 
         builder.HasReference<DebtEntry, DebtAccount>(entry => entry.DebtAccountId);
         builder.HasReference<DebtEntry, Order>(entry => entry.OrderId);
         builder.HasReference<DebtEntry, Delivery>(entry => entry.DeliveryId);
         builder.HasReference<DebtEntry, DeliveryAttempt>(entry => entry.DeliveryAttemptId);
         builder.HasReference<DebtEntry, StockMovement>(entry => entry.SourceStockMovementId);
+        builder.HasReference<DebtEntry, CropSeason>(entry => entry.OriginCropSeasonId);
+        builder.HasReference<DebtEntry, CropSeason>(entry => entry.CollectionCropSeasonId);
         builder.HasUserReference(entry => entry.CreatedBy);
         builder.HasMany(entry => entry.Actions).WithOne().HasForeignKey(action => action.DebtEntryId);
 
@@ -44,6 +48,7 @@ internal sealed class DebtEntryConfiguration : EntityConfiguration<DebtEntry>
         builder.HasCheck("prepayment_within_fulfillment", "prepayment_applied_amount <= fulfillment_value");
         builder.HasCheck("original_amount_formula", "original_amount = fulfillment_value - prepayment_applied_amount");
         builder.HasCheck("outstanding_within_original", "outstanding_amount <= original_amount");
+        builder.HasCheck("rollover_count", "rollover_count >= 0");
         builder.HasCheck(
             "source_references",
             "(source_type = 'DELIVERY' AND order_id IS NOT NULL AND delivery_id IS NOT NULL "

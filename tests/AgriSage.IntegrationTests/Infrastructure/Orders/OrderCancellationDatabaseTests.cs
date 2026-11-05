@@ -54,7 +54,7 @@ public class OrderCancellationDatabaseTests
             PriceLists = new PriceListService(context, clock, errors, audit);
             var queries = new OrderQueries(context);
             Orders = new OrderService(
-                context, new OrderBuilder(context, new PriceResolver(context), user, clock, audit, new AgriSage.Application.Features.Credit.CreditEligibilityService(context, clock, Microsoft.Extensions.Options.Options.Create(new AgriSage.Application.Features.Credit.CreditPolicy()))), queries, user, clock, errors, audit);
+                context, new OrderBuilder(context, new PriceResolver(context), user, clock, audit, new AgriSage.Application.Features.Credit.CreditEligibilityService(context, clock)), queries, user, clock, errors, audit);
             Confirmation = new OrderConfirmationService(
                 context, locks, new OrderConfirmer(context, locks, new StubOrderSettlementGuard(), user, clock, audit), queries, clock, errors, audit);
             Cancellation = new OrderPaymentCancellation(context, locks, Gateway, clock, audit);

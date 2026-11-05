@@ -1,5 +1,7 @@
+using AgriSage.Application.Common;
 using AgriSage.Application.Common.Exceptions;
 using AgriSage.Application.Common.Interfaces;
+using AgriSage.Application.Features.Debt;
 using AgriSage.Application.Features.Payments;
 using AgriSage.Domain.Features.Credit.Entities;
 using AgriSage.Domain.Features.Orders.Entities;
@@ -29,7 +31,9 @@ public sealed class OrderSettlementGuard(IAgriSageDbContext db, IRowLockService 
             && r.AmountReserved > r.AmountConsumed + r.AmountReleased, token))
             throw new BusinessRuleException("The order already has a credit reservation.");
         if (required > 0) db.CreditReservations.Add(new CreditReservation(order.StoreId, profile.Id, order.Id, required, actorId, clock.UtcNow));
-        return new(profile.CreditTier!.DefaultPaymentTermDays);
+        // F3.13 (D15): the order joins the season open for orders on the Vietnam day it is confirmed; the debt arises on delivery.
+        var season = await DebtDueLookup.OpenSeasonOnAsync(db, order.StoreId, BusinessCalendar.Today(clock.UtcNow), token);
+        return new(profile.CreditTier!.DefaultPaymentTermDays, season?.Id);
     }
 
     public async Task ReleaseAsync(Order order, Guid actorId, string? reason, CancellationToken token)

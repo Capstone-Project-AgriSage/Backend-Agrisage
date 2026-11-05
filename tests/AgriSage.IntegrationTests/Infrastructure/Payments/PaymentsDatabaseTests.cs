@@ -52,7 +52,7 @@ public class PaymentsDatabaseTests
             StoreProducts = new StoreProductService(context, errors);
             PriceLists = new PriceListService(context, clock, errors, audit);
             Orders = new OrderService(
-                context, new OrderBuilder(context, new PriceResolver(context), user, clock, audit, new AgriSage.Application.Features.Credit.CreditEligibilityService(context, clock, Microsoft.Extensions.Options.Options.Create(new AgriSage.Application.Features.Credit.CreditPolicy()))), new OrderQueries(context),
+                context, new OrderBuilder(context, new PriceResolver(context), user, clock, audit, new AgriSage.Application.Features.Credit.CreditEligibilityService(context, clock)), new OrderQueries(context),
                 user, clock, errors, audit);
             Ledger = new OrderPrepaymentLedger(context);
             Allocator = new PaymentAllocator(clock, new StubCreditReservationAdjuster(), new StubDebtRepaymentPosting());

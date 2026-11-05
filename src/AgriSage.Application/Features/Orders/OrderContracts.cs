@@ -1,4 +1,5 @@
 using AgriSage.Application.Common.Models;
+using AgriSage.Application.Features.Debt;
 
 namespace AgriSage.Application.Features.Orders;
 
@@ -127,7 +128,9 @@ public sealed record OrderResponse(
     DateTimeOffset? CancelledAt,
     string? CancelReason,
     long Version,
-    IReadOnlyList<OrderItemResponse> Items);
+    IReadOnlyList<OrderItemResponse> Items,
+    DebtSeasonReference? OriginSeason = null,
+    DateOnly? ExpectedDueDate = null);
 
 public sealed record OrderListItem(
     Guid Id,

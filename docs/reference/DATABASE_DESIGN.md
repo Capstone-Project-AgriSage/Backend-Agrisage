@@ -6575,6 +6575,70 @@ Every enum-backed varchar column also has an IN (...) CHECK of its
 documented values (§0.5).
 ```
 
+## 35.23 Debt by crop season, store debt policy and the start of reminders (tables 34, 49, 50; new tables crop_seasons, store_debt_policies) — migrations CropSeasonsAndDebtPolicy, CropSeasonDebtPermissions, LockDebtPermissionDelegation, DebtReminderStartDate
+
+```text
+Decided by the L3 owner on 2026-11-03 (mentor approval as reported by the owner, no record linked); the team lead has NOT yet
+reviewed the migrations or the reason-code lists (status: "owner-decided, awaiting lead review").
+Supersedes §35.20 where it says the debt term never depends on crop seasons: a credit order now joins the
+crop season open for orders on the day it is confirmed, and the due date of its debt follows the season;
+the credit tier term (§35.20) still applies to debt that belongs to no season and to deliveries made after
+the season's due date. Model: 67 -> 69 tables from this section (the model has 82 tables in total).
+
+crop_seasons (new, one row per season of a Store; soft delete; version)
+  id, store_id FK stores (RESTRICT), code varchar(30), name varchar(150), crop_type varchar(50) DEFAULT 'RICE',
+  order_window_start, harvest_start, harvest_end, grace_days, payment_due_date  (all date),
+  seasonal_rule_id uuid NULL FK inventory_seasonal_rules (the warehouse season; optional link, no dependency),
+  closed_at / closed_by / closed_summary jsonb  (all NULL, or all set when the season is closed),
+  version bigint DEFAULT 0, created_at, updated_at, deleted_at, deleted_by.
+  CHECK order_window_start < harvest_start;  harvest_end > harvest_start;  grace_days BETWEEN 0 AND 365;
+        payment_due_date = harvest_end + grace_days;  closed_* all NULL or all set.
+  UNIQUE (store_id, code) WHERE deleted_at IS NULL;  index (store_id, harvest_start); index (seasonal_rule_id).
+  Seasons are consecutive: the first one is given order_window_start, each later one opens on the harvest_start
+  of the previous one, new seasons are only added after the last (Application check, SeasonCalendar.ValidateSequence).
+  The phase (PLANNED / OPEN / HARVESTING / COLLECTING / CLOSED) is derived from the Vietnam date, never stored.
+  A closed season keeps closed_summary (the report figures at that moment) and no longer changes.
+
+store_debt_policies (new, one row per Store, created on the first save; the defaults apply while there is none)
+  store_id FK stores (RESTRICT), default_grace_days DEFAULT 30, reminder_offsets jsonb {"n2":-7,"n4":14,"n5":30},
+  staff_rollover_limit DEFAULT 1, owner_review_after_rollovers DEFAULT 2, on_time_seasons_for_limit_raise DEFAULT 2,
+  max_credit_term_days NULL (off), max_total_extension_days DEFAULT 365,
+  reminders_start_date date NULL  (migration DebtReminderStartDate: NULL = reminders not started, the job sends nothing;
+  set once to today in Vietnam time by POST /api/debt-reminders/initialize and never changed),
+  version, soft delete columns.
+  CHECK default_grace_days BETWEEN 0 AND 365; staff_rollover_limit >= 0; owner_review_after_rollovers >= staff_rollover_limit;
+        on_time_seasons_for_limit_raise >= 1; max_credit_term_days IS NULL OR >= 1; max_total_extension_days >= 1.
+  The Application and Domain also require owner_review_after_rollovers >= 1 (at 0 every entry would need a decision).
+  UNIQUE (store_id) WHERE deleted_at IS NULL.
+
+debt_entries (table 49) — new columns
+  origin_crop_season_id uuid NULL FK crop_seasons    the season the debt arose in (fixed)
+  collection_crop_season_id uuid NULL FK crop_seasons  the season it is collected in (moves on a rollover)
+  original_due_date date NOT NULL                    the first due date (backfilled from due_date for existing rows)
+  rollover_count integer NOT NULL DEFAULT 0  CHECK >= 0
+  due_basis jsonb NULL                               how the due date was computed (rule, season, term, cap) — D17
+  Indexes on both season columns. A rollover changes only collection_crop_season_id, due_date and rollover_count;
+  the amount, the status, origin_crop_season_id and original_due_date stay.
+
+debt_entry_actions (table 50) — new columns and values
+  old_crop_season_id, new_crop_season_id uuid NULL FK crop_seasons (indexed);  reason_code varchar(30) NULL
+  CHECK IN ('MAT_MUA','THIEN_TAI','KHO_KHAN','TRI_AN','SAI_SOT','KHONG_THU_HOI','KHAC')   — optional until the team decides (F3.22)
+  action_type CHECK now also allows 'ROLLOVER'.
+
+orders (table 34) — new column
+  crop_season_id uuid NULL FK crop_seasons (indexed)  CHECK crop_season_id IS NULL OR settlement_type = 'CREDIT'
+  Set once, when the credit order is confirmed (the season whose order window contains the Vietnam day of the
+  confirmation); later edits of the season do not move it. Debt arises only on fulfillment (§35.20 stays true).
+
+Permissions (permissions, role_permissions): six new codes DEBT.ROLLOVER, CROP_SEASONS.READ|MANAGE, DEBT_POLICY.READ|MANAGE,
+MY_CROP_SEASONS.READ; and nine existing codes (DEBT.ADJUST, DEBT.CANCEL, DEBT.MANUAL, DEBT.DUE_DATE, BANK_PAYMENTS.CONFIRM,
+BANK_PAYMENTS.REJECT, CREDIT.SUSPEND, CREDIT.BLOCK, CREDIT.ACTIVATE) become is_delegable = false: only ADMIN and STORE_OWNER
+may use them, the service checks the role again, and the migration revokes the grants of everyone else (data only).
+
+Never automatic: the system does not lock or limit a customer's credit because of overdue debt; overdue debt still counts
+against the credit limit. No fee, interest or penalty (BUSINESS_RULES 24).
+```
+
 ## 35.22 Sales report revenue from SALE movements (tables 26, 27, 34, 35, 57, 58) — no schema change
 
 ```text

@@ -99,6 +99,11 @@ public sealed class NotificationCoverageDatabaseTests
             ("DEBT_CREATED", "DEBT_ENTRY", debt.Entry.Id, farmer),
             ("DEBT_MANUAL_ENTRY", "DEBT_ENTRY", debt.Entry.Id, farmer),
             ("DEBT_DISPUTE", "DEBT_ENTRY", debt.Entry.Id, staff),
+            ("DEBT_ROLLOVER", "DEBT_ENTRY", debt.Entry.Id, farmer),
+            ("DEBT_CHANGE_DUE_DATE", "DEBT_ENTRY", debt.Entry.Id, farmer),
+            ("DEBT_ADJUST", "DEBT_ENTRY", debt.Entry.Id, farmer),
+            ("DEBT_CANCEL", "DEBT_ENTRY", debt.Entry.Id, farmer),
+            ("DEBT_KEEP", "DEBT_ENTRY", debt.Entry.Id, farmer),
             ("CUSTOMER_CREDIT_LIMIT_CHANGED", "CREDIT_PROFILE", credit.Id, [owner.User.Id, e.User.Id]),
             ("RETURN_REQUESTED", "SALES_RETURN", salesReturn.Id, staff),
             ("RETURN_APPROVED", "SALES_RETURN", salesReturn.Id, farmer),
@@ -125,6 +130,15 @@ public sealed class NotificationCoverageDatabaseTests
             if (row.Action == "DELIVERY_ATTEMPT_COMPLETED") Assert.All(notices, n => Assert.Equal("DELIVERY_FAILED", n.NotificationType));
             if (row.Action == "PAYMENT_RECEIVED" && row.Id == repayment.Id) Assert.All(notices, n => Assert.Equal("DEBT_PAYMENT_CONFIRMED", n.NotificationType));
             if (row.Action == "DEBT_DISPUTE") Assert.All(notices, n => Assert.Equal("DEBT_DISPUTED", n.NotificationType));
+            var debtType = row.Action switch
+            {
+                "DEBT_ROLLOVER" or "DEBT_CHANGE_DUE_DATE" => "DEBT_DUE_DATE_CHANGED",
+                "DEBT_ADJUST" => "DEBT_REDUCED",
+                "DEBT_CANCEL" => "DEBT_CANCELLED",
+                "DEBT_KEEP" => "DEBT_DISPUTE_RESOLVED",
+                _ => null,
+            };
+            if (debtType is not null) Assert.All(notices, n => Assert.Equal(debtType, n.NotificationType));
         }
         var mismatch = e.Audit.Record("ORDER_CANCELLED", "ORDER", order.Id, otherStore.Id);
         await e.Context.SaveChangesAsync(Token);
@@ -133,7 +147,9 @@ public sealed class NotificationCoverageDatabaseTests
     }
 
     [RealDbFact]
-    public async Task Debt_reminders_reach_staff_even_if_the_farmer_was_already_notified_and_do_not_change_the_ledger()
+    // F3.18 (D10): the overdue group gets its due-date reminder (N3) with one summary for each staff member, the group due
+    // in two days its N2 (Farmer only). A reminder under the old daily key does not block the milestone reminders.
+    public async Task Debt_reminders_reach_staff_once_per_milestone_and_do_not_change_the_ledger()
     {
         await using var e = await OperationsTestEnvironment.CreateAsync();
         var owner = await MemberAsync(e, RoleCode.StoreOwner);
@@ -150,14 +166,21 @@ public sealed class NotificationCoverageDatabaseTests
         await e.Context.SaveChangesAsync(Token);
         var service = new OperationalAlertsService(e.Context, writer, new AgriSage.Application.Features.Inventory.InventoryService(
             e.Context, e.Time, new RowLockService(e.Context)), e.Time);
-        await service.DebtRemindersAsync(1, 3, Token);
-        await service.DebtRemindersAsync(1, 3, Token);
-        await service.DebtRemindersAsync(1, 3, Token);
+        await AgriSage.IntegrationTests.Infrastructure.Debt.ReminderStartHelper.EnsureAsync(e.Context, e.Store.Id, Token);
+        await service.DebtRemindersAsync(1, Token);
+        await service.DebtRemindersAsync(1, Token);
+        await service.DebtRemindersAsync(1, Token);
         var notices = await e.Context.Notifications.Where(n => n.NotificationType == "DEBT_OVERDUE" || n.NotificationType == "DEBT_DUE_SOON").ToListAsync(Token);
-        Assert.Equal(6, notices.Count);
-        Assert.Equal(2, notices.Count(n => n.UserId == owner.User.Id));
-        Assert.Equal(2, notices.Count(n => n.UserId == sales.User.Id));
-        Assert.Equal(2, notices.Count(n => n.UserId == e.User.Id));
+        Assert.Equal(5, notices.Count);
+        Assert.Equal($"debt-reminder-staff:{e.Store.Id:N}:{today:yyyyMMdd}:N3", Assert.Single(notices, n => n.UserId == owner.User.Id).DeduplicationKey);
+        Assert.Equal($"debt-reminder-staff:{e.Store.Id:N}:{today:yyyyMMdd}:N3", Assert.Single(notices, n => n.UserId == sales.User.Id).DeduplicationKey);
+        var farmer = notices.Where(n => n.UserId == e.User.Id).Select(n => (n.NotificationType, n.DeduplicationKey!)).OrderBy(n => n.Item2).ToList();
+        Assert.Equal(new[]
+        {
+            ("DEBT_OVERDUE", $"debt-reminder:{e.Farmer.Id}:{today.AddDays(-1):yyyyMMdd}:N3"),
+            ("DEBT_DUE_SOON", $"debt-reminder:{e.Farmer.Id}:{today.AddDays(2):yyyyMMdd}:N2"),
+            ("DEBT_OVERDUE", $"debt:{overdue.Entry.Id}:{today:yyyyMMdd}"),
+        }.OrderBy(n => n.Item2), farmer);
         Assert.Equal(300m, account.CurrentBalance);
         Assert.Equal(2, await e.Context.DebtTransactions.CountAsync(t => t.DebtAccountId == account.Id, Token));
     }

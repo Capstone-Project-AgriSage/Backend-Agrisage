@@ -4,6 +4,7 @@ using AgriSage.Application.Common;
 using AgriSage.Application.Common.Interfaces;
 using AgriSage.Application.Features.Credit;
 using AgriSage.Application.Features.Orders;
+using AgriSage.Application.Features.Permissions;
 using AgriSage.Application.Features.Pricing;
 using AgriSage.Domain.Features.Credit.Entities;
 using AgriSage.Domain.Features.Customers.Entities;
@@ -16,6 +17,8 @@ using AgriSage.Domain.Features.Stores.Entities;
 using AgriSage.Infrastructure.Persistence;
 using AgriSage.Infrastructure.Persistence.Interceptors;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using System.Data.Common;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 
@@ -43,6 +46,25 @@ internal sealed class CreditTestDatabase : IAsyncDisposable
     { public DateTimeOffset UtcNow { get; set; } = new(2026, 10, 4, 17, 30, 0, TimeSpan.Zero); }
     public UserContext User { get; } = new();
     public TestClock Clock { get; } = new();
+    // Lets a test run code right after a SQL command of any scope of this database (for example to commit another transaction
+    // between the two reads of one use case). Runs once: it disarms itself before the callback, which may use the database.
+    public sealed class CommandHookInterceptor : DbCommandInterceptor
+    {
+        public Func<string, bool>? When { get; set; }
+        public Func<Task>? Then { get; set; }
+        private async Task FireAsync(DbCommand command)
+        {
+            var (when, then) = (When, Then);
+            if (when is null || then is null || !when(command.CommandText)) return;
+            When = null; Then = null;
+            await then();
+        }
+        public override async ValueTask<object?> ScalarExecutedAsync(DbCommand command, CommandExecutedEventData eventData, object? result, CancellationToken cancellationToken = default)
+        { await FireAsync(command); return result; }
+        public override async ValueTask<DbDataReader> ReaderExecutedAsync(DbCommand command, CommandExecutedEventData eventData, DbDataReader result, CancellationToken cancellationToken = default)
+        { await FireAsync(command); return result; }
+    }
+    public CommandHookInterceptor CommandHook { get; } = new();
     public Guid StoreId { get; private set; }
     public Guid FarmerId { get; private set; }
     public Guid FarmerUserId { get; private set; }
@@ -53,6 +75,8 @@ internal sealed class CreditTestDatabase : IAsyncDisposable
     public Guid PackagingId { get; private set; }
     public Guid LotId { get; private set; }
     public IServiceScope Scope() => _services!.CreateScope();
+    // Connection string of this test's isolated schema, for tests that host the API over the same data.
+    public string ConnectionString { get; private set; } = "";
 
     public static async Task<CreditTestDatabase> StartAsync(CancellationToken token)
     {
@@ -71,13 +95,14 @@ internal sealed class CreditTestDatabase : IAsyncDisposable
             await cmd.ExecuteNonQueryAsync(token);
         }
         var connection = new NpgsqlConnectionStringBuilder(_adminConnection) { SearchPath = _schema, Pooling = false }.ConnectionString;
+        ConnectionString = connection;
         var s = new ServiceCollection();
         s.AddApplication(); s.AddSingleton<ICurrentUserService>(User); s.AddSingleton<IDateTimeProvider>(Clock);
         s.AddSingleton<IDatabaseErrorClassifier, NpgsqlErrorClassifier>();
         // OrderPaymentCancellation (flow 2, F2.4) closes payOS links through the gateway; tests never reach payOS.
         s.AddSingleton<IPaymentGateway, AgriSage.IntegrationTests.Infrastructure.Payments.FakePaymentGateway>();
         s.AddDbContext<AgriSageDbContext>(o => o.UseNpgsql(connection).AddInterceptors(new SoftDeleteInterceptor(User, Clock),
-            new AuditableEntityInterceptor(Clock), new ConcurrencyVersionInterceptor()));
+            new AuditableEntityInterceptor(Clock), new ConcurrencyVersionInterceptor(), CommandHook));
         s.AddScoped<IAgriSageDbContext>(p => p.GetRequiredService<AgriSageDbContext>());
         s.AddScoped<IRowLockService, RowLockService>();
         s.AddSingleton<IPaymentGateway, AgriSage.IntegrationTests.Infrastructure.Payments.FakePaymentGateway>();
@@ -101,6 +126,11 @@ internal sealed class CreditTestDatabase : IAsyncDisposable
         lot.ReceiveStock(1000, 100_000);
         StoreProductId = storeProduct.Id; PackagingId = packaging.Id; LotId = lot.Id;
         db.AddRange(ownerRole, farmerRole, owner, farmerUser, farmer, store, tier, profile, account, category, unit, product, storeProduct, lot);
+        // Since dynamic permissions (27594a9) the services ask IPermissionEvaluator, which needs the owner to be an active member
+        // of the store and the Store Owner role defaults to exist in the database. Both are required: either one alone is refused.
+        db.StoreMembers.Add(new StoreMember(store.Id, owner.Id));
+        foreach (var permission in PermissionCatalog.Entries.Where(p => p.DefaultRoles.Contains("STORE_OWNER")))
+            db.RolePermissions.Add(new RolePermission(ownerRole.Id, permission.Id, true));
         await db.SaveChangesAsync(token);
         var prices = scope.ServiceProvider.GetRequiredService<IPriceListService>();
         var list = await prices.CreateAsync(new("PRICE", "Price", Clock.UtcNow.AddDays(-1), IsWalkInDefault: true), token);
@@ -113,10 +143,18 @@ internal sealed class CreditTestDatabase : IAsyncDisposable
         return await s.ServiceProvider.GetRequiredService<IOrderService>().CreateAsync(
             new("REGISTERED", "CREDIT", "PICKUP", [new(StoreProductId, PackagingId, quantity)], FarmerId), token);
     }
-    public async Task<OrderResponse> FulfillAsync(long quantity, CancellationToken token)
+    // Since F3.13 a confirmed credit order joins the season open for orders that day. withoutSeason clears it, for the tests of
+    // debt that belongs to no season (the credit-tier term), whatever seasons the store has.
+    public async Task<OrderResponse> FulfillAsync(long quantity, CancellationToken token, bool withoutSeason = false)
     {
         var o = await OrderAsync(quantity, token);
         using (var s = Scope()) await s.ServiceProvider.GetRequiredService<IOrderConfirmationService>().ConfirmAsync(o.Id, token);
+        if (withoutSeason)
+        {
+            using var clear = Scope();
+            await clear.ServiceProvider.GetRequiredService<AgriSageDbContext>().Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE orders SET crop_season_id = NULL WHERE id = {o.Id}", token);
+        }
         using var pickup = Scope();
         return await pickup.ServiceProvider.GetRequiredService<IOrderPickupService>().PickupAsync(o.Id,
             new([new(o.Items.Single().Id, [new(LotId, quantity)])]), token);

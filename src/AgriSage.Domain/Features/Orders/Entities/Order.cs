@@ -86,6 +86,9 @@ public sealed class Order : SoftDeletableEntity, IHasConcurrencyVersion
     // Captured at confirmation of a CREDIT order; later Credit Tier changes do not alter it.
     public int? CreditTermDaysSnapshot { get; private set; }
 
+    // Origin season of a CREDIT order's debt (D9), fixed at confirmation; partial or late deliveries keep it.
+    public Guid? CropSeasonId { get; private set; }
+
     public FulfillmentType FulfillmentType { get; private set; }
 
     public Guid? SourceAddressId { get; private set; }
@@ -208,8 +211,15 @@ public sealed class Order : SoftDeletableEntity, IHasConcurrencyVersion
         Note = note;
     }
 
-    public void Confirm(Guid confirmedBy, DateTimeOffset confirmedAt, int? creditTermDays = null)
+    // cropSeasonId: the debt-collection season the CREDIT order belongs to, fixed at confirmation (CS-04, D15); null when
+    // no season covers the confirmation day and the credit-tier term applies.
+    public void Confirm(Guid confirmedBy, DateTimeOffset confirmedAt, int? creditTermDays = null, Guid? cropSeasonId = null)
     {
+        if (cropSeasonId is not null && (SettlementType != SettlementType.Credit || cropSeasonId == Guid.Empty))
+        {
+            throw new DomainException("Only a CREDIT order carries a crop season.");
+        }
+
         EnsurePending();
 
         if (!ActiveItems.Any())
@@ -230,6 +240,7 @@ public sealed class Order : SoftDeletableEntity, IHasConcurrencyVersion
         }
 
         CreditTermDaysSnapshot = creditTermDays;
+        CropSeasonId = cropSeasonId;
         Status = OrderStatus.Confirmed;
         ConfirmedBy = confirmedBy;
         ConfirmedAt = confirmedAt;

@@ -52,7 +52,9 @@ public sealed class DebtAccount : SoftDeletableEntity, IHasConcurrencyVersion
         Guid createdBy,
         DateTimeOffset occurredAt,
         Guid? deliveryId = null,
-        Guid? deliveryAttemptId = null)
+        Guid? deliveryAttemptId = null,
+        Guid? originCropSeasonId = null,
+        string? dueBasis = null)
     {
         if (sourceType is not (DebtEntrySourceType.Delivery or DebtEntrySourceType.Pickup))
         {
@@ -70,7 +72,9 @@ public sealed class DebtAccount : SoftDeletableEntity, IHasConcurrencyVersion
             orderId,
             deliveryId,
             deliveryAttemptId,
-            sourceStockMovementId);
+            sourceStockMovementId,
+            originCropSeasonId,
+            dueBasis);
 
         var transaction = Post(DebtTransactionType.CreditSale, entry.OriginalAmount, entry.Id, occurredAt, createdBy);
 
@@ -85,7 +89,9 @@ public sealed class DebtAccount : SoftDeletableEntity, IHasConcurrencyVersion
         Guid createdBy,
         DateTimeOffset occurredAt,
         Guid? orderId = null,
-        string? note = null)
+        string? note = null,
+        Guid? originCropSeasonId = null,
+        string? dueBasis = null)
     {
         var entry = new DebtEntry(
             Id,
@@ -95,7 +101,9 @@ public sealed class DebtAccount : SoftDeletableEntity, IHasConcurrencyVersion
             prepaymentAppliedAmount: 0,
             dueDate,
             createdBy,
-            orderId);
+            orderId,
+            originCropSeasonId: originCropSeasonId,
+            dueBasis: dueBasis);
 
         var transaction = Post(
             DebtTransactionType.AdjustmentIn,
@@ -144,12 +152,13 @@ public sealed class DebtAccount : SoftDeletableEntity, IHasConcurrencyVersion
         decimal decreaseAmount,
         string reason,
         Guid createdBy,
-        DateTimeOffset occurredAt)
+        DateTimeOffset occurredAt,
+        DebtReasonCode? reasonCode = null)
     {
         EnsureOwns(entry);
         EnsureCanPost(-decreaseAmount);
 
-        var action = entry.Adjust(decreaseAmount, reason, createdBy);
+        var action = entry.Adjust(decreaseAmount, reason, createdBy, reasonCode);
 
         return Post(
             DebtTransactionType.AdjustmentOut,
@@ -171,12 +180,13 @@ public sealed class DebtAccount : SoftDeletableEntity, IHasConcurrencyVersion
         return Post(DebtTransactionType.Return, -amount, entry.Id, occurredAt, createdBy, salesReturnId: salesReturnId);
     }
 
-    public DebtTransaction CancelEntry(DebtEntry entry, string reason, Guid createdBy, DateTimeOffset occurredAt)
+    public DebtTransaction CancelEntry(DebtEntry entry, string reason, Guid createdBy, DateTimeOffset occurredAt,
+        DebtReasonCode? reasonCode = null)
     {
         EnsureOwns(entry);
         EnsureCanPost(-entry.OutstandingAmount);
 
-        var action = entry.Cancel(reason, createdBy);
+        var action = entry.Cancel(reason, createdBy, reasonCode);
 
         return Post(
             DebtTransactionType.AdjustmentOut,

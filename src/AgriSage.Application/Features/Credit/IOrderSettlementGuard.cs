@@ -15,5 +15,6 @@ public interface IOrderSettlementGuard
     Task ReleaseAsync(Order order, Guid actorId, string? reason, CancellationToken cancellationToken);
 }
 
-// CreditTermDays is set for CREDIT orders only (snapshotted on the order at confirmation).
-public sealed record SettlementResult(int? CreditTermDays);
+// CreditTermDays is set for CREDIT orders only (snapshotted on the order at confirmation). CropSeasonId (F3.13, D15) is the
+// season whose order window contains the confirmation day, or null when the store has none for that day.
+public sealed record SettlementResult(int? CreditTermDays, Guid? CropSeasonId = null);

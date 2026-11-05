@@ -51,6 +51,7 @@ public sealed class CreditDebtHttpTests(StaffHttpTests.StaffApiFactory factory) 
     [InlineData("/api/debt-entries/{id}/adjust")]
     [InlineData("/api/debt-entries/{id}/cancel")]
     [InlineData("/api/customers/{id}/debt/manual-entries")]
+    [InlineData("/api/debt-entries/{id}/change-due-date")]
     public async Task Sales_cannot_review_bank_receipts_or_adjust_debt(string route)
     {
         using var c = Client("SALES_STAFF");

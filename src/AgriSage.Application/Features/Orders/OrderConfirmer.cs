@@ -107,7 +107,7 @@ public sealed class OrderConfirmer(
         }
 
         context.InventoryReservations.Add(reservation);
-        order.Confirm(actorId, now, settlement.CreditTermDays);
+        order.Confirm(actorId, now, settlement.CreditTermDays, settlement.CropSeasonId);
         audit.Record(
             "ORDER_CONFIRMED",
             "ORDER",
@@ -118,6 +118,7 @@ public sealed class OrderConfirmer(
             {
                 order.OrderNumber,
                 creditTermDays = settlement.CreditTermDays,
+                cropSeasonId = settlement.CropSeasonId,
                 reserved = reservation.Items.Select(i => new { orderItemId = i.OrderItemId, lotId = i.InventoryLotId, baseQuantity = i.BaseQuantityReserved })
             });
 

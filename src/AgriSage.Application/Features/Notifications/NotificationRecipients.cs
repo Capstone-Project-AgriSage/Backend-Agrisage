@@ -8,8 +8,13 @@ namespace AgriSage.Application.Features.Notifications;
 internal static class NotificationRecipients
 {
     public static Task<List<Guid>> StaffAsync(IAgriSageDbContext context, Guid storeId, CancellationToken token,
-        params RoleCode[] roles) => context.StoreMembers.AsNoTracking().Where(m => m.StoreId == storeId
+        params RoleCode[] roles) => StaffAsync(context, storeId, null, token, roles);
+
+    // memberBefore: only members added before that moment (a notice about an earlier day goes to those who were there).
+    public static Task<List<Guid>> StaffAsync(IAgriSageDbContext context, Guid storeId, DateTimeOffset? memberBefore,
+        CancellationToken token, params RoleCode[] roles) => context.StoreMembers.AsNoTracking().Where(m => m.StoreId == storeId
             && m.Status == StoreMemberStatus.Active && m.User.Status == UserStatus.Active
-            && m.User.Role.IsActive && m.User.Role.DeletedAt == null && roles.Contains(m.User.Role.Code))
+            && m.User.Role.IsActive && m.User.Role.DeletedAt == null && roles.Contains(m.User.Role.Code)
+            && (memberBefore == null || m.CreatedAt < memberBefore))
             .Select(m => m.UserId).Distinct().ToListAsync(token);
 }

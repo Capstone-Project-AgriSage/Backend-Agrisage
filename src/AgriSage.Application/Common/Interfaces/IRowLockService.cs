@@ -5,6 +5,7 @@ namespace AgriSage.Application.Common.Interfaces;
 public interface IRowLockService
 {
     // Customer/group mutations lock the store first, then the Farmer. This also serializes first-profile creation.
+    // It excludes other store locks but does not block plain inserts that reference the store (FOR NO KEY UPDATE).
     Task LockStoreAsync(Guid storeId, CancellationToken cancellationToken);
 
     Task LockFarmerProfileAsync(Guid farmerProfileId, CancellationToken cancellationToken);

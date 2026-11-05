@@ -27,6 +27,16 @@ public sealed class CustomerWrites(IAgriSageDbContext context, ICurrentUserServi
         return id;
     }
 
+    // Owner-only actions (F3.21: CS-01, CS-10, CS-11, AD-02). The hard role gate applies with or without the dynamic-permission
+    // evaluator, so a permission granted to Sale staff (by an override, a role default or inheritance) never opens them. The
+    // evaluator also requires an active membership of the active store for a non-admin, and the permission itself.
+    public async Task<Guid> OwnerActorAsync(string permission, CancellationToken token)
+    {
+        var id = Actor(manage: true);
+        if (permissions is not null && !await permissions.HasAsync(permission, token)) throw new ForbiddenException();
+        return id;
+    }
+
     public Guid Actor(bool manage = false)
     {
         var id = currentUser.UserId ?? throw new AuthenticationFailedException("Authentication is required.");
@@ -188,7 +198,9 @@ public sealed class CustomerWrites(IAgriSageDbContext context, ICurrentUserServi
             FarmerCreditProfileStatus.Blocked => "CREDIT.BLOCK",
             _ => throw new BusinessRuleException("Invalid credit status.")
         };
-        await ActorAsync(permission, token, manage: true);
+        // Every credit status change is owner-only (CS-10, F3.21), also when it arrives through the customer form: suspend, block
+        // and reactivation alike, so delegated staff cannot undo what the owner decided.
+        await OwnerActorAsync(permission, token);
         RequireReason(reason);
         var before = new { Status = EnumText.Format(profile.Status) };
         profile.ChangeStatus(status);
