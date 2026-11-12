@@ -3729,6 +3729,51 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                     b.HasData(
                         new
                         {
+                            Id = new Guid("f9a22c22-7ddd-4b7d-a801-163a754d0001"),
+                            Code = "ARTICLES.READ",
+                            IsActive = true,
+                            IsDelegable = false,
+                            Module = "ARTICLES",
+                            Name = "Xem bài viết"
+                        },
+                        new
+                        {
+                            Id = new Guid("f9a22c22-7ddd-4b7d-a801-163a754d0002"),
+                            Code = "ARTICLES.MANAGE",
+                            IsActive = true,
+                            IsDelegable = false,
+                            Module = "ARTICLES",
+                            Name = "Quản lý bài viết"
+                        },
+                        new
+                        {
+                            Id = new Guid("f9a22c22-7ddd-4b7d-a801-163a754d0003"),
+                            Code = "CONTACT_REQUESTS.READ",
+                            IsActive = true,
+                            IsDelegable = true,
+                            Module = "CONTACT_REQUESTS",
+                            Name = "Xem liên hệ"
+                        },
+                        new
+                        {
+                            Id = new Guid("f9a22c22-7ddd-4b7d-a801-163a754d0004"),
+                            Code = "CONTACT_REQUESTS.MANAGE",
+                            IsActive = true,
+                            IsDelegable = true,
+                            Module = "CONTACT_REQUESTS",
+                            Name = "Xử lý liên hệ"
+                        },
+                        new
+                        {
+                            Id = new Guid("f9a22c22-7ddd-4b7d-a801-163a754d0005"),
+                            Code = "MY_CONTACT_REQUESTS.READ",
+                            IsActive = true,
+                            IsDelegable = false,
+                            Module = "MY_CONTACT_REQUESTS",
+                            Name = "Xem liên hệ của tôi"
+                        },
+                        new
+                        {
                             Id = new Guid("cb30e359-0710-4c8a-b2ab-7ea248e5d441"),
                             Code = "REPLENISHMENT.READ",
                             IsActive = true,

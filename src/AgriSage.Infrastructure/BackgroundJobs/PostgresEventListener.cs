@@ -49,6 +49,7 @@ public sealed class PostgresEventListener(IServiceScopeFactory scopes, RealtimeW
                     }
                     while (pending.TryDequeue(out var payload))
                     {
+                        token.ThrowIfCancellationRequested();
                         var signal = JsonSerializer.Deserialize<RealtimeSignal>(payload)
                             ?? throw new JsonException("Invalid realtime signal.");
                         await using var scope = scopes.CreateAsyncScope();
@@ -58,7 +59,7 @@ public sealed class PostgresEventListener(IServiceScopeFactory scopes, RealtimeW
                     await connection.WaitAsync(token);
                 }
             }
-            catch (OperationCanceledException) when (token.IsCancellationRequested) { return; }
+            catch (Exception) when (token.IsCancellationRequested) { return; }
             catch (Exception e)
             {
                 logger.LogWarning("PostgreSQL event listener interrupted ({ErrorType}); reconnecting.", e.GetType().Name);

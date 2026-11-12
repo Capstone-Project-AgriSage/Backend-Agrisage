@@ -5,9 +5,21 @@ namespace AgriSage.Api.Authorization;
 
 public static class PermissionEndpointMap
 {
-    private static readonly HashSet<string> IdentityAndPublicControllers = ["Auth", "AuthSecurity", "Catalog", "MeNotifications"];
+    private static readonly HashSet<string> IdentityAndPublicControllers = ["Auth", "AuthSecurity", "Catalog", "MeNotifications", "Articles"];
     private static readonly Dictionary<string, string> Codes = new(StringComparer.Ordinal)
     {
+        ["AdminArticles.List"] = "ARTICLES.READ",
+        ["AdminArticles.Get"] = "ARTICLES.READ",
+        ["AdminArticles.Create"] = "ARTICLES.MANAGE",
+        ["AdminArticles.Update"] = "ARTICLES.MANAGE",
+        ["AdminArticles.Status"] = "ARTICLES.MANAGE",
+        ["AdminArticles.Delete"] = "ARTICLES.MANAGE",
+        ["Files.UploadArticleImage"] = "ARTICLES.MANAGE",
+        ["ContactRequests.List"] = "CONTACT_REQUESTS.READ",
+        ["ContactRequests.Get"] = "CONTACT_REQUESTS.READ",
+        ["ContactRequests.Update"] = "CONTACT_REQUESTS.MANAGE",
+        ["MeContactRequests.List"] = "MY_CONTACT_REQUESTS.READ",
+        ["MeContactRequests.Get"] = "MY_CONTACT_REQUESTS.READ",
         ["Replenishment.Suggestions"] = "REPLENISHMENT.READ",
         ["Replenishment.Stockout"] = "REPLENISHMENT.READ",
         ["Replenishment.Forecast"] = "REPLENISHMENT.READ",

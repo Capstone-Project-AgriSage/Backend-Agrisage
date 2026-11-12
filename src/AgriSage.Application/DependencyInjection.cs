@@ -40,6 +40,8 @@ public static class DependencyInjection
         services.AddScoped<AgriSage.Application.Features.Permissions.IPermissionConfigurationService, AgriSage.Application.Features.Permissions.PermissionConfigurationService>();
 
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<Features.Content.IArticleService, Features.Content.ArticleService>();
+        services.AddScoped<Features.Content.IContactRequestService, Features.Content.ContactRequestService>();
         services.AddScoped<AuthSessionService>();
         services.AddScoped<IAuthSessionService>(sp => sp.GetRequiredService<AuthSessionService>());
         services.AddScoped<IAuthChallengeService, AuthChallengeService>();

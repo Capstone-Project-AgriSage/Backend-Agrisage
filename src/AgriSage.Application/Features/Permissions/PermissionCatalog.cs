@@ -9,6 +9,11 @@ public static class PermissionCatalog
     }
     public static IReadOnlyList<Definition> Entries { get; } = Array.AsReadOnly<Definition>(
     [
+        new(new Guid("f9a22c22-7ddd-4b7d-a801-163a754d0001"), "ARTICLES.READ", "ARTICLES", "Xem bài viết", false, ["ADMIN", "STORE_OWNER"]),
+        new(new Guid("f9a22c22-7ddd-4b7d-a801-163a754d0002"), "ARTICLES.MANAGE", "ARTICLES", "Quản lý bài viết", false, ["ADMIN", "STORE_OWNER"]),
+        new(new Guid("f9a22c22-7ddd-4b7d-a801-163a754d0003"), "CONTACT_REQUESTS.READ", "CONTACT_REQUESTS", "Xem liên hệ", true, ["ADMIN", "STORE_OWNER", "SALES_STAFF"]),
+        new(new Guid("f9a22c22-7ddd-4b7d-a801-163a754d0004"), "CONTACT_REQUESTS.MANAGE", "CONTACT_REQUESTS", "Xử lý liên hệ", true, ["ADMIN", "STORE_OWNER", "SALES_STAFF"]),
+        new(new Guid("f9a22c22-7ddd-4b7d-a801-163a754d0005"), "MY_CONTACT_REQUESTS.READ", "MY_CONTACT_REQUESTS", "Xem liên hệ của tôi", false, ["FARMER"]),
         new(new Guid("cb30e359-0710-4c8a-b2ab-7ea248e5d441"), "REPLENISHMENT.READ", "INVENTORY", "Xem kế hoạch nhập hàng", true, ["ADMIN", "STORE_OWNER"]),
         new(new Guid("cb30e359-0710-4c8a-b2ab-7ea248e5d442"), "SEASONAL_RULES.READ", "INVENTORY", "Xem quy tắc mùa vụ", true, ["ADMIN", "STORE_OWNER"]),
         new(new Guid("cb30e359-0710-4c8a-b2ab-7ea248e5d443"), "SEASONAL_RULES.MANAGE", "INVENTORY", "Quản lý quy tắc mùa vụ", true, ["ADMIN", "STORE_OWNER"]),

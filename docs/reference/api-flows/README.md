@@ -44,6 +44,8 @@ then change the code. Never change a route, field name or status code only in co
 
 ## 1. General conventions
 
+Articles and contact requests: [CONTENT_CONTACT.md](CONTENT_CONTACT.md) (2026-11-12 extension).
+
 | Topic | Rule |
 |---|---|
 | Base path | `/api/...`, plural kebab-case nouns: `/api/orders`, `/api/deliveries` |

@@ -72,4 +72,14 @@ public sealed class ContactRequest : SoftDeletableEntity
 
         Status = status;
     }
+
+    public void UpdateHandling(ContactRequestStatus status, string? resolutionNote)
+    {
+        ChangeStatus(status);
+        ResolutionNote = resolutionNote;
+        if (status is ContactRequestStatus.Open or ContactRequestStatus.InProgress)
+        {
+            ResolvedAt = null;
+        }
+    }
 }

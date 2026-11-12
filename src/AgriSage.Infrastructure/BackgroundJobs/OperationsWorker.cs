@@ -24,6 +24,7 @@ public sealed class OperationsWorker(IServiceScopeFactory scopes, IOptions<Backg
         {
             foreach (var task in Enum.GetValues<BackgroundTask>().Where(t => t != BackgroundTask.Notifications))
             {
+                if (stoppingToken.IsCancellationRequested) return;
                 if (!Enabled(task, o) || next.GetValueOrDefault(task) > time.GetUtcNow()) continue;
                 try
                 {
@@ -33,7 +34,9 @@ public sealed class OperationsWorker(IServiceScopeFactory scopes, IOptions<Backg
                     await using var lease = await scope.ServiceProvider.GetRequiredService<IBackgroundJobLock>().TryAcquireAsync(task, budget.Token);
                     if (lease is not null) await RunAsync(task, o, budget.Token);
                 }
-                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
+                // Scope/provider disposal may surface as ObjectDisposedException while the host is stopping.
+                // Do not retry or write to providers whose own shutdown may already have started.
+                catch (Exception) when (stoppingToken.IsCancellationRequested) { return; }
                 catch (Exception e) { logger.LogWarning("Background task {Task} failed ({ErrorType}); it will retry.", task, e.GetType().Name); }
                 next[task] = time.GetUtcNow().AddSeconds(Interval(task, o));
             }
@@ -67,7 +70,7 @@ public sealed class OperationsWorker(IServiceScopeFactory scopes, IOptions<Backg
                         await using var payment = scopes.CreateAsyncScope();
                         await payment.ServiceProvider.GetRequiredService<PaymentReconciliationService>().ReconcileAsync(id, token);
                     }
-                    catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+                    catch (Exception) when (token.IsCancellationRequested) { throw; }
                     catch (Exception e) { logger.LogWarning("Payment {PaymentId} reconciliation failed ({ErrorType}); it will retry.", id, e.GetType().Name); }
                 }
                 break;
