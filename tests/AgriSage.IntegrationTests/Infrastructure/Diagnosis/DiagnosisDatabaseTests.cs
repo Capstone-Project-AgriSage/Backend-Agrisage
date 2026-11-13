@@ -197,7 +197,10 @@ public sealed class DiagnosisDatabaseTests
 
         async Task<User> Actor(RoleCode code, string name)
         {
-            var role = await db.Roles.IgnoreQueryFilters().FirstOrDefaultAsync(r => r.Code == code, Token);
+            // On a database without reference data the role is created here once and reused by the next actor of the
+            // same role, which is only in the change tracker until the first save.
+            var role = db.Roles.Local.FirstOrDefault(r => r.Code == code)
+                       ?? await db.Roles.IgnoreQueryFilters().FirstOrDefaultAsync(r => r.Code == code, Token);
             if (role is null)
             {
                 role = new Role(code, code.ToString());
