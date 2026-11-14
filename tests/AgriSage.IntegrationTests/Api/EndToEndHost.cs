@@ -46,7 +46,8 @@ internal sealed class EndToEndHost : IAsyncDisposable
         public void Advance(TimeSpan by) => _offset += by;
     }
 
-    public static EndToEndHost Start(StaffHttpTests.StaffApiFactory factory, CreditTestDatabase e)
+    // `replace` may swap further services for one test (for example a sender that keeps the SMS codes).
+    public static EndToEndHost Start(StaffHttpTests.StaffApiFactory factory, CreditTestDatabase e, Action<IServiceCollection>? replace = null)
     {
         var clock = new MovableClock();
         return new(e, factory.WithWebHostBuilder(builder =>
@@ -68,6 +69,7 @@ internal sealed class EndToEndHost : IAsyncDisposable
                 services.AddDbContext<AgriSageDbContext>((p, o) => o.UseNpgsql(e.ConnectionString).AddInterceptors(
                     p.GetRequiredService<SoftDeleteInterceptor>(), p.GetRequiredService<AuditableEntityInterceptor>(),
                     p.GetRequiredService<ConcurrencyVersionInterceptor>()));
+                replace?.Invoke(services);
             });
         }), clock);
     }
