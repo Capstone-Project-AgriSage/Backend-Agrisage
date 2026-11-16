@@ -75,6 +75,8 @@ internal sealed class EndToEndHost : IAsyncDisposable
     }
 
     // A signed-in client; the real account validator needs a persisted session matching the user's security version.
+    // The session lasts 90 days so that a test may move the API clock forward (the account validator checks the session
+    // against that clock). Create the clients before moving it: the token itself is issued on the API clock.
     public async Task<HttpClient> ClientAsync(Guid userId, string role, CancellationToken token)
     {
         var now = DateTimeOffset.UtcNow;
@@ -84,7 +86,7 @@ internal sealed class EndToEndHost : IAsyncDisposable
         {
             var context = s.ServiceProvider.GetRequiredService<AgriSageDbContext>();
             version = (await context.Users.AsNoTracking().SingleAsync(u => u.Id == userId, token)).SecurityVersion;
-            var session = new AuthSession(userId, version, now, now.AddHours(1));
+            var session = new AuthSession(userId, version, now, now.AddDays(90));
             context.AuthSessions.Add(session);
             await context.SaveChangesAsync(token);
             sessionId = session.Id;
