@@ -87,7 +87,11 @@ public class LockDebtPermissionDelegationMigrationTests
             await using (var db = Context()) await db.GetService<IMigrator>().MigrateAsync(Previous, Token);
 
             Guid Id(string code) => PermissionCatalog.ByCode[code].Id;
-            var other = PermissionCatalog.Entries.First(p => !OwnerOnly.Contains(p.Code) && p.Delegable).Id;
+            // The other delegable permission must already exist at the previous migration: later migrations add new
+            // delegable codes (for example CONTACT_REQUESTS.READ, 2026-11-12) at the top of the catalog.
+            List<Guid> existing;
+            await using (var db = Context()) existing = await db.Permissions.AsNoTracking().Select(p => p.Id).ToListAsync(Token);
+            var other = PermissionCatalog.Entries.First(p => !OwnerOnly.Contains(p.Code) && p.Delegable && existing.Contains(p.Id)).Id;
             var saleRole = new Role(RoleCode.SalesStaff, "Sale"); var ownerRole = new Role(RoleCode.StoreOwner, "Owner");
             var store = new Store("F321", "Store", "Street", "Province");
             var sale = new User(saleRole.Id, "Sale", "hash", "sale@example.test", null);
