@@ -280,6 +280,12 @@ setup documentation
   a person; replaces the active-ingredient match. One migration (tables `disease_products`, `advisory_sessions`,
   `advisory_session_items`, two `diseases` columns, permissions). Code follows in separate PRs: backend, then
   Management-Webs, Farmer-Mobile, Farmer-Web. Photo model choice postponed.
+- Done (branch `feature/stocktake-exact-stale`) — exact stale stocktake lines (design §35.24, replaces the 5-minute
+  margin of §35.19): migration `20261116161710_StocktakeItemSnapshotMovementCount` (`stocktake_items.snapshot_movement_count`,
+  back-filled to keep every existing line's result), `Stocktake.AddItem` / `RefreshItem` take the count,
+  `StocktakeQueries.SnapshotMovementCountsAsync` + `StaleItemIdsAsync` count posted or reversed movement items. Counting
+  and refreshing right after a receipt or sale work at once. Migration review + real-DB back-fill test; not yet applied
+  to `agrisage-dev`.
 
 ## Not Yet Implied by Foundation Completion
 

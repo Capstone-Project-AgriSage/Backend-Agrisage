@@ -14,14 +14,14 @@ public class StocktakeAdjustmentTests
     {
         var actor = Guid.NewGuid();
         var s = new Stocktake(Guid.NewGuid(), "ST-test", actor);
-        var i = s.AddItem(Guid.NewGuid(), 0, Now);
+        var i = s.AddItem(Guid.NewGuid(), 0, Now, 0);
         s.Start(actor, Now);
         s.RecordCount(i.Id, 5, actor, Now, "OTHER", unitCost: 12.345678m);
         Assert.Equal(12.345678m, i.UnitCostSnapshot);
         Assert.Equal(61.728390m, i.DifferenceCostValue);
         s.RecordCount(i.Id, 6, actor, Now, "OTHER", unitCost: 10m);
         Assert.Equal(60m, i.DifferenceCostValue);
-        s.RefreshItem(i.Id, 0, Now.AddMinutes(10));
+        s.RefreshItem(i.Id, 0, Now.AddMinutes(10), 1);
         Assert.Null(i.UnitCostSnapshot);
         Assert.Null(i.DifferenceCostValue);
         Assert.Null(i.CountedQuantity);
@@ -32,7 +32,7 @@ public class StocktakeAdjustmentTests
     {
         var actor = Guid.NewGuid();
         var s = new Stocktake(Guid.NewGuid(), "ST-test", actor);
-        var i = s.AddItem(Guid.NewGuid(), 10, Now, 20m);
+        var i = s.AddItem(Guid.NewGuid(), 10, Now, 0, 20m);
         s.Start(actor, Now);
         s.RecordCount(i.Id, 12, actor, Now, "OTHER", unitCost: 999m);
         Assert.Equal(20m, i.UnitCostSnapshot);
@@ -44,7 +44,7 @@ public class StocktakeAdjustmentTests
     {
         var actor = Guid.NewGuid();
         var s = new Stocktake(Guid.NewGuid(), "ST-test", actor);
-        var i = s.AddItem(Guid.NewGuid(), 0, Now);
+        var i = s.AddItem(Guid.NewGuid(), 0, Now, 0);
         s.Start(actor, Now);
         Assert.Throws<DomainException>(() => s.RecordCount(i.Id, 1, actor, Now, unitCost: -1));
         Assert.Throws<DomainException>(() => s.RecordCount(i.Id, 1, actor, Now, unitCost: 1.0000001m));

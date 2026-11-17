@@ -16,8 +16,10 @@ namespace AgriSage.IntegrationTests.Api;
 
 // WF-04 end to end (BM04 TC-WF04-10): an Excel receipt with an expired row saves nothing; the correct sheet is previewed,
 // imported as a DRAFT and confirmed by sale staff, creating the lot (product + lot number + expiry) with STOCK_IN at the
-// purchase cost; a stocktake counts 2 bottles fewer in that lot; sale staff cannot complete it, the owner does and the
-// difference is posted; the lot's stock card balances (opening + in − out = closing = 98). Every call goes through HTTP.
+// purchase cost; a stocktake starts right after the receipt (no waiting, design §35.24); a counter sale from the new lot
+// during the count makes only that line stale, it is refreshed at once and counted 2 bottles short; sale staff cannot
+// complete it, the owner does and the difference is posted; the lot's stock card balances (opening + in − out = closing
+// = 97). Every call goes through HTTP.
 public sealed class ReceiptToStocktakeEndToEndTests(StaffHttpTests.StaffApiFactory factory)
     : IClassFixture<StaffHttpTests.StaffApiFactory>
 {
@@ -51,39 +53,63 @@ public sealed class ReceiptToStocktakeEndToEndTests(StaffHttpTests.StaffApiFacto
         var lotId = confirmed.GetProperty("items")[0].GetProperty("inventoryLotId").GetGuid();
         Assert.NotEqual(e.LotId, lotId);
 
-        // Stocktake: the new lot is counted 2 short (damaged), the old lot as recorded. It starts more than 5 minutes after
-        // the receipt: a movement posted within 5 minutes before the snapshot marks the line stale (design §35.19).
-        host.Clock.Advance(TimeSpan.FromMinutes(6));
+        // Stocktake right after the receipt: the receipt is in the snapshot, so nothing waits (design §35.24).
         var stocktake = await OkAsync(await staff.PostAsJsonAsync("/api/stocktakes",
             new { storeProductIds = new[] { e.StoreProductId } }, token), token);
         var stocktakeId = stocktake.GetProperty("id").GetGuid();
         var started = await OkAsync(await staff.PostAsync($"/api/stocktakes/{stocktakeId}/start", null, token), token);
         Assert.Equal("IN_PROGRESS", started.GetProperty("status").GetString());
+        var newLotLine = started.GetProperty("items").EnumerateArray().Single(i => i.GetProperty("inventoryLotId").GetGuid() == lotId);
+        Assert.Equal(100, newLotLine.GetProperty("systemQuantitySnapshot").GetInt64());
+
+        // While the shelves are counted a walk-in buys 1 bottle of the new lot at the counter: 99 left, 2 of them damaged.
+        await OkAsync(await staff.PostAsJsonAsync("/api/counter-sales", new
+        {
+            customerType = "WALK_IN",
+            items = new[] { new { storeProductId = e.StoreProductId, productPackagingId = e.PackagingId, quantity = 1L, lots = new[] { new { inventoryLotId = lotId, baseQuantity = 1L } } } },
+        }, token), token);
         var counts = started.GetProperty("items").EnumerateArray().Select(i =>
         {
             var system = i.GetProperty("systemQuantitySnapshot").GetInt64();
             return i.GetProperty("inventoryLotId").GetGuid() == lotId
-                ? (object)new { itemId = i.GetProperty("id").GetGuid(), countedQuantity = system - 2, reasonCode = "DAMAGED" }
+                ? (object)new { itemId = i.GetProperty("id").GetGuid(), countedQuantity = 97L, reasonCode = "DAMAGED" }
                 : new { itemId = i.GetProperty("id").GetGuid(), countedQuantity = system, reasonCode = (string?)null };
         }).ToArray();
         Assert.Equal(2, counts.Length);
-        await OkAsync(await staff.PutAsJsonAsync($"/api/stocktakes/{stocktakeId}/counts", new { counts }, token), token);
+        var counted = await OkAsync(await staff.PutAsJsonAsync($"/api/stocktakes/{stocktakeId}/counts", new { counts }, token), token);
+
+        // Only the new lot moved between its snapshot and its count: completing is refused for that line alone.
+        Assert.All(counted.GetProperty("items").EnumerateArray(), i => Assert.Equal(
+            i.GetProperty("inventoryLotId").GetGuid() == lotId, i.GetProperty("isStale").GetBoolean()));
+        var stale = await owner.PostAsync($"/api/stocktakes/{stocktakeId}/complete", null, token);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, stale.StatusCode);
+        Assert.Contains(lotId.ToString(), await stale.Content.ReadAsStringAsync(token));
+
+        // Refreshed at once (no waiting): the new snapshot has 99, the line is counted again (97, damaged).
+        var refreshed = await OkAsync(await staff.PostAsync($"/api/stocktakes/{stocktakeId}/refresh-stale", null, token), token);
+        var line = refreshed.GetProperty("items").EnumerateArray().Single(i => i.GetProperty("inventoryLotId").GetGuid() == lotId);
+        Assert.Equal(99, line.GetProperty("systemQuantitySnapshot").GetInt64());
+        Assert.False(line.GetProperty("isStale").GetBoolean());
+        await OkAsync(await staff.PutAsJsonAsync($"/api/stocktakes/{stocktakeId}/counts", new
+        {
+            counts = new[] { new { itemId = line.GetProperty("id").GetGuid(), countedQuantity = 97L, reasonCode = "DAMAGED" } },
+        }, token), token);
         Assert.Equal(HttpStatusCode.Forbidden, (await staff.PostAsync($"/api/stocktakes/{stocktakeId}/complete", null, token)).StatusCode);
         var completed = await OkAsync(await owner.PostAsync($"/api/stocktakes/{stocktakeId}/complete", null, token), token);
         Assert.Equal("COMPLETED", completed.GetProperty("status").GetString());
 
-        // The lot's stock card balances: 0 + 100 in − 2 out = 98.
+        // The lot's stock card balances: 0 + 100 in − 1 sold − 2 damaged = 97.
         var card = await OkAsync(await owner.GetAsync(
             $"/api/inventory/stock-card?storeProductId={e.StoreProductId}&inventoryLotId={lotId}&fromDate={today:yyyy-MM-dd}&toDate={today:yyyy-MM-dd}", token), token);
         var lines = card.GetProperty("lines").EnumerateArray().ToList();
         var inQty = lines.Sum(l => l.GetProperty("inBaseQuantity").GetInt64());
         var outQty = lines.Sum(l => l.GetProperty("outBaseQuantity").GetInt64());
         Assert.Equal(100, inQty);
-        Assert.Equal(2, outQty);
+        Assert.Equal(3, outQty);
         Assert.Equal(card.GetProperty("openingBaseQuantity").GetInt64() + inQty - outQty, card.GetProperty("closingBaseQuantity").GetInt64());
-        Assert.Equal(98, card.GetProperty("closingBaseQuantity").GetInt64());
+        Assert.Equal(97, card.GetProperty("closingBaseQuantity").GetInt64());
         using (var s = e.Scope())
-            Assert.Equal(98, (await s.ServiceProvider.GetRequiredService<AgriSageDbContext>().InventoryLotBalances.AsNoTracking()
+            Assert.Equal(97, (await s.ServiceProvider.GetRequiredService<AgriSageDbContext>().InventoryLotBalances.AsNoTracking()
                 .SingleAsync(b => b.InventoryLotId == lotId, token)).QuantityOnHand);
     }
 

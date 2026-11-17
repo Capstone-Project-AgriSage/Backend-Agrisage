@@ -3,8 +3,9 @@ using AgriSage.Domain.Common;
 namespace AgriSage.Domain.Features.Inventory.Entities;
 
 // One counted Lot in a Stocktake. Created, counted and refreshed only through Stocktake.
-// snapshot_at = when the system quantity was taken (database design §35.19): a line is stale when a stock movement
-// for its Lot was posted between the snapshot and the count.
+// snapshot_at = when the system quantity was taken; snapshot_movement_count = the posted stock movement items of its Lot
+// with posted_at <= snapshot_at seen at that moment (database design §35.24). The line is stale when more such items
+// exist with posted_at <= counted_at: the Lot moved between the snapshot and the count.
 public sealed class StocktakeItem : SoftDeletableChildEntity
 {
     private StocktakeItem()
@@ -16,12 +17,14 @@ public sealed class StocktakeItem : SoftDeletableChildEntity
         Guid inventoryLotId,
         long systemQuantitySnapshot,
         DateTimeOffset snapshotAt,
+        int snapshotMovementCount,
         decimal? unitCostSnapshot)
     {
         StocktakeId = stocktakeId;
         InventoryLotId = inventoryLotId;
         SystemQuantitySnapshot = Guard.NotNegative(systemQuantitySnapshot);
         SnapshotAt = snapshotAt;
+        SnapshotMovementCount = (int)Guard.NotNegative(snapshotMovementCount);
         UnitCostSnapshot = unitCostSnapshot is null ? null : Guard.UnitCost(unitCostSnapshot.Value);
     }
 
@@ -32,6 +35,8 @@ public sealed class StocktakeItem : SoftDeletableChildEntity
     public long SystemQuantitySnapshot { get; private set; }
 
     public DateTimeOffset SnapshotAt { get; private set; }
+
+    public int SnapshotMovementCount { get; private set; }
 
     public long? CountedQuantity { get; private set; }
 
@@ -77,11 +82,12 @@ public sealed class StocktakeItem : SoftDeletableChildEntity
     }
 
     // Takes a new snapshot of a stale line and clears its count, so only this Lot is counted again.
-    internal void Refresh(long systemQuantitySnapshot, decimal? unitCostSnapshot, DateTimeOffset snapshotAt)
+    internal void Refresh(long systemQuantitySnapshot, decimal? unitCostSnapshot, DateTimeOffset snapshotAt, int snapshotMovementCount)
     {
         SystemQuantitySnapshot = Guard.NotNegative(systemQuantitySnapshot);
         UnitCostSnapshot = unitCostSnapshot is null ? null : Guard.UnitCost(unitCostSnapshot.Value);
         SnapshotAt = snapshotAt;
+        SnapshotMovementCount = (int)Guard.NotNegative(snapshotMovementCount);
         CountedQuantity = null;
         DifferenceQuantity = null;
         DifferenceCostValue = null;

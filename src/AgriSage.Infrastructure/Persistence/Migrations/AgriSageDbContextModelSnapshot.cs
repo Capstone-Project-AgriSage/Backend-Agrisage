@@ -7002,6 +7002,10 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("snapshot_at");
 
+                    b.Property<int>("SnapshotMovementCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("snapshot_movement_count");
+
                     b.Property<Guid>("StocktakeId")
                         .HasColumnType("uuid")
                         .HasColumnName("stocktake_id");
@@ -7032,6 +7036,8 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                     b.ToTable("stocktake_items", null, t =>
                         {
                             t.HasCheckConstraint("ck_stocktake_items_counted_quantity", "counted_quantity IS NULL OR counted_quantity >= 0");
+
+                            t.HasCheckConstraint("ck_stocktake_items_snapshot_movement_count", "snapshot_movement_count >= 0");
 
                             t.HasCheckConstraint("ck_stocktake_items_system_quantity_snapshot", "system_quantity_snapshot >= 0");
                         });

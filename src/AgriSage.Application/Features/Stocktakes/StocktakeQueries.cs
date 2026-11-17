@@ -97,10 +97,26 @@ public sealed class StocktakeQueries(IAgriSageDbContext context)
             movements.Select(m => new StocktakeMovement(m.Id, m.MovementNumber, EnumText.Format(m.MovementType))).ToList(), items);
     }
 
+    // A counted line is stale when its Lot has more posted stock movement items with posted_at <= counted_at than the
+    // snapshot saw (database design §35.24): a movement posted between the snapshot and the count, or one whose posted_at
+    // was taken before the snapshot but committed after it. No time margin, so a line can be refreshed at once.
+    // REVERSED movements stay counted: they were posted, and their reversal is one more item.
     public Task<List<Guid>> StaleItemIdsAsync(Guid id, CancellationToken token) =>
         context.StocktakeItems.AsNoTracking().Where(i => i.StocktakeId == id && i.CountedAt != null
-            && context.StockMovementItems.Any(mi => mi.InventoryLotId == i.InventoryLotId
-                && context.StockMovements.Any(m => m.Id == mi.StockMovementId && m.Status == StockMovementStatus.Posted
-                    && m.PostedAt > i.SnapshotAt.AddMinutes(-5) && m.PostedAt <= i.CountedAt)))
+            && context.StockMovementItems.Count(mi => mi.InventoryLotId == i.InventoryLotId
+                && context.StockMovements.Any(m => m.Id == mi.StockMovementId
+                    && (m.Status == StockMovementStatus.Posted || m.Status == StockMovementStatus.Reversed)
+                    && m.PostedAt <= i.CountedAt)) > i.SnapshotMovementCount)
             .Select(i => i.Id).ToListAsync(token);
+
+    // The posted stock movement items per Lot with posted_at <= at, read after locking the Lot balances: the movements a
+    // snapshot taken at `at` already contains. Same item rule as StaleItemIdsAsync. Lots without one are absent (0).
+    public Task<Dictionary<Guid, int>> SnapshotMovementCountsAsync(IReadOnlyCollection<Guid> lotIds, DateTimeOffset at,
+        CancellationToken token) =>
+        context.StockMovementItems.AsNoTracking()
+            .Where(mi => lotIds.Contains(mi.InventoryLotId) && context.StockMovements.Any(m => m.Id == mi.StockMovementId
+                && (m.Status == StockMovementStatus.Posted || m.Status == StockMovementStatus.Reversed) && m.PostedAt <= at))
+            .GroupBy(mi => mi.InventoryLotId)
+            .Select(g => new { LotId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.LotId, x => x.Count, token);
 }
