@@ -213,8 +213,7 @@ public class StocktakeAdjustmentDatabaseTests
         Assert.False(Assert.Single(stale.Items, i => i.InventoryLotId == env.LotIds[1]).IsStale);
         var error = await Assert.ThrowsAsync<BusinessRuleException>(() => env.Complete(draft.Id));
         Assert.Contains(env.LotIds[0].ToString(), error.Errors!.Keys);
-        // Allow the contract's five-minute lookback margin to pass before taking the new snapshot.
-        env.Clock.Advance(6);
+        // Refreshed at once, with no time margin to wait for (design §35.24).
         var refreshed = await env.Stocktake(s => s.RefreshStaleAsync(draft.Id, Token));
         var changed = Assert.Single(refreshed.Items, i => i.InventoryLotId == env.LotIds[0]);
         var unchanged = Assert.Single(refreshed.Items, i => i.InventoryLotId == env.LotIds[1]);
@@ -227,6 +226,40 @@ public class StocktakeAdjustmentDatabaseTests
         env.Clock.Advance();
         await env.Count(draft.Id, new StocktakeCountRequest(changed.Id, 10));
         env.Clock.Advance();
+        var complete = await env.Complete(draft.Id);
+        Assert.Equal("COMPLETED", complete.Status);
+        Assert.Empty(complete.Movements);
+    }
+
+    // Design §35.24: a movement posted before the snapshot is in it, so counting right after a sale or receipt is not
+    // stale; a movement whose posted_at was taken before the snapshot but which committed after it is caught by the count.
+    [RealDbFact]
+    public async Task A_movement_just_before_the_snapshot_is_in_it_and_one_committed_after_it_is_caught()
+    {
+        await using var session = await RealDb.Session.StartAsync();
+        var env = await Prepare(session);
+        await env.Adjust(new StockAdjustmentLine(env.LotIds[0], -1));
+        var draft = await env.Create();
+        var lotA = Assert.Single(draft.Items, i => i.InventoryLotId == env.LotIds[0]);
+        var lotB = Assert.Single(draft.Items, i => i.InventoryLotId == env.LotIds[1]);
+        Assert.Equal(9, lotA.SystemQuantitySnapshot);
+        await env.Start(draft.Id);
+
+        // posted_at one minute before the snapshot, committed after it: the snapshot of lot B does not contain it.
+        env.Clock.UtcNow = env.Clock.UtcNow.AddMinutes(-1);
+        await env.Adjust(new StockAdjustmentLine(env.LotIds[1], -1));
+        env.Clock.Advance(2);
+        await env.Count(draft.Id, new StocktakeCountRequest(lotA.Id, 9), new StocktakeCountRequest(lotB.Id, 9, ReasonCode: "OTHER"));
+        var counted = await env.Get(draft.Id);
+        Assert.False(Assert.Single(counted.Items, i => i.Id == lotA.Id).IsStale);
+        Assert.True(Assert.Single(counted.Items, i => i.Id == lotB.Id).IsStale);
+        var error = await Assert.ThrowsAsync<BusinessRuleException>(() => env.Complete(draft.Id));
+        Assert.Equal([env.LotIds[1].ToString()], error.Errors!.Keys);
+
+        var refreshed = await env.Stocktake(s => s.RefreshStaleAsync(draft.Id, Token));
+        Assert.Equal(9, Assert.Single(refreshed.Items, i => i.Id == lotB.Id).SystemQuantitySnapshot);
+        env.Clock.Advance();
+        await env.Count(draft.Id, new StocktakeCountRequest(lotB.Id, 9));
         var complete = await env.Complete(draft.Id);
         Assert.Equal("COMPLETED", complete.Status);
         Assert.Empty(complete.Movements);

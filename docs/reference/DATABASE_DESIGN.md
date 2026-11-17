@@ -1474,6 +1474,7 @@ inventory_lot_id            uuid NOT NULL FK inventory_lots.id
 
 system_quantity_snapshot    bigint NOT NULL
 snapshot_at                 timestamptz NOT NULL         (§35.19)
+snapshot_movement_count     integer NOT NULL             (§35.24)
 counted_quantity            bigint NULL
 difference_quantity         bigint NULL
 
@@ -1497,6 +1498,7 @@ Constraints:
 ```text
 UNIQUE(stocktake_id, inventory_lot_id)
 system_quantity_snapshot >= 0
+snapshot_movement_count >= 0
 counted_quantity >= 0 when not NULL
 ```
 
@@ -6575,6 +6577,40 @@ Every enum-backed varchar column also has an IN (...) CHECK of its
 documented values (§0.5).
 ```
 
+## 35.24 Exact stale stocktake lines (table 29) — migration StocktakeItemSnapshotMovementCount
+
+```text
+Chosen on 2026-11-16 after the WF-04 check (option b); lead review in its pull request.
+Replaces the stale rule of §35.19; the rest of §35.19
+(snapshot_at, refresh, completion) stays. Table count stays 67.
+
+Why: the 5-minute margin of §35.19 made every line of a Lot stale for 5 minutes after any
+receipt or sale on it, and refresh-stale could not help until they passed. A store must be
+able to sell, then count at once.
+
+stocktake_items.snapshot_movement_count integer NOT NULL, CHECK >= 0 = the stock movement
+items of the line's Lot whose movement is POSTED or REVERSED with posted_at <= snapshot_at,
+read in the same transaction as the snapshot. Creating a stocktake and refresh-stale lock
+the Lot balances (FOR SHARE), take snapshot_at, read this count, then read the balance.
+
+A counted line is STALE when
+  count(items of its Lot, movement POSTED or REVERSED, posted_at <= counted_at)
+    > snapshot_movement_count.
+
+This catches a movement posted between the snapshot and the count, a movement whose
+posted_at was taken before the snapshot but which committed after it (the case the
+5-minute margin covered), and movements that cancel each other out (-1 then +1: two more
+items). A movement already in the snapshot never makes the line stale, whenever it was
+posted. A REVERSED movement stays counted: its reversal is one more item. A movement that
+commits between the count read and the balance read only causes one extra recount. A
+movement posted after the count still does not make the line stale (§35.19).
+
+Back-fill of existing lines: the items of the Lot with posted_at <= snapshot_at - 5 minutes
+(soft-deleted items excluded). With it, the new rule gives each existing line exactly the
+result of the old rule, so a stocktake being counted during the migration neither gains nor
+loses a stale line; refreshed lines then follow the exact rule. Down drops the column.
+```
+
 ## 35.23 Debt by crop season, store debt policy and the start of reminders (tables 34, 49, 50; new tables crop_seasons, store_debt_policies) — migrations CropSeasonsAndDebtPolicy, CropSeasonDebtPermissions, LockDebtPermissionDelegation, DebtReminderStartDate
 
 ```text
@@ -6720,6 +6756,8 @@ Confirmed orders are never affected by later tier or group changes.
 
 ```text
 Approved by the team on 2026-10-03 (decision C-D6). Table count stays 67.
+Superseded in part on 2026-11-16: the STALE rule below (5-minute margin) is replaced by the
+exact count of §35.24; snapshot_at, refresh and completion stay as written.
 
 stocktake_items.snapshot_at timestamptz NOT NULL = when system_quantity_snapshot (and
 unit_cost_snapshot) was read. The use case locks the Lot balance (SELECT ... FOR SHARE)

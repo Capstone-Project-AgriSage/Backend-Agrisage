@@ -32,7 +32,11 @@ public sealed class StocktakeService(IAgriSageDbContext context, IRowLockService
         }
 
         var lotIds = await scopedLots.Select(l => l.Id).ToArrayAsync(token);
+        // Lock, then the snapshot time and movement count, then the balances (database design §35.24): a movement that
+        // commits between the count and the balance read only causes one extra recount, never a missed one.
         await locks.ShareLockLotBalancesAsync(lotIds, token);
+        var snapshotAt = clock.UtcNow;
+        var movementCounts = await queries.SnapshotMovementCountsAsync(lotIds, snapshotAt, token);
         var snapshots = await scopedLots.Where(l => lotIds.Contains(l.Id)).Select(l => new
         {
             l.Id,
@@ -44,7 +48,7 @@ public sealed class StocktakeService(IAgriSageDbContext context, IRowLockService
                 .Select(s => s.StocktakeNumber), DocumentNumbers.Stocktake, BusinessCalendar.Today(clock.UtcNow), token), actor, Texts.Clean(request.Note));
         foreach (var lot in snapshots.Where(l => request.IncludeEmptyLots || l.QuantityOnHand > 0).OrderBy(l => l.Id))
         {
-            stocktake.AddItem(lot.Id, lot.QuantityOnHand, clock.UtcNow,
+            stocktake.AddItem(lot.Id, lot.QuantityOnHand, snapshotAt, movementCounts.GetValueOrDefault(lot.Id),
                 lot.QuantityOnHand > 0 ? AgriSage.Domain.Common.CostRounding.RoundUnitCost(lot.TotalCostValue / lot.QuantityOnHand) : null);
         }
         context.Stocktakes.Add(stocktake);
@@ -90,6 +94,8 @@ public sealed class StocktakeService(IAgriSageDbContext context, IRowLockService
         var stale = (await queries.StaleItemIdsAsync(id, token)).ToHashSet();
         var items = s.Items.Where(i => stale.Contains(i.Id)).ToList();
         var ids = items.Select(i => i.InventoryLotId).ToArray();
+        var snapshotAt = clock.UtcNow;
+        var movementCounts = await queries.SnapshotMovementCountsAsync(ids, snapshotAt, token);
         var lots = await context.InventoryLots.AsNoTracking().Include(l => l.Balance)
             .Where(l => ids.Contains(l.Id) && l.StoreProduct.StoreId == s.StoreId).ToDictionaryAsync(l => l.Id, token);
         foreach (var item in items)
@@ -98,7 +104,8 @@ public sealed class StocktakeService(IAgriSageDbContext context, IRowLockService
             {
                 throw new BusinessRuleException($"Lot {item.InventoryLotId} is no longer available for counting.");
             }
-            s.RefreshItem(item.Id, lot.Balance.QuantityOnHand, clock.UtcNow, lot.Balance.AverageUnitCost);
+            s.RefreshItem(item.Id, lot.Balance.QuantityOnHand, snapshotAt, movementCounts.GetValueOrDefault(item.InventoryLotId),
+                lot.Balance.AverageUnitCost);
         }
     }, token);
 

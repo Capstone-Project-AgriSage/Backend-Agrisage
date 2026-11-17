@@ -39,7 +39,8 @@ public class InitialCreateMigrationTests
                 "20261102203458_CropSeasonsAndDebtPolicy",
                 "20261102205426_CropSeasonDebtPermissions",
                 "20261103161207_DebtReminderStartDate",
-                "20261112151319_ContentContactPermissions"
+                "20261112151319_ContentContactPermissions",
+                "20261116161710_StocktakeItemSnapshotMovementCount"
             ],
             context.Database.GetMigrations());
     }

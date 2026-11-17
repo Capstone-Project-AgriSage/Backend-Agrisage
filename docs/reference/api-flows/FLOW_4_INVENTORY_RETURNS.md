@@ -47,7 +47,7 @@ rules read/write use SEASONAL_RULES.READ/MANAGE (owner/admin, delegable); report
 REPORTS.READ; ordinary stock alerts retain INVENTORY.READ. No public/Farmer/Delivery access.
 
 Version 2.0 — 2026-10-03. Conventions, shared shapes, interfaces and ownership rules: [README.md](README.md).
-Sources: `DATABASE_DESIGN.md` §21–29, §52–54, §7.1, §7.5, §VIII, §XXI–XXII, §35.8–35.11, §35.17–35.19;
+Sources: `DATABASE_DESIGN.md` §21–29, §52–54, §7.1, §7.5, §VIII, §XXI–XXII, §35.8–35.11, §35.17–35.19, §35.24;
 `BUSINESS_RULES.md` rules 10, 30–33, 52–58.
 
 Inventory is the mentor's main focus. L4 owns everything that changes or explains stock outside a sale: receiving
@@ -157,14 +157,17 @@ Rules:
   completion otherwise).
 - `reasonCode`: `DAMAGED | EXPIRED | LOST | STOCKTAKE_DIFFERENCE | MANUAL_CORRECTION | OTHER`; required when
   the difference ≠ 0.
-- **Stale line (decision C-D6, design §35.19):** a POSTED stock movement for the line's lot has
-  `posted_at` in (`snapshot_at` − 5 minutes, `counted_at`]. This also catches movements that cancel each
-  other out; a movement after the count does not make the line stale. `GET` marks such lines
-  `isStale: true`. `refresh-stale` re-snapshots only those lines (lock the balance `FOR SHARE`, read on hand
-  and average cost, then `snapshot_at`) through `Stocktake.RefreshItem` (Domain, done) and clears their
-  count, so staff recount just those lots — never the whole stocktake.
-- Creating a stocktake takes each line's snapshot the same way (lock, read, `snapshot_at`) and passes it to
-  `Stocktake.AddItem(lotId, quantity, snapshotAt, unitCost)`.
+- **Stale line (decision C-D6, exact rule since 2026-11-16, design §35.24):** the line's lot has more stock
+  movement items (movement POSTED or REVERSED) with `posted_at` <= `counted_at` than `snapshot_movement_count`,
+  the count seen with the snapshot. So the lot moved between the snapshot and the count; this also catches
+  movements that cancel each other out and a movement that committed just after the snapshot. A movement in the
+  snapshot or after the count does not make the line stale, so counting right after a receipt or sale needs no
+  wait (the old 5-minute margin is gone). `GET` marks such lines `isStale: true`. `refresh-stale` re-snapshots
+  only those lines (lock the balance `FOR SHARE`, take `snapshot_at`, read the movement count, then on hand and
+  average cost) through `Stocktake.RefreshItem` and clears their count, so staff recount just those lots — never
+  the whole stocktake — and may do it at once.
+- Creating a stocktake takes each line's snapshot the same way (lock, `snapshot_at`, movement count, balance) and
+  passes it to `Stocktake.AddItem(lotId, quantity, snapshotAt, snapshotMovementCount, unitCost)`.
 - Complete (one transaction): every line counted (§35.8); lock lot balances; refuse (422, listing the lots) if
   any line is stale; one ADJUSTMENT_IN movement (`ReceiveStock` at the snapshot/entered cost) and one
   ADJUSTMENT_OUT movement (`IssueUnreserved` at average cost), both linked by `stocktake_id`; a decrease below
@@ -459,7 +462,7 @@ their expiry.
 | C-D2 | Cancelling an order reverses the unconsumed ORDER allocations and requests one PENDING refund per payment through the Order aggregate; staff pay back in cash or by bank transfer and complete it (schema: `refunds.order_id`, design §35.18) |
 | C-D3 | Refund proof images use `POST /api/files/delivery-proofs`; a referenced photo cannot be deleted (422) |
 | C-D5 | Stocktake create/count/refresh, return request/receive/inspect = Operate; stocktake completion, manual stock adjustments, return approve/reject/complete-inspection and every refund = Manage — they can decrease stock or pay money out; the person who counts is not the person who approves |
-| C-D6 | Each stocktake line stores `snapshot_at`; a stale line blocks completion; only stale lines are refreshed and recounted (design §35.19) |
+| C-D6 | Each stocktake line stores `snapshot_at` and, since 2026-11-16, `snapshot_movement_count`; a stale line blocks completion; only stale lines are refreshed and recounted, with no waiting time (design §35.19, §35.24) |
 | D5 | Delivery incidents that move stock are posted through `POST /api/inventory/adjustments` and linked by L2 |
 | F-D4 | Every refund endpoint belongs to L4 |
 | F-D5 | Reports are Manage-only and owned by the flow whose data they read |

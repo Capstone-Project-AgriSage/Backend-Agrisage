@@ -25,6 +25,7 @@ internal sealed class StocktakeItemConfiguration : EntityConfiguration<Stocktake
         builder.HasIndex(item => new { item.StocktakeId, item.InventoryLotId }).IsUnique();
 
         builder.HasCheck("system_quantity_snapshot", "system_quantity_snapshot >= 0");
+        builder.HasCheck("snapshot_movement_count", "snapshot_movement_count >= 0");
         builder.HasCheck("counted_quantity", "counted_quantity IS NULL OR counted_quantity >= 0");
     }
 }
