@@ -26,7 +26,9 @@ public sealed class DebtEntry : SoftDeletableEntity
         Guid? orderId = null,
         Guid? deliveryId = null,
         Guid? deliveryAttemptId = null,
-        Guid? sourceStockMovementId = null)
+        Guid? sourceStockMovementId = null,
+        Guid? originCropSeasonId = null,
+        string? dueBasis = null)
     {
         Guard.NonNegativeMoney(fulfillmentValue);
         Guard.NonNegativeMoney(prepaymentAppliedAmount);
@@ -58,6 +60,10 @@ public sealed class DebtEntry : SoftDeletableEntity
         OriginalAmount = originalAmount;
         OutstandingAmount = originalAmount;
         DueDate = dueDate;
+        OriginalDueDate = dueDate;
+        OriginCropSeasonId = originCropSeasonId;
+        CollectionCropSeasonId = originCropSeasonId;
+        DueBasis = string.IsNullOrWhiteSpace(dueBasis) ? null : dueBasis;
         CreatedBy = createdBy;
         Status = DebtEntryStatus.Open;
     }
@@ -85,6 +91,21 @@ public sealed class DebtEntry : SoftDeletableEntity
     public decimal OutstandingAmount { get; private set; }
 
     public DateOnly DueDate { get; private set; }
+
+    // D9: the season the debt arose in (fixed at creation, never changes) and the season it is collected in (moves on
+    // rollover). Both are null when no season applied and the credit-tier term was used.
+    public Guid? OriginCropSeasonId { get; private set; }
+
+    public Guid? CollectionCropSeasonId { get; private set; }
+
+    // The due date the debt was created with; extensions are measured from it and reports show "debt carried over".
+    public DateOnly OriginalDueDate { get; private set; }
+
+    public int RolloverCount { get; private set; }
+
+    // D17: the values the due date was computed from (season, harvest end, grace, cap, or the tier term), as jsonb, so a
+    // later change of the season or the credit tier never silently moves an existing debt. Null for legacy entries.
+    public string? DueBasis { get; private set; }
 
     public DebtEntryStatus Status { get; private set; }
 
@@ -120,7 +141,7 @@ public sealed class DebtEntry : SoftDeletableEntity
         return AddAction(DebtEntryActionType.Keep, reason, createdBy);
     }
 
-    public DebtEntryAction ChangeDueDate(DateOnly newDueDate, string reason, Guid createdBy)
+    public DebtEntryAction ChangeDueDate(DateOnly newDueDate, string reason, Guid createdBy, DebtReasonCode? reasonCode = null)
     {
         EnsureNotClosed();
 
@@ -132,7 +153,50 @@ public sealed class DebtEntry : SoftDeletableEntity
             reason,
             createdBy,
             oldDueDate: oldDueDate,
-            newDueDate: newDueDate);
+            newDueDate: newDueDate,
+            reasonCode: reasonCode);
+    }
+
+    // CS-07 / D5: extend an unpaid entry to a later season. Only the collection season and the due date move; the amount,
+    // the status, the origin season and the original due date stay. Who may do it (CS-08) and the total extension limit are
+    // checked by the application against StoreDebtPolicy, because they depend on the actor's role.
+    public DebtEntryAction Rollover(Guid newCropSeasonId, DateOnly newDueDate, DebtReasonCode reasonCode, string note, Guid createdBy)
+    {
+        EnsureNotClosed();
+        if (Status == DebtEntryStatus.Disputed)
+        {
+            throw new DomainException($"Debt entry '{EntryNumber}' is disputed; resolve the dispute before extending it.");
+        }
+
+        if (OutstandingAmount == 0)
+        {
+            throw new DomainException($"Debt entry '{EntryNumber}' has nothing left to extend.");
+        }
+
+        Guard.NotEmpty(newCropSeasonId);
+        if (newCropSeasonId == CollectionCropSeasonId)
+        {
+            throw new DomainException("A rollover moves the debt to another season.");
+        }
+
+        if (newDueDate <= DueDate)
+        {
+            throw new DomainException("A rollover must move the due date later.");
+        }
+
+        if (!DebtReasonCodes.AllowsRollover(reasonCode))
+        {
+            throw new DomainException($"Reason code {reasonCode} cannot justify a rollover.");
+        }
+
+        var oldSeason = CollectionCropSeasonId;
+        var oldDueDate = DueDate;
+        var action = AddAction(DebtEntryActionType.Rollover, note, createdBy, oldDueDate: oldDueDate, newDueDate: newDueDate,
+            oldCropSeasonId: oldSeason, newCropSeasonId: newCropSeasonId, reasonCode: reasonCode);
+        CollectionCropSeasonId = newCropSeasonId;
+        DueDate = newDueDate;
+        RolloverCount++;
+        return action;
     }
 
     internal void ApplyPayment(decimal amount)
@@ -150,9 +214,10 @@ public sealed class DebtEntry : SoftDeletableEntity
     }
 
     // ADJUST only decreases the outstanding amount; returns the action the Debt Transaction references.
-    internal DebtEntryAction Adjust(decimal decreaseAmount, string reason, Guid createdBy)
+    internal DebtEntryAction Adjust(decimal decreaseAmount, string reason, Guid createdBy, DebtReasonCode? reasonCode = null)
     {
         EnsureNotClosed();
+        EnsureReductionCode(reasonCode);
         EnsureWithinOutstanding(decreaseAmount);
 
         var previous = OutstandingAmount;
@@ -165,13 +230,15 @@ public sealed class DebtEntry : SoftDeletableEntity
             createdBy,
             previousOutstanding: previous,
             adjustment: -decreaseAmount,
-            resultingOutstanding: OutstandingAmount);
+            resultingOutstanding: OutstandingAmount,
+            reasonCode: reasonCode);
     }
 
     // CANCEL removes the whole remaining receivable.
-    internal DebtEntryAction Cancel(string reason, Guid createdBy)
+    internal DebtEntryAction Cancel(string reason, Guid createdBy, DebtReasonCode? reasonCode = null)
     {
         EnsureNotClosed();
+        EnsureReductionCode(reasonCode);
 
         if (OutstandingAmount == 0)
         {
@@ -188,7 +255,8 @@ public sealed class DebtEntry : SoftDeletableEntity
             createdBy,
             previousOutstanding: previous,
             adjustment: -previous,
-            resultingOutstanding: 0);
+            resultingOutstanding: 0,
+            reasonCode: reasonCode);
     }
 
     // Debt entries are never deleted; they are paid, adjusted or cancelled.
@@ -222,7 +290,10 @@ public sealed class DebtEntry : SoftDeletableEntity
         decimal? adjustment = null,
         decimal? resultingOutstanding = null,
         DateOnly? oldDueDate = null,
-        DateOnly? newDueDate = null)
+        DateOnly? newDueDate = null,
+        Guid? oldCropSeasonId = null,
+        Guid? newCropSeasonId = null,
+        DebtReasonCode? reasonCode = null)
     {
         var action = new DebtEntryAction(
             Id,
@@ -233,11 +304,23 @@ public sealed class DebtEntry : SoftDeletableEntity
             adjustment,
             resultingOutstanding,
             oldDueDate,
-            newDueDate);
+            newDueDate,
+            oldCropSeasonId,
+            newCropSeasonId,
+            reasonCode);
 
         _actions.Add(action);
 
         return action;
+    }
+
+    // D7: a missing code is still accepted here (legacy callers); the application makes it mandatory for new actions.
+    private static void EnsureReductionCode(DebtReasonCode? reasonCode)
+    {
+        if (reasonCode is { } code && !DebtReasonCodes.AllowsReduction(code))
+        {
+            throw new DomainException($"Reason code {code} cannot justify reducing a debt.");
+        }
     }
 
     private void EnsureWithinOutstanding(decimal amount)

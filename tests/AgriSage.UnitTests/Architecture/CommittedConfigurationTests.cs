@@ -40,6 +40,11 @@ public class CommittedConfigurationTests
         }
 
         Assert.False(root.TryGetProperty("ConnectionStrings", out _), $"{relativePath} must not contain a connection string.");
+        if (root.TryGetProperty("Redis", out var redis))
+        {
+            Assert.False(redis.TryGetProperty("Url", out _), $"{relativePath} must not contain Redis:Url.");
+        }
+        Assert.False(root.TryGetProperty("REDIS_URL", out _), $"{relativePath} must not contain REDIS_URL.");
 
         if (root.TryGetProperty("Storage", out var storage))
         {

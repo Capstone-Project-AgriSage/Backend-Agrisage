@@ -38,9 +38,13 @@ public sealed class RowLockService(AgriSageDbContext context) : IRowLockService
             $"SELECT 1 FROM inventory_lots WHERE id = ANY({ids}) ORDER BY id FOR UPDATE", cancellationToken);
     }
 
+    // FOR NO KEY UPDATE, not FOR UPDATE: it still excludes every other store lock, but does not block a transaction that only
+    // inserts a row with a foreign key to the store (that takes FOR KEY SHARE on the store row). With FOR UPDATE a rollover
+    // (store lock, then the Farmer lock) deadlocked with an adjust of the same customer (Farmer lock, then its audit entry).
+    // The store row's key is never changed or deleted, so nothing relies on blocking those inserts.
     public async Task LockStoreAsync(Guid storeId, CancellationToken cancellationToken) =>
         await context.Database.ExecuteSqlInterpolatedAsync(
-            $"SELECT 1 FROM stores WHERE id = {storeId} FOR UPDATE", cancellationToken);
+            $"SELECT 1 FROM stores WHERE id = {storeId} FOR NO KEY UPDATE", cancellationToken);
 
     public async Task LockFarmerProfileAsync(Guid farmerProfileId, CancellationToken cancellationToken) =>
         await context.Database.ExecuteSqlInterpolatedAsync(

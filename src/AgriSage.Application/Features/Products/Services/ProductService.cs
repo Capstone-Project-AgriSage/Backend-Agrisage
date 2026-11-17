@@ -13,7 +13,7 @@ namespace AgriSage.Application.Features.Products.Services;
 
 // Product aggregate: the product with its packagings (created together, one SaveChanges), plus its ingredient links.
 public sealed class ProductService(IAgriSageDbContext context, IDatabaseErrorClassifier databaseErrors,
-    AuditTrail? audit = null) : IProductService
+    AuditTrail? audit = null, ICatalogReadCache? cache = null) : IProductService
 {
     private sealed record ProductRow(
         Guid Id,
@@ -73,6 +73,18 @@ public sealed class ProductService(IAgriSageDbContext context, IDatabaseErrorCla
 
     public async Task<ProductResponse> GetAsync(Guid id, CancellationToken cancellationToken)
     {
+        var metadata = await CatalogCache.ReadAsync(cache, "product-metadata", new { id },
+            () => LoadMetadataAsync(id, cancellationToken), cancellationToken);
+        // Store activation/sellability is operational state and must remain current even on a metadata cache hit.
+        var store = await context.StoreProducts.AsNoTracking()
+            .Where(sp => sp.ProductId == id)
+            .Select(sp => new ProductStoreInfo(sp.Id, sp.IsSellable, sp.IsActive))
+            .FirstOrDefaultAsync(cancellationToken);
+        return metadata with { Store = store };
+    }
+
+    private async Task<ProductResponse> LoadMetadataAsync(Guid id, CancellationToken cancellationToken)
+    {
         var product = await context.Products.AsNoTracking()
             .Include(p => p.Category)
             .Include(p => p.Brand)
@@ -85,11 +97,6 @@ public sealed class ProductService(IAgriSageDbContext context, IDatabaseErrorCla
             .OrderBy(l => l.ActiveIngredient.Name)
             .Select(l => new ProductIngredientResponse(l.ActiveIngredientId, l.ActiveIngredient.Name, l.Concentration, l.Note))
             .ToListAsync(cancellationToken);
-
-        var store = await context.StoreProducts.AsNoTracking()
-            .Where(sp => sp.ProductId == id)
-            .Select(sp => new ProductStoreInfo(sp.Id, sp.IsSellable, sp.IsActive))
-            .FirstOrDefaultAsync(cancellationToken);
 
         var packagings = product.Packagings
             .OrderByDescending(p => p.IsBaseUnit).ThenBy(p => p.ConversionToBase).ThenBy(p => p.Id)
@@ -111,10 +118,13 @@ public sealed class ProductService(IAgriSageDbContext context, IDatabaseErrorCla
             StatusText(product.Status),
             packagings,
             ingredients,
-            store);
+            null);
     }
 
-    public async Task<PagedResult<ProductListItem>> ListAsync(ProductListRequest request, CancellationToken cancellationToken)
+    public Task<PagedResult<ProductListItem>> ListAsync(ProductListRequest request, CancellationToken cancellationToken) =>
+        CatalogCache.ReadAsync(cache, "products", request, () => LoadListAsync(request, cancellationToken), cancellationToken);
+
+    private async Task<PagedResult<ProductListItem>> LoadListAsync(ProductListRequest request, CancellationToken cancellationToken)
     {
         var query = context.Products.AsNoTracking().AsQueryable();
 

@@ -33,6 +33,18 @@ setup documentation
 
 ## Progress
 
+- Implemented on branch `feature/f3-21-debt-permission-lock`, not yet merged to `main` (L3 debt by crop season, 2026-11-03; tasks
+  F3.8–F3.21): crop seasons (`crop_seasons`, owner-only API, closing and frozen figures), the store debt policy
+  (`store_debt_policies`, `GET/PUT /api/debt-policy`), credit orders joining the season on confirmation and the debt due date
+  by season on delivery, one-entry and whole-season rollover with reason codes, debt views by season ("Cần quyết định", due
+  states, credit-limit alerts), milestone reminders N1–N5, the debt-by-season report and limit suggestions, and the owner-only
+  lock on nine money-changing debt/credit permissions, and the one-time start of reminders (T0, `POST /api/debt-reminders/initialize`). Four new migrations (`20261102193332_LockDebtPermissionDelegation`,
+  `20261102203458_CropSeasonsAndDebtPolicy`, `20261102205426_CropSeasonDebtPermissions`, `20261103161207_DebtReminderStartDate`) must be applied together with the code;
+  the model now has 82 tables (historical baseline 67). Contract: `docs/reference/api-flows/FLOW_3_CREDIT_DEBT.md` sections 8b–8i;
+  FE guide `docs/FE_GUIDE_FLOW_3.md`; manual test `docs/F3_SEASON_SWAGGER_TEST.md`. Still open: the receipt per season
+  (`outstandingBySeason`), the L1/L2 review
+  of the order-confirmation change, and the lead's review of the migrations and reason-code lists.
+
 - Implemented — User-requested Auth P0 + in-app notifications + scheduled operations + audit-history APIs
   (2026-10-07): hashed rotating refresh tokens, live sessions/security-version checks, logout/revocation,
   single-use verification/password-reset challenges, SMTP email adapter and future configurable SMS
@@ -268,6 +280,12 @@ setup documentation
   a person; replaces the active-ingredient match. One migration (tables `disease_products`, `advisory_sessions`,
   `advisory_session_items`, two `diseases` columns, permissions). Code follows in separate PRs: backend, then
   Management-Webs, Farmer-Mobile, Farmer-Web. Photo model choice postponed.
+- Done (branch `feature/stocktake-exact-stale`) — exact stale stocktake lines (design §35.24, replaces the 5-minute
+  margin of §35.19): migration `20261116161710_StocktakeItemSnapshotMovementCount` (`stocktake_items.snapshot_movement_count`,
+  back-filled to keep every existing line's result), `Stocktake.AddItem` / `RefreshItem` take the count,
+  `StocktakeQueries.SnapshotMovementCountsAsync` + `StaleItemIdsAsync` count posted or reversed movement items. Counting
+  and refreshing right after a receipt or sale work at once. Migration review + real-DB back-fill test; not yet applied
+  to `agrisage-dev`.
 
 ## Not Yet Implied by Foundation Completion
 

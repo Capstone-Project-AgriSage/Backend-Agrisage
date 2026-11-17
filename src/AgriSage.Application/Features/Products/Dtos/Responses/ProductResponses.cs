@@ -56,4 +56,5 @@ public sealed record StoreProductResponse(
     string? StoreSku,
     long? MinStockLevelBase,
     bool IsSellable,
-    bool IsActive);
+    bool IsActive,
+    AgriSage.Application.Features.Products.Dtos.Requests.ReplenishmentSettings? Replenishment = null);

@@ -26,7 +26,8 @@ public sealed class StoreProductService(IAgriSageDbContext context, IDatabaseErr
         string? StoreSku,
         long? MinStockLevelBase,
         bool IsSellable,
-        bool IsActive);
+        bool IsActive,
+        ReplenishmentSettings Replenishment);
 
     public async Task<StoreProductResponse> CreateAsync(CreateStoreProductRequest request, CancellationToken cancellationToken)
     {
@@ -108,6 +109,10 @@ public sealed class StoreProductService(IAgriSageDbContext context, IDatabaseErr
 
         var before = Snapshot(storeProduct);
         storeProduct.UpdateSettings(Texts.Clean(request.StoreSku), request.MinStockLevelBase);
+        var settings = request.Replenishment ?? new ReplenishmentSettings(storeProduct.ReplenishmentEnabled,
+            storeProduct.TargetStockLevelBase, storeProduct.LeadTimeDays, storeProduct.SafetyStockBase, storeProduct.TargetCoverageDays);
+        storeProduct.ConfigureReplenishment(settings.Enabled, settings.TargetStockLevelBase,
+            settings.LeadTimeDays, settings.SafetyStockBase, settings.TargetCoverageDays);
         audit?.Record("STORE_PRODUCT_UPDATED", "STORE_PRODUCT", storeProduct.Id, storeProduct.StoreId, before, Snapshot(storeProduct));
         await context.SaveChangesAsync(cancellationToken);
 
@@ -152,7 +157,8 @@ public sealed class StoreProductService(IAgriSageDbContext context, IDatabaseErr
     }
 
     private static object Snapshot(StoreProduct sp) => new { sp.Product.Sku, sp.Product.Name,
-        sp.StoreSku, sp.MinStockLevelBase, sp.IsActive, sp.IsSellable };
+        sp.StoreSku, sp.MinStockLevelBase, sp.IsActive, sp.IsSellable, sp.ReplenishmentEnabled,
+        sp.TargetStockLevelBase, sp.LeadTimeDays, sp.SafetyStockBase, sp.TargetCoverageDays };
 
     private async Task<StoreProduct> FindAsync(Guid id, CancellationToken cancellationToken)
     {
@@ -176,9 +182,11 @@ public sealed class StoreProductService(IAgriSageDbContext context, IDatabaseErr
 
     private static IQueryable<Row> Project(IQueryable<StoreProduct> query) => query.Select(sp => new Row(
         sp.Id, sp.ProductId, sp.Product.Sku, sp.Product.Name, sp.Product.ImageUrl, sp.Product.Status,
-        sp.StoreSku, sp.MinStockLevelBase, sp.IsSellable, sp.IsActive));
+        sp.StoreSku, sp.MinStockLevelBase, sp.IsSellable, sp.IsActive,
+        new ReplenishmentSettings(sp.ReplenishmentEnabled, sp.TargetStockLevelBase, sp.LeadTimeDays,
+            sp.SafetyStockBase, sp.TargetCoverageDays)));
 
     private static StoreProductResponse ToResponse(Row r) => new(
         r.Id, r.ProductId, r.Sku, r.Name, r.ImageUrl, ProductService.StatusText(r.ProductStatus),
-        r.StoreSku, r.MinStockLevelBase, r.IsSellable, r.IsActive);
+        r.StoreSku, r.MinStockLevelBase, r.IsSellable, r.IsActive, r.Replenishment);
 }

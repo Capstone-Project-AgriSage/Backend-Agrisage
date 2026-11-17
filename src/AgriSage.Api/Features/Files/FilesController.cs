@@ -13,6 +13,21 @@ namespace AgriSage.Api.Features.Files;
 [Route("api/files")]
 public sealed class FilesController(IProductImageService images, IDeliveryProofService proofs) : ControllerBase
 {
+    // Article thumbnails use the existing public image storage and the same validated upload pipeline.
+    [HttpPost("article-images")]
+    [Authorize(Roles = ApiRoles.Manage)]
+    [EnableRateLimiting(RateLimitingExtensions.UploadPolicy)]
+    [RequestSizeLimit(ImageRules.MaxBytes + 512 * 1024)]
+    [RequestFormLimits(MultipartBodyLengthLimit = ImageRules.MaxBytes + 512 * 1024)]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType<UploadedImageResponse>(StatusCodes.Status201Created)]
+    public async Task<IActionResult> UploadArticleImage(IFormFile file, CancellationToken cancellationToken)
+    {
+        await using var stream = file.OpenReadStream();
+        var response = await images.UploadAsync(stream, cancellationToken);
+        return StatusCode(StatusCodes.Status201Created, response);
+    }
+
     // multipart/form-data with one field named "file": JPEG, PNG or WebP, at most 3 MB.
     [HttpPost("product-images")]
     [Authorize(Roles = ApiRoles.Manage)]

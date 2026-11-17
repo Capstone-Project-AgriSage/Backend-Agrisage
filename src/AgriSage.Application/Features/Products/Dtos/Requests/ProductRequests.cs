@@ -62,7 +62,10 @@ public sealed record ProductListRequest : PaginationRequest
 
 public sealed record CreateStoreProductRequest(Guid ProductId, string? StoreSku = null, long? MinStockLevelBase = null);
 
-public sealed record UpdateStoreProductRequest(string? StoreSku, long? MinStockLevelBase);
+public sealed record ReplenishmentSettings(bool Enabled = true, long? TargetStockLevelBase = null,
+    int LeadTimeDays = 7, long SafetyStockBase = 0, int TargetCoverageDays = 14);
+public sealed record UpdateStoreProductRequest(string? StoreSku, long? MinStockLevelBase,
+    ReplenishmentSettings? Replenishment = null);
 
 public sealed record StoreProductListRequest : PaginationRequest
 {

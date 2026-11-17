@@ -39,6 +39,7 @@ public class CatalogHttpTests : IClassFixture<StaffHttpTests.StaffApiFactory>
         { "PUT", $"/api/categories/{Id}" },
         { "POST", $"/api/categories/{Id}/activate" },
         { "POST", $"/api/categories/{Id}/deactivate" },
+        { "POST", $"/api/categories/{Id}/reorder" },
         { "DELETE", $"/api/categories/{Id}" },
         { "POST", "/api/brands" },
         { "PUT", $"/api/brands/{Id}" },
@@ -189,7 +190,7 @@ public class CatalogHttpTests : IClassFixture<StaffHttpTests.StaffApiFactory>
 
         foreach (var path in new[]
         {
-            "/api/categories", "/api/categories/tree", "/api/categories/{id}", "/api/brands", "/api/active-ingredients",
+            "/api/categories", "/api/categories/tree", "/api/categories/{id}", "/api/categories/{id}/reorder", "/api/brands", "/api/active-ingredients",
             "/api/units", "/api/products", "/api/products/{id}/packagings", "/api/products/{id}/ingredients",
             "/api/products/{id}/status", "/api/store-products", "/api/store-products/{id}/mark-sellable",
             "/api/catalog/categories", "/api/catalog/brands", "/api/catalog/products", "/api/catalog/products/{id}"

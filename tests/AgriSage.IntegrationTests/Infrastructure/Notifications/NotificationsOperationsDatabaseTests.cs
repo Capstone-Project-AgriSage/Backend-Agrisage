@@ -206,7 +206,9 @@ public sealed class NotificationsOperationsDatabaseTests
         Assert.Contains(id, await dispatcher.DueAsync(100, Token));
     }
     [RealDbFact]
-    public async Task Debt_reminders_deduplicate_daily_without_mutating_the_ledger()
+    // F3.18 (D10) replaced the daily reminder: an entry due yesterday gets its due-date reminder (N3) once, nothing on the
+    // following days, and the next one only at N4 (due + 14).
+    public async Task Debt_reminders_follow_the_milestones_without_mutating_the_ledger()
     {
         await using var e = await OperationsTestEnvironment.CreateAsync();
         var account = new DebtAccount(e.Store.Id, e.Farmer.Id);
@@ -217,12 +219,16 @@ public sealed class NotificationsOperationsDatabaseTests
         var ledgerCount = await e.Context.DebtTransactions.CountAsync(t => t.DebtAccountId == account.Id, Token);
         var service = new OperationalAlertsService(e.Context, new NotificationWriter(e.Context),
             new InventoryService(e.Context, e.Time, new RowLockService(e.Context)), e.Time);
-        await service.DebtRemindersAsync(10, 3, Token); await service.DebtRemindersAsync(10, 3, Token);
+        await AgriSage.IntegrationTests.Infrastructure.Debt.ReminderStartHelper.EnsureAsync(e.Context, e.Store.Id, Token);
+        await service.DebtRemindersAsync(10, Token); await service.DebtRemindersAsync(10, Token);
         Assert.Equal(1, await e.Context.Notifications.CountAsync(n => n.UserId == e.User.Id && n.NotificationType == "DEBT_OVERDUE", Token));
         Assert.Equal(100_000m, account.CurrentBalance);
         Assert.Equal(ledgerCount, await e.Context.DebtTransactions.CountAsync(t => t.DebtAccountId == account.Id, Token));
-        e.Time.UtcNow = e.Time.UtcNow.AddDays(1); await service.DebtRemindersAsync(10, 3, Token);
+        e.Time.UtcNow = e.Time.UtcNow.AddDays(1); await service.DebtRemindersAsync(10, Token);
+        Assert.Equal(1, await e.Context.Notifications.CountAsync(n => n.UserId == e.User.Id && n.NotificationType == "DEBT_OVERDUE", Token));
+        e.Time.UtcNow = e.Time.UtcNow.AddDays(13); await service.DebtRemindersAsync(10, Token);
         Assert.Equal(2, await e.Context.Notifications.CountAsync(n => n.UserId == e.User.Id && n.NotificationType == "DEBT_OVERDUE", Token));
+        Assert.Equal(ledgerCount, await e.Context.DebtTransactions.CountAsync(t => t.DebtAccountId == account.Id, Token));
     }
     [RealDbFact]
     public async Task Audit_history_is_admin_or_active_owner_only_and_owner_cannot_see_global_or_other_store_events()

@@ -100,6 +100,12 @@ Use it to locate the correct domain, then open the exact authoritative table sec
 66. notifications
 67. audit_logs
 
+### Added after the 67-table baseline (debt by crop season, 2026-11-03) — see `DATABASE_DESIGN.md` §35.23
+- `crop_seasons` — a Store's consecutive crop seasons (order window, harvest, grace days, payment due date; optional link to a warehouse season; frozen summary when closed).
+- `store_debt_policies` — one row per Store: grace days, reminder offsets, rollover limits, term cap, `reminders_start_date`.
+- New columns: `debt_entries` (`origin_crop_season_id`, `collection_crop_season_id`, `original_due_date`, `rollover_count`, `due_basis`), `debt_entry_actions` (`old_crop_season_id`, `new_crop_season_id`, `reason_code`, action `ROLLOVER`), `orders` (`crop_season_id`, credit orders only).
+- The model has more tables than the baseline (82 in total at this date, from several flows); this file lists the 67 baseline tables plus the section above.
+
 ## Global DB Conventions
 
 ```text
@@ -128,6 +134,7 @@ CREDIT EXPOSURE RULE
 RETURN / REFUND POSTING FLOW
 FINAL CORE BUSINESS FLOWS
 IMPORTANT DATABASE INVARIANTS
+35.23 DEBT BY CROP SEASON (crop_seasons, store_debt_policies)
 MIGRATION-CANDIDATE RELATIONSHIP / FK POLICY
 MIGRATION-CANDIDATE INDEX PLAN
 RULES ENFORCED IN APPLICATION / DOMAIN LAYER

@@ -102,6 +102,25 @@ public class OrderTests
         Assert.Throws<DomainException>(() => fullPayment.Confirm(StaffId, Now, creditTermDays: 30));
     }
 
+    // F3.8: a CREDIT order is attached to its debt-collection season at confirmation; other orders never carry one.
+    [Fact]
+    public void Only_a_credit_order_carries_a_crop_season_fixed_at_confirmation()
+    {
+        var season = Guid.NewGuid();
+        var (credit, _) = CreateOrderWithItem(settlementType: SettlementType.Credit);
+        Assert.Throws<DomainException>(() => credit.Confirm(StaffId, Now, creditTermDays: 30, cropSeasonId: Guid.Empty));
+        credit.Confirm(StaffId, Now, creditTermDays: 30, cropSeasonId: season);
+        Assert.Equal(season, credit.CropSeasonId);
+
+        var (withoutSeason, _) = CreateOrderWithItem(settlementType: SettlementType.Credit);
+        withoutSeason.Confirm(StaffId, Now, creditTermDays: 30);
+        Assert.Null(withoutSeason.CropSeasonId);
+
+        var (fullPayment, _) = CreateOrderWithItem();
+        Assert.Throws<DomainException>(() => fullPayment.Confirm(StaffId, Now, cropSeasonId: season));
+        Assert.Null(fullPayment.CropSeasonId);
+    }
+
     [Fact]
     public void Order_without_items_cannot_be_confirmed()
     {

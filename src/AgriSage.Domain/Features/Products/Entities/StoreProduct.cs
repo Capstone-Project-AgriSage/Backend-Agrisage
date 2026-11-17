@@ -28,6 +28,24 @@ public sealed class StoreProduct : SoftDeletableEntity
     // Base-unit quantity.
     public long? MinStockLevelBase { get; private set; }
 
+    public bool ReplenishmentEnabled { get; private set; } = true;
+    public long? TargetStockLevelBase { get; private set; }
+    public int LeadTimeDays { get; private set; } = 7;
+    public long SafetyStockBase { get; private set; }
+    public int TargetCoverageDays { get; private set; } = 14;
+
+    public void ConfigureReplenishment(bool enabled, long? target, int leadTimeDays, long safety, int coverageDays)
+    {
+        if (target < 0 || safety < 0 || leadTimeDays is < 0 or > 365 || coverageDays is < 1 or > 90
+            || (target.HasValue && MinStockLevelBase.HasValue && target < MinStockLevelBase))
+            throw new AgriSage.Domain.Common.Exceptions.DomainException("Invalid replenishment settings: target must cover minimum stock and quantities must be nonnegative.");
+        ReplenishmentEnabled = enabled;
+        TargetStockLevelBase = target;
+        LeadTimeDays = leadTimeDays;
+        SafetyStockBase = safety;
+        TargetCoverageDays = coverageDays;
+    }
+
     public bool IsSellable { get; private set; }
 
     public bool IsActive { get; private set; }

@@ -1,5 +1,29 @@
 # Hướng dẫn FE tích hợp API — Luồng L4: Tồn kho, Kiểm kê, Trả hàng và Hoàn tiền
 
+## Bổ sung kế hoạch nhập hàng — 2026-11-02
+
+- Kho `/agent/inventory`: thêm tìm kiếm cảnh báo, lọc danh mục, `OUT_OF_STOCK` và
+  `hasSellableStock`; `hasStock` vẫn là tồn thực tế. `/sales/inventory` dùng chung màn hình và phân quyền.
+- `/agent/inventory/replenishment`: 4 tab suggestions/stockout/forecast/seasonal. Mỗi tab dùng
+  GET `/api/inventory/replenishment/{tab}`, tìm SKU/tên, danh mục, ưu tiên, lý do, dữ liệu,
+  kỳ lịch sử/kỳ dự báo, sắp xếp và phân trang server (`page`, `pageSize`, không dùng pageIndex).
+- KPI từ `summary` là toàn bộ kết quả sau lọc, trước phân trang; không cộng số lượng khác đơn vị.
+  Popup chi tiết hiển thị lý do, lịch sử, cảnh báo, quy tắc tác động và biểu đồ nhu cầu mỗi ngày.
+- Popup cấu hình dùng GET `/api/store-products/{id}` và PUT endpoint này với `storeSku`,
+  `minStockLevelBase`, `replenishment: { enabled,targetStockLevelBase,leadTimeDays,safetyStockBase,targetCoverageDays }`.
+  Khi bỏ qua `replenishment`, backend giữ nguyên cấu hình hiện tại. Mục tiêu null nghĩa là tự tính.
+- `/agent/inventory/seasonal-rules`: CRUD bằng 5 endpoint đã ghi trong FLOW_4. Sửa gửi `version`
+  đọc từ detail mới nhất; 409 yêu cầu tải lại. `isActive=true` trên PUT có thể bật lại quy tắc đã ngừng.
+  Đây là lịch nhập hàng, độc lập với lịch công nợ `/agent/crop-seasons` đang được đề xuất.
+- `/agent/inventory/reports/planning`: tốc độ bán và rủi ro hạn dùng; tìm kiếm, lọc, KPI,
+  phân trang và popup chi tiết. Không gọi tốc độ bán là vòng quay vốn vì chưa có tồn bình quân lịch sử.
+- Báo cáo kho hiện tại hỗ trợ search SKU/tên; Xuất Excel dùng cùng kỳ/danh mục/search qua
+  GET `/api/reports/inventory-movement/export`. Cả file và KPI giữ dữ liệu toàn bộ kết quả lọc.
+- Quyền REPLENISHMENT.READ, SEASONAL_RULES.READ/MANAGE và REPORTS.READ áp dụng ở menu,
+  route, nút thao tác và backend. Không tự tăng tồn từ các đề xuất.
+- Mutation hiện tại phát `agrisage-business-data-changed`; realtime inventory cập nhật các kế hoạch,
+  bao gồm đổi cấu hình sản phẩm và quy tắc mùa vụ nhờ trigger trong migration mới.
+
 Viết cho: đội FE (React) của các app **Đại lý (Agent)** và **Admin**.
 Nguồn sự thật: `docs/reference/api-flows/FLOW_4_INVENTORY_RETURNS.md`.
 Tài liệu này tóm tắt các luồng màn hình chính, gọi API nào, dữ liệu gửi/nhận, và lưu ý xử lý lỗi dành cho phía Frontend.

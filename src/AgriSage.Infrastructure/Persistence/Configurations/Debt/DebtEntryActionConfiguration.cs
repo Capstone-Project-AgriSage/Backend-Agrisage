@@ -17,8 +17,12 @@ internal sealed class DebtEntryActionConfiguration : EntityConfiguration<DebtEnt
         builder.Property(action => action.AdjustmentAmount).IsMoney();
         builder.Property(action => action.ResultingOutstandingAmount).IsMoney();
         builder.Property(action => action.Reason).HasMaxLength(1000);
+        // Nullable (D7): actions recorded before the policy keep no code; the enum check allows only the 7 CS-11 codes.
+        builder.Property(action => action.ReasonCode).HasMaxLength(30);
 
         builder.HasUserReference(action => action.CreatedBy);
+        builder.HasReference<DebtEntryAction, CropSeason>(action => action.OldCropSeasonId);
+        builder.HasReference<DebtEntryAction, CropSeason>(action => action.NewCropSeasonId);
 
         builder.HasIndex(action => new { action.DebtEntryId, action.CreatedAt }).IsDescending(false, true);
     }

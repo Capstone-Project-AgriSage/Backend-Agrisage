@@ -8,6 +8,7 @@ using AgriSage.Application.Features.Staff.Dtos.Requests;
 using AgriSage.Application.Features.Staff.Interfaces;
 using AgriSage.Application.Features.Staff.Services;
 using AgriSage.Infrastructure.Persistence;
+using AgriSage.Infrastructure.Caching;
 using AgriSage.Infrastructure.Persistence.Interceptors;
 using AgriSage.Infrastructure.Persistence.Seed;
 using Microsoft.AspNetCore.Hosting;
@@ -67,7 +68,9 @@ public class ApiStartupTests : IClassFixture<ApiStartupTests.DevelopmentApiFacto
             interceptors,
             interceptor => Assert.IsType<SoftDeleteInterceptor>(interceptor),
             interceptor => Assert.IsType<AuditableEntityInterceptor>(interceptor),
-            interceptor => Assert.IsType<ConcurrencyVersionInterceptor>(interceptor));
+            interceptor => Assert.IsType<ConcurrencyVersionInterceptor>(interceptor),
+            interceptor => Assert.IsType<CatalogCacheSaveInterceptor>(interceptor),
+            interceptor => Assert.IsType<CatalogCacheTransactionInterceptor>(interceptor));
     }
 
     [Fact]

@@ -40,6 +40,8 @@ public static class DependencyInjection
         services.AddScoped<AgriSage.Application.Features.Permissions.IPermissionConfigurationService, AgriSage.Application.Features.Permissions.PermissionConfigurationService>();
 
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<Features.Content.IArticleService, Features.Content.ArticleService>();
+        services.AddScoped<Features.Content.IContactRequestService, Features.Content.ContactRequestService>();
         services.AddScoped<AuthSessionService>();
         services.AddScoped<IAuthSessionService>(sp => sp.GetRequiredService<AuthSessionService>());
         services.AddScoped<IAuthChallengeService, AuthChallengeService>();
@@ -58,9 +60,13 @@ public static class DependencyInjection
         services.AddScoped<ICustomerService, CustomerService>();
         services.AddScoped<ICustomerGroupService, CustomerGroupService>();
         services.AddScoped<ICustomerCreditService, CustomerCreditService>();
-        services.AddOptions<CreditPolicy>();
         services.AddScoped<ICreditEligibilityService, CreditEligibilityService>();
         services.AddScoped<IDebtService, DebtService>();
+        services.AddScoped<ICropSeasonService, CropSeasonService>();
+        services.AddScoped<IDebtPolicyService, DebtPolicyService>();
+        services.AddScoped<IDebtReminderStartService, DebtReminderStartService>();
+        services.AddScoped<IDebtRolloverService, DebtRolloverService>();
+        services.AddScoped<ICropSeasonClosingService, CropSeasonClosingService>();
         services.AddScoped<IBankDebtPaymentService, BankDebtPaymentService>();
         services.AddScoped<CustomerAddresses>();
         services.AddScoped<IMyProfileService, MyProfileService>();
@@ -84,6 +90,10 @@ public static class DependencyInjection
         services.AddScoped<IGoodsReceiptService>(provider => provider.GetRequiredService<GoodsReceiptService>());
         services.AddScoped<IGoodsReceiptImportService, GoodsReceiptImportService>();
         services.AddScoped<IInventoryService, InventoryService>();
+        services.AddScoped<InventoryPlanningData>();
+        services.AddScoped<IReplenishmentService, ReplenishmentService>();
+        services.AddScoped<ISeasonalRuleService, SeasonalRuleService>();
+        services.AddScoped<IInventoryPlanningReportService, InventoryPlanningReportService>();
         services.AddScoped<StockAdjustmentPosting>();
         services.AddScoped<IStockAdjustmentService, StockAdjustmentService>();
         services.AddScoped<StocktakeQueries>();

@@ -10,7 +10,7 @@ public static class BusinessNotificationPolicy
         or "DELIVERY_DISPATCHED" or "DELIVERY_ATTEMPT_COMPLETED" or "DELIVERY_CANCELLED"
         or "DELIVERY_CREATED" or "PAYMENT_FAILED" or "DEBT_PAYMENT_REJECTED"
         or "DEBT_CREATED" or "DEBT_MANUAL_ENTRY" or "CUSTOMER_CREDIT_LIMIT_CHANGED"
-        or "DEBT_DISPUTE"
+        or "DEBT_DISPUTE" or "DEBT_ROLLOVER" or "DEBT_CHANGE_DUE_DATE" or "DEBT_ADJUST" or "DEBT_CANCEL" or "DEBT_KEEP"
         or "RETURN_REQUESTED" or "RETURN_APPROVED" or "RETURN_REJECTED" or "RETURN_CANCELLED"
         or "RETURN_INSPECTION_COMPLETED" or "REFUND_PENDING" or "REFUND_COMPLETED"
         or "REFUND_FAILED" or "REFUND_CANCELLED" or "ORDER_CREATED" or "COUNTER_SALE_COMPLETED"
@@ -34,6 +34,11 @@ public static class BusinessNotificationPolicy
         "PAYMENT_FAILED" or "DEBT_PAYMENT_REJECTED" => ("PAYMENT_FAILED", "Thanh toán không thành công", "Khoản thanh toán không thành công hoặc bị từ chối. Vui lòng kiểm tra chi tiết thanh toán."),
         "DEBT_CREATED" or "DEBT_MANUAL_ENTRY" => ("DEBT_CREATED", "Có khoản công nợ mới", "Một khoản công nợ mới đã phát sinh. Vui lòng kiểm tra số tiền và hạn thanh toán."),
         "DEBT_DISPUTE" => ("DEBT_DISPUTED", "Nông dân khiếu nại công nợ", "Có khiếu nại mới về khoản công nợ. Vui lòng kiểm tra lý do và xử lý."),
+        // F3.14: the Farmer is told when the store changes a debt: new due date, reduced, forgiven, dispute kept.
+        "DEBT_ROLLOVER" or "DEBT_CHANGE_DUE_DATE" => ("DEBT_DUE_DATE_CHANGED", "Hạn trả nợ đã thay đổi", "Cửa hàng đã cập nhật hạn trả của một khoản công nợ. Vui lòng xem hạn trả mới."),
+        "DEBT_ADJUST" => ("DEBT_REDUCED", "Khoản công nợ đã được giảm", "Cửa hàng đã giảm số tiền của một khoản công nợ. Vui lòng xem số tiền còn nợ."),
+        "DEBT_CANCEL" => ("DEBT_CANCELLED", "Khoản công nợ đã được xóa", "Cửa hàng đã xóa một khoản công nợ của bạn. Vui lòng xem chi tiết."),
+        "DEBT_KEEP" => ("DEBT_DISPUTE_RESOLVED", "Khiếu nại công nợ đã được xử lý", "Cửa hàng đã xem xét khiếu nại và giữ nguyên số nợ. Vui lòng liên hệ cửa hàng nếu cần."),
         "DELIVERY_CREATED" => ("DELIVERY_REQUIRED", "Đơn hàng cần giao", "Phiếu giao hàng mới đã được tạo. Vui lòng kiểm tra và phân công giao hàng."),
         "DELIVERY_ASSIGNED" => ("DELIVERY_ASSIGNED", "Bạn được giao một phiếu giao hàng", "Vui lòng kiểm tra phiếu giao hàng vừa được phân công."),
         "DELIVERY_DISPATCHED" => ("ORDER_STATUS_CHANGED", "Đơn hàng đang được giao", "Nhân viên đang giao hàng cho bạn."),

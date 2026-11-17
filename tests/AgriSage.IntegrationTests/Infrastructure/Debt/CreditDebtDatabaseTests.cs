@@ -17,7 +17,6 @@ using AgriSage.Domain.Features.Stores.Enums;
 using AgriSage.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 
 namespace AgriSage.IntegrationTests.Infrastructure.Debt;
 
@@ -167,7 +166,7 @@ public sealed class CreditDebtDatabaseTests
         Assert.Equal(3_000_000, (await verify.ServiceProvider.GetRequiredService<IDebtService>().AccountAsync(e.FarmerId, Token)).CurrentBalance);
     }
     [CreditDbFact]
-    public async Task Due_today_is_not_overdue_and_policy_only_blocks_after_due_date()
+    public async Task Due_today_is_not_overdue_and_overdue_debt_never_blocks_credit_by_itself()
     {
         await using var e = await CreditTestDatabase.StartAsync(Token); await e.FulfillAsync(5, Token);
         using var s = e.Scope(); var db = s.ServiceProvider.GetRequiredService<AgriSageDbContext>();
@@ -176,9 +175,19 @@ public sealed class CreditDebtDatabaseTests
         Assert.False((await service.EntryAsync(entry.Id, Token)).IsOverdue);
         e.Clock.UtcNow = e.Clock.UtcNow.AddDays(1);
         Assert.Equal(1, (await service.EntryAsync(entry.Id, Token)).OverdueDays);
-        var blocking = new CreditEligibilityService(db, e.Clock, Options.Create(new CreditPolicy { BlockCreditWhenOverdue = true }));
-        Assert.Equal("OVERDUE_DEBT", (await blocking.CheckAsync(e.FarmerId, 1, Token)).ReasonCode);
-        Assert.True((await s.ServiceProvider.GetRequiredService<ICreditEligibilityService>().CheckAsync(e.FarmerId, 1, Token)).Eligible);
+        // CS-10 (approved policy): the system never blocks or limits credit because a debt is overdue; only the owner suspends or
+        // blocks, by hand and with a reason. Overdue debt still counts against the limit, and running out of it is reported as
+        // "insufficient credit" with the remaining amount, never as an overdue or locked customer.
+        var eligibility = s.ServiceProvider.GetRequiredService<ICreditEligibilityService>();
+        var within = await eligibility.CheckAsync(e.FarmerId, 1, Token);
+        Assert.True(within.Eligible);
+        Assert.Equal("ELIGIBLE", within.ReasonCode);
+        Assert.True(within.HasOverdueDebt);
+        Assert.Equal(5_000_000, within.OverdueAmount);
+        var over = await eligibility.CheckAsync(e.FarmerId, within.AvailableCredit + 1, Token);
+        Assert.False(over.Eligible);
+        Assert.Equal("INSUFFICIENT_CREDIT", over.ReasonCode);
+        Assert.Equal(within.AvailableCredit, over.AvailableCredit);
         var dashboard = await service.DashboardAsync(Token);
         Assert.Equal(5_000_000, dashboard.TotalOverdueDebt); Assert.Single(dashboard.OverdueDebts);
     }

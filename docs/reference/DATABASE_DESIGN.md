@@ -688,6 +688,11 @@ product_id              uuid NOT NULL FK products.id
 
 store_sku               varchar(50) NULL
 min_stock_level_base    bigint NULL
+replenishment_enabled  boolean NOT NULL DEFAULT true
+target_stock_level_base bigint NULL
+lead_time_days         integer NOT NULL DEFAULT 7
+safety_stock_base      bigint NOT NULL DEFAULT 0
+target_coverage_days   integer NOT NULL DEFAULT 14
 
 is_sellable             boolean NOT NULL DEFAULT true
 is_active               boolean NOT NULL DEFAULT true
@@ -705,6 +710,18 @@ UNIQUE(store_id, product_id)
 ```
 
 ---
+
+Inventory replenishment extension (2026-11-02): store-product targets/minimum/safety are nonnegative
+base quantities, target >= minimum when both exist; lead time 0–365, coverage 1–90.
+`inventory_seasonal_rules`: uuid PK, store_id FK stores, name varchar(150), crop_type varchar(50),
+region varchar(150) NULL, starts_on/ends_on date, prepare_days integer (0–90), demand_factor
+numeric(6,3) (0.1–5), is_active boolean default true, version bigint default 0 (concurrency),
+standard audit and soft-delete columns. Check ends_on >= starts_on; index (store_id,is_active,starts_on).
+`inventory_seasonal_rule_items`: uuid PK, seasonal_rule_id FK inventory_seasonal_rules,
+store_product_id FK store_products, target_stock_level_base bigint NULL CHECK >=0, standard audit
+and soft-delete columns. Unique (seasonal_rule_id,store_product_id) WHERE deleted_at IS NULL.
+All FKs use Restrict/NoAction. Rules may overlap; computation uses max target/factor, not sum.
+The new migration is additive, preserving historical inventory/financial ledgers and existing settings.
 
 ## 17. `product_reviews`
 
@@ -1457,6 +1474,7 @@ inventory_lot_id            uuid NOT NULL FK inventory_lots.id
 
 system_quantity_snapshot    bigint NOT NULL
 snapshot_at                 timestamptz NOT NULL         (§35.19)
+snapshot_movement_count     integer NOT NULL             (§35.24)
 counted_quantity            bigint NULL
 difference_quantity         bigint NULL
 
@@ -1480,6 +1498,7 @@ Constraints:
 ```text
 UNIQUE(stocktake_id, inventory_lot_id)
 system_quantity_snapshot >= 0
+snapshot_movement_count >= 0
 counted_quantity >= 0 when not NULL
 ```
 
@@ -6558,6 +6577,104 @@ Every enum-backed varchar column also has an IN (...) CHECK of its
 documented values (§0.5).
 ```
 
+## 35.24 Exact stale stocktake lines (table 29) — migration StocktakeItemSnapshotMovementCount
+
+```text
+Chosen on 2026-11-16 after the WF-04 check (option b); lead review in its pull request.
+Replaces the stale rule of §35.19; the rest of §35.19
+(snapshot_at, refresh, completion) stays. Table count stays 67.
+
+Why: the 5-minute margin of §35.19 made every line of a Lot stale for 5 minutes after any
+receipt or sale on it, and refresh-stale could not help until they passed. A store must be
+able to sell, then count at once.
+
+stocktake_items.snapshot_movement_count integer NOT NULL, CHECK >= 0 = the stock movement
+items of the line's Lot whose movement is POSTED or REVERSED with posted_at <= snapshot_at,
+read in the same transaction as the snapshot. Creating a stocktake and refresh-stale lock
+the Lot balances (FOR SHARE), take snapshot_at, read this count, then read the balance.
+
+A counted line is STALE when
+  count(items of its Lot, movement POSTED or REVERSED, posted_at <= counted_at)
+    > snapshot_movement_count.
+
+This catches a movement posted between the snapshot and the count, a movement whose
+posted_at was taken before the snapshot but which committed after it (the case the
+5-minute margin covered), and movements that cancel each other out (-1 then +1: two more
+items). A movement already in the snapshot never makes the line stale, whenever it was
+posted. A REVERSED movement stays counted: its reversal is one more item. A movement that
+commits between the count read and the balance read only causes one extra recount. A
+movement posted after the count still does not make the line stale (§35.19).
+
+Back-fill of existing lines: the items of the Lot with posted_at <= snapshot_at - 5 minutes
+(soft-deleted items excluded). With it, the new rule gives each existing line exactly the
+result of the old rule, so a stocktake being counted during the migration neither gains nor
+loses a stale line; refreshed lines then follow the exact rule. Down drops the column.
+```
+
+## 35.23 Debt by crop season, store debt policy and the start of reminders (tables 34, 49, 50; new tables crop_seasons, store_debt_policies) — migrations CropSeasonsAndDebtPolicy, CropSeasonDebtPermissions, LockDebtPermissionDelegation, DebtReminderStartDate
+
+```text
+Decided by the L3 owner on 2026-11-03 (mentor approval as reported by the owner, no record linked); the team lead has NOT yet
+reviewed the migrations or the reason-code lists (status: "owner-decided, awaiting lead review").
+Supersedes §35.20 where it says the debt term never depends on crop seasons: a credit order now joins the
+crop season open for orders on the day it is confirmed, and the due date of its debt follows the season;
+the credit tier term (§35.20) still applies to debt that belongs to no season and to deliveries made after
+the season's due date. Model: 67 -> 69 tables from this section (the model has 82 tables in total).
+
+crop_seasons (new, one row per season of a Store; soft delete; version)
+  id, store_id FK stores (RESTRICT), code varchar(30), name varchar(150), crop_type varchar(50) DEFAULT 'RICE',
+  order_window_start, harvest_start, harvest_end, grace_days, payment_due_date  (all date),
+  seasonal_rule_id uuid NULL FK inventory_seasonal_rules (the warehouse season; optional link, no dependency),
+  closed_at / closed_by / closed_summary jsonb  (all NULL, or all set when the season is closed),
+  version bigint DEFAULT 0, created_at, updated_at, deleted_at, deleted_by.
+  CHECK order_window_start < harvest_start;  harvest_end > harvest_start;  grace_days BETWEEN 0 AND 365;
+        payment_due_date = harvest_end + grace_days;  closed_* all NULL or all set.
+  UNIQUE (store_id, code) WHERE deleted_at IS NULL;  index (store_id, harvest_start); index (seasonal_rule_id).
+  Seasons are consecutive: the first one is given order_window_start, each later one opens on the harvest_start
+  of the previous one, new seasons are only added after the last (Application check, SeasonCalendar.ValidateSequence).
+  The phase (PLANNED / OPEN / HARVESTING / COLLECTING / CLOSED) is derived from the Vietnam date, never stored.
+  A closed season keeps closed_summary (the report figures at that moment) and no longer changes.
+
+store_debt_policies (new, one row per Store, created on the first save; the defaults apply while there is none)
+  store_id FK stores (RESTRICT), default_grace_days DEFAULT 30, reminder_offsets jsonb {"n2":-7,"n4":14,"n5":30},
+  staff_rollover_limit DEFAULT 1, owner_review_after_rollovers DEFAULT 2, on_time_seasons_for_limit_raise DEFAULT 2,
+  max_credit_term_days NULL (off), max_total_extension_days DEFAULT 365,
+  reminders_start_date date NULL  (migration DebtReminderStartDate: NULL = reminders not started, the job sends nothing;
+  set once to today in Vietnam time by POST /api/debt-reminders/initialize and never changed),
+  version, soft delete columns.
+  CHECK default_grace_days BETWEEN 0 AND 365; staff_rollover_limit >= 0; owner_review_after_rollovers >= staff_rollover_limit;
+        on_time_seasons_for_limit_raise >= 1; max_credit_term_days IS NULL OR >= 1; max_total_extension_days >= 1.
+  The Application and Domain also require owner_review_after_rollovers >= 1 (at 0 every entry would need a decision).
+  UNIQUE (store_id) WHERE deleted_at IS NULL.
+
+debt_entries (table 49) — new columns
+  origin_crop_season_id uuid NULL FK crop_seasons    the season the debt arose in (fixed)
+  collection_crop_season_id uuid NULL FK crop_seasons  the season it is collected in (moves on a rollover)
+  original_due_date date NOT NULL                    the first due date (backfilled from due_date for existing rows)
+  rollover_count integer NOT NULL DEFAULT 0  CHECK >= 0
+  due_basis jsonb NULL                               how the due date was computed (rule, season, term, cap) — D17
+  Indexes on both season columns. A rollover changes only collection_crop_season_id, due_date and rollover_count;
+  the amount, the status, origin_crop_season_id and original_due_date stay.
+
+debt_entry_actions (table 50) — new columns and values
+  old_crop_season_id, new_crop_season_id uuid NULL FK crop_seasons (indexed);  reason_code varchar(30) NULL
+  CHECK IN ('MAT_MUA','THIEN_TAI','KHO_KHAN','TRI_AN','SAI_SOT','KHONG_THU_HOI','KHAC')   — optional until the team decides (F3.22)
+  action_type CHECK now also allows 'ROLLOVER'.
+
+orders (table 34) — new column
+  crop_season_id uuid NULL FK crop_seasons (indexed)  CHECK crop_season_id IS NULL OR settlement_type = 'CREDIT'
+  Set once, when the credit order is confirmed (the season whose order window contains the Vietnam day of the
+  confirmation); later edits of the season do not move it. Debt arises only on fulfillment (§35.20 stays true).
+
+Permissions (permissions, role_permissions): six new codes DEBT.ROLLOVER, CROP_SEASONS.READ|MANAGE, DEBT_POLICY.READ|MANAGE,
+MY_CROP_SEASONS.READ; and nine existing codes (DEBT.ADJUST, DEBT.CANCEL, DEBT.MANUAL, DEBT.DUE_DATE, BANK_PAYMENTS.CONFIRM,
+BANK_PAYMENTS.REJECT, CREDIT.SUSPEND, CREDIT.BLOCK, CREDIT.ACTIVATE) become is_delegable = false: only ADMIN and STORE_OWNER
+may use them, the service checks the role again, and the migration revokes the grants of everyone else (data only).
+
+Never automatic: the system does not lock or limit a customer's credit because of overdue debt; overdue debt still counts
+against the credit limit. No fee, interest or penalty (BUSINESS_RULES 24).
+```
+
 ## 35.22 Sales report revenue from SALE movements (tables 26, 27, 34, 35, 57, 58) — no schema change
 
 ```text
@@ -6639,6 +6756,8 @@ Confirmed orders are never affected by later tier or group changes.
 
 ```text
 Approved by the team on 2026-10-03 (decision C-D6). Table count stays 67.
+Superseded in part on 2026-11-16: the STALE rule below (5-minute margin) is replaced by the
+exact count of §35.24; snapshot_at, refresh and completion stay as written.
 
 stocktake_items.snapshot_at timestamptz NOT NULL = when system_quantity_snapshot (and
 unit_cost_snapshot) was read. The use case locks the Lot balance (SELECT ... FOR SHARE)

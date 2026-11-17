@@ -1,0 +1,502 @@
+using AgriSage.Application.Common.Exceptions;
+using AgriSage.Application.Features.Debt;
+using AgriSage.Application.Features.Orders;
+using AgriSage.Application.Features.Payments;
+using AgriSage.Domain.Common.Exceptions;
+using AgriSage.Domain.Features.Credit.Entities;
+using AgriSage.Domain.Features.Customers.Entities;
+using AgriSage.Domain.Features.Debt.Entities;
+using AgriSage.Domain.Features.Debt.Enums;
+using AgriSage.Domain.Features.Identity.Entities;
+using AgriSage.Domain.Features.Identity.Enums;
+using AgriSage.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace AgriSage.IntegrationTests.Infrastructure.Debt;
+
+// F3.19 against real PostgreSQL: closing a season (D11), the debt-by-season report (D9) and limit suggestions (D12, CS-14).
+// Đông Xuân: harvest 15/02–15/03/2027, due 14/04/2027. Hè Thu: harvest 15/07–15/08/2027, due 14/09/2027.
+public sealed class CropSeasonClosingDatabaseTests
+{
+    private static CancellationToken Token => TestContext.Current.CancellationToken;
+
+    private static readonly DateOnly DxDue = new(2027, 4, 14);
+    private static readonly DateOnly HtDue = new(2027, 9, 14);
+
+    private static async Task<T> Run<T>(CreditTestDatabase e, Func<IServiceProvider, Task<T>> act)
+    {
+        using var s = e.Scope();
+        return await act(s.ServiceProvider);
+    }
+
+    private static Task<T> Closing<T>(CreditTestDatabase e, Func<ICropSeasonClosingService, Task<T>> act) =>
+        Run(e, sp => act(sp.GetRequiredService<ICropSeasonClosingService>()));
+
+    // Vietnam noon of the day: the business date is that day.
+    private static void At(CreditTestDatabase e, int year, int month, int day) =>
+        e.Clock.UtcNow = new DateTimeOffset(year, month, day, 5, 0, 0, TimeSpan.Zero);
+
+    private static async Task<(CropSeasonResponse Dx, CropSeasonResponse Ht)> SeasonsAsync(CreditTestDatabase e)
+    {
+        using var scope = e.Scope();
+        var seasons = scope.ServiceProvider.GetRequiredService<ICropSeasonService>();
+        var dx = await seasons.CreateAsync(new("DX-2026", "Đông Xuân 2026–2027", new DateOnly(2027, 2, 15), new DateOnly(2027, 3, 15), 30, new DateOnly(2026, 10, 1)), Token);
+        var ht = await seasons.CreateAsync(new("HT-2027", "Hè Thu 2027", new DateOnly(2027, 7, 15), new DateOnly(2027, 8, 15), 30), Token);
+        return (dx, ht);
+    }
+
+    // A debt of the season (what F3.13 will record at delivery), entered as a manual debt for exact amounts.
+    private static async Task<Guid> DebtAsync(CreditTestDatabase e, Guid farmer, decimal amount, Guid? season, DateOnly due)
+    {
+        var entry = await Run(e, sp => sp.GetRequiredService<IDebtService>().ManualAsync(farmer, new(amount, due, "Đơn chịu"), Token));
+        using var s = e.Scope();
+        await s.ServiceProvider.GetRequiredService<AgriSageDbContext>().Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE debt_entries SET origin_crop_season_id = {season}, collection_crop_season_id = {season}, original_due_date = due_date WHERE id = {entry.Id}", Token);
+        return entry.Id;
+    }
+
+    private static Task PayAsync(CreditTestDatabase e, Guid farmer, decimal amount) =>
+        Run(e, sp => sp.GetRequiredService<IPaymentService>().ReceiveCashAsync(new("DEBT_REPAYMENT", amount, FarmerProfileId: farmer), Token));
+
+    private static Task<DebtEntryResponse> RollAsync(CreditTestDatabase e, Guid entry, Guid? target = null) =>
+        Run(e, sp => sp.GetRequiredService<IDebtRolloverService>().RolloverAsync(entry, new("MAT_MUA", "Mất mùa", target), Token));
+
+    private static Task<CropSeasonResponse> CloseAsync(CreditTestDatabase e, Guid season) =>
+        Run(e, async sp =>
+        {
+            var current = await sp.GetRequiredService<ICropSeasonService>().GetAsync(season, Token);
+            return await sp.GetRequiredService<ICropSeasonClosingService>().CloseAsync(season, new(current.Version, "Đã thu xong"), Token);
+        });
+
+    private static async Task<DebtBySeasonItem> ReportAsync(CreditTestDatabase e, Guid season) =>
+        (await Closing(e, c => c.ReportAsync(new() { PageSize = 100 }, Token))).Items.Single(i => i.Season.Id == season);
+
+    private static async Task<Guid> FarmerAsync(CreditTestDatabase e, string name)
+    {
+        using var s = e.Scope();
+        var db = s.ServiceProvider.GetRequiredService<AgriSageDbContext>();
+        var role = await db.Roles.SingleAsync(r => r.Code == RoleCode.Farmer, Token);
+        var user = new User(role.Id, name, "hash", $"{Guid.NewGuid():N}@example.test", null);
+        var farmer = new FarmerProfile(user.Id);
+        db.AddRange(user, farmer, new FarmerCreditProfile(e.StoreId, farmer.Id, 20_000_000m, e.User.UserId!.Value, e.Clock.UtcNow, e.TierId),
+            new DebtAccount(e.StoreId, farmer.Id));
+        await db.SaveChangesAsync(Token);
+        return farmer.Id;
+    }
+
+    // §8.1 "nông dân Bảy": two credit debts in Đông Xuân, a 1 million payment, the rest rolled over to Hè Thu, then the
+    // owner closes Đông Xuân. The report keeps the rolled-over debt under Đông Xuân (origin) and shows it to collect in Hè Thu.
+    [CreditDbFact]
+    public async Task Farmer_Bay_closes_Dong_Xuan_and_the_report_follows_the_origin_season()
+    {
+        await using var e = await CreditTestDatabase.StartAsync(Token);
+        var (dx, ht) = await SeasonsAsync(e);
+        At(e, 2026, 12, 6);
+        var a = await DebtAsync(e, e.FarmerId, 1_200_000m, dx.Id, DxDue);
+        At(e, 2027, 1, 11);
+        var b = await DebtAsync(e, e.FarmerId, 800_000m, dx.Id, DxDue);
+        At(e, 2027, 2, 20);
+        var c = await DebtAsync(e, e.FarmerId, 500_000m, ht.Id, HtDue);
+        At(e, 2027, 3, 25);
+        await PayAsync(e, e.FarmerId, 1_000_000m);
+        At(e, 2027, 4, 28);
+
+        var blocked = await Closing(e, x => x.ClosingCheckAsync(dx.Id, Token));
+        Assert.Equal((false, 2, 0, "COLLECTING"), (blocked.CanClose, blocked.OpenEntryCount, blocked.OpenCreditOrderCount, blocked.Status));
+        Assert.Equal(["OPEN_ENTRIES"], blocked.Reasons);
+        Assert.Equal(new[] { a, b }.Order(), blocked.OpenEntries.Select(o => o.EntryId).Order());
+        var openA = blocked.OpenEntries.Single(o => o.EntryId == a);
+        Assert.Equal((200_000m, "Farmer Test", e.FarmerId, "PARTIALLY_PAID"), (openA.OutstandingAmount, openA.FullName, openA.FarmerProfileId, openA.Status));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => CloseAsync(e, dx.Id));
+
+        await RollAsync(e, a);
+        await RollAsync(e, b);
+        Assert.True((await Closing(e, x => x.ClosingCheckAsync(dx.Id, Token))).CanClose);
+        var closed = await CloseAsync(e, dx.Id);
+        Assert.Equal("CLOSED", closed.Status);
+
+        var dxReport = await ReportAsync(e, dx.Id);
+        Assert.True(dxReport.IsFrozen);
+        Assert.Equal(new SeasonOriginFigures(2_000_000m, 1_000_000m, 0m, 0m, 0m, 1_000_000m, 1_000_000m, 2, 1), dxReport.Origin);
+        Assert.Equal(new SeasonCollectionFigures(0m, 0m, 0), dxReport.Collection);
+        var htReport = await ReportAsync(e, ht.Id);
+        Assert.False(htReport.IsFrozen);
+        Assert.Equal(new SeasonOriginFigures(500_000m, 0m, 0m, 0m, 0m, 0m, 500_000m, 1, 1), htReport.Origin);
+        Assert.Equal(new SeasonCollectionFigures(1_000_000m, 1_500_000m, 3), htReport.Collection);
+
+        // After closing, Đông Xuân's figures are frozen; Hè Thu's follow the ledger.
+        await PayAsync(e, e.FarmerId, 300_000m);
+        Assert.Equal(1_000_000m, (await ReportAsync(e, dx.Id)).Origin.CollectedAmount);
+        Assert.Equal(1_200_000m, (await ReportAsync(e, ht.Id)).Collection.ToCollectAmount);
+
+        // A closed season never changes and debt cannot move into it.
+        await Assert.ThrowsAsync<BusinessRuleException>(() => CloseAsync(e, dx.Id));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => Run(e, sp => sp.GetRequiredService<ICropSeasonService>()
+            .UpdateAsync(dx.Id, new("X", new DateOnly(2027, 2, 15), new DateOnly(2027, 3, 15), 30, closed.Version), Token)));
+        using (var s = e.Scope())
+        {
+            var db = s.ServiceProvider.GetRequiredService<AgriSageDbContext>();
+            var season = await db.CropSeasons.AsNoTracking().SingleAsync(x => x.Id == dx.Id, Token);
+            Assert.Equal(e.User.UserId, season.ClosedBy);
+            Assert.NotNull(season.ClosedSummary);
+            var audit = await db.AuditLogs.AsNoTracking().SingleAsync(x => x.Action == "CROP_SEASON_CLOSED", Token);
+            Assert.Equal(("CROP_SEASON", dx.Id, "Đã thu xong"), (audit.EntityType, audit.EntityId!.Value, audit.Reason));
+        }
+    }
+
+    // D11: still-owed debt (disputed included), an unfinished credit order of the season, or a harvest not yet ended.
+    [CreditDbFact]
+    public async Task Closing_is_blocked_by_open_debt_open_credit_orders_and_an_unfinished_harvest()
+    {
+        await using var e = await CreditTestDatabase.StartAsync(Token);
+        var (dx, _) = await SeasonsAsync(e);
+        var disputed = await DebtAsync(e, e.FarmerId, 300_000m, dx.Id, DxDue);
+        await Run(e, sp => sp.GetRequiredService<IDebtService>().ActionAsync(disputed, "DISPUTE", "Sai số lượng", null, null, Token));
+
+        var early = await Closing(e, x => x.ClosingCheckAsync(dx.Id, Token));
+        Assert.Equal(["HARVEST_NOT_ENDED", "OPEN_ENTRIES"], early.Reasons);
+        Assert.Equal("DISPUTED", Assert.Single(early.OpenEntries).Status);
+
+        var order = await e.OrderAsync(1, Token);
+        await Run(e, sp => sp.GetRequiredService<IOrderConfirmationService>().ConfirmAsync(order.Id, Token));
+        using (var s = e.Scope())
+        {
+            await s.ServiceProvider.GetRequiredService<AgriSageDbContext>().Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE orders SET crop_season_id = {dx.Id} WHERE id = {order.Id}", Token);
+        }
+
+        At(e, 2027, 3, 15); // the last harvest day is still HARVESTING
+        Assert.Contains("HARVEST_NOT_ENDED", (await Closing(e, x => x.ClosingCheckAsync(dx.Id, Token))).Reasons);
+        At(e, 2027, 3, 16);
+        var check = await Closing(e, x => x.ClosingCheckAsync(dx.Id, Token));
+        Assert.Equal(["OPEN_ENTRIES", "OPEN_CREDIT_ORDERS"], check.Reasons);
+        var open = Assert.Single(check.OpenCreditOrders);
+        Assert.Equal((order.Id, order.OrderNumber, "CONFIRMED"), (open.OrderId, open.OrderNumber, open.Status));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => CloseAsync(e, dx.Id));
+
+        await Run(e, sp => sp.GetRequiredService<IDebtService>().ActionAsync(disputed, "CANCEL", "Miễn nợ", null, null, "TRI_AN", Token));
+        Assert.Equal(["OPEN_CREDIT_ORDERS"], (await Closing(e, x => x.ClosingCheckAsync(dx.Id, Token))).Reasons);
+        await Run(e, sp => sp.GetRequiredService<IOrderCancellationService>().CancelAsync(order.Id, new("Khách đổi ý"), Token));
+        Assert.True((await Closing(e, x => x.ClosingCheckAsync(dx.Id, Token))).CanClose);
+        await CloseAsync(e, dx.Id);
+        var after = await Closing(e, x => x.ClosingCheckAsync(dx.Id, Token));
+        Assert.Equal((false, "CLOSED"), (after.CanClose, after.Status));
+        Assert.Equal(["ALREADY_CLOSED"], after.Reasons);
+    }
+
+    [CreditDbFact]
+    public async Task Only_the_owner_closes_and_a_stale_version_is_refused()
+    {
+        await using var e = await CreditTestDatabase.StartAsync(Token);
+        var (dx, _) = await SeasonsAsync(e);
+        At(e, 2027, 4, 28);
+        var staff = await OwnerOnlyDebtDatabaseTests.AddStaffAsync(e, OwnerOnlyDebtDatabaseTests.NoGrant);
+        var owner = e.User.UserId;
+        e.User.UserId = staff.UserId; e.User.Role = "SALES_STAFF";
+        try
+        {
+            Assert.True((await Closing(e, x => x.ClosingCheckAsync(dx.Id, Token))).CanClose);
+            await Assert.ThrowsAsync<ForbiddenException>(() => Closing(e, x => x.CloseAsync(dx.Id, new(dx.Version), Token)));
+        }
+        finally { e.User.UserId = owner; e.User.Role = "STORE_OWNER"; }
+
+        await Assert.ThrowsAsync<ConflictException>(() => Closing(e, x => x.CloseAsync(dx.Id, new(dx.Version + 1), Token)));
+        await Assert.ThrowsAsync<NotFoundException>(() => Closing(e, x => x.CloseAsync(Guid.NewGuid(), new(0), Token)));
+        await Assert.ThrowsAsync<NotFoundException>(() => Closing(e, x => x.ClosingCheckAsync(Guid.NewGuid(), Token)));
+        Assert.Equal("CLOSED", (await Closing(e, x => x.CloseAsync(dx.Id, new(dx.Version), Token))).Status);
+        // Closing changed the version: the old one is now stale for any other change.
+        await Assert.ThrowsAsync<BusinessRuleException>(() => Closing(e, x => x.CloseAsync(dx.Id, new(dx.Version + 1), Token)));
+    }
+
+    // While a closing holds the store lock (not yet committed), a rollover into that season waits for it, then sees the
+    // season closed and is refused: debt never moves into a season that is being closed.
+    [CreditDbFact]
+    public async Task A_rollover_into_a_season_being_closed_waits_and_is_refused()
+    {
+        await using var e = await CreditTestDatabase.StartAsync(Token);
+        var (dx, _) = await SeasonsAsync(e);
+        var single = await DebtAsync(e, e.FarmerId, 400_000m, null, new DateOnly(2027, 4, 1));
+        var listed = await DebtAsync(e, e.FarmerId, 300_000m, null, new DateOnly(2027, 4, 2));
+        At(e, 2027, 4, 28);
+
+        using var closer = e.Scope();
+        var db = closer.ServiceProvider.GetRequiredService<AgriSageDbContext>();
+        await using var tx = await db.Database.BeginTransactionAsync(Token);
+        await closer.ServiceProvider.GetRequiredService<AgriSage.Application.Common.Interfaces.IRowLockService>().LockStoreAsync(e.StoreId, Token);
+        var season = await db.CropSeasons.SingleAsync(x => x.Id == dx.Id, Token);
+        season.Close(e.User.UserId!.Value, e.Clock.UtcNow, "{}", new DateOnly(2027, 4, 28));
+        await db.SaveChangesAsync(Token);
+
+        var roll = RollAsync(e, single, dx.Id);
+        // The other rollover path too (a listed entry, collected in no season, is not in Đông Xuân; it only has to wait).
+        var other = Run(e, sp => sp.GetRequiredService<IDebtRolloverService>().RolloverAsync(listed, new("MAT_MUA", "Mất mùa", dx.Id), Token));
+        await Task.Delay(TimeSpan.FromSeconds(2), Token);
+        Assert.False(roll.IsCompleted);
+        Assert.False(other.IsCompleted);
+        await tx.CommitAsync(Token);
+
+        await Assert.ThrowsAsync<BusinessRuleException>(() => roll);
+        await Assert.ThrowsAsync<BusinessRuleException>(() => other);
+        using var s = e.Scope();
+        var entries = await s.ServiceProvider.GetRequiredService<AgriSageDbContext>().DebtEntries.AsNoTracking()
+            .Where(x => x.Id == single || x.Id == listed).ToListAsync(Token);
+        Assert.All(entries, x => Assert.Null(x.CollectionCropSeasonId));
+    }
+
+    // Review finding 1: a manual debt put into a season takes the store lock like the closing does, so while the season is
+    // being closed it waits, then sees it closed and is refused (no entry, no ledger line).
+    [CreditDbFact]
+    public async Task A_manual_debt_into_a_season_being_closed_waits_and_is_refused()
+    {
+        await using var e = await CreditTestDatabase.StartAsync(Token);
+        var (dx, _) = await SeasonsAsync(e);
+        At(e, 2027, 4, 28);
+
+        using var closer = e.Scope();
+        var db = closer.ServiceProvider.GetRequiredService<AgriSageDbContext>();
+        await using var tx = await db.Database.BeginTransactionAsync(Token);
+        await closer.ServiceProvider.GetRequiredService<AgriSage.Application.Common.Interfaces.IRowLockService>().LockStoreAsync(e.StoreId, Token);
+        var season = await db.CropSeasons.SingleAsync(x => x.Id == dx.Id, Token);
+        season.Close(e.User.UserId!.Value, e.Clock.UtcNow, "{}", new DateOnly(2027, 4, 28));
+        await db.SaveChangesAsync(Token);
+
+        var manual = Run(e, sp => sp.GetRequiredService<IDebtService>()
+            .ManualAsync(e.FarmerId, new(400_000m, new DateOnly(2027, 5, 30), "Nợ cũ", dx.Id), Token));
+        await Task.Delay(TimeSpan.FromSeconds(2), Token);
+        Assert.False(manual.IsCompleted);
+        await tx.CommitAsync(Token);
+
+        await Assert.ThrowsAsync<BusinessRuleException>(() => manual);
+        using var s = e.Scope();
+        Assert.Empty(await s.ServiceProvider.GetRequiredService<AgriSageDbContext>().DebtEntries.AsNoTracking().ToListAsync(Token));
+    }
+
+    // Review finding (closing check order): a delivery does not take the store lock, so it can commit between the two reads of
+    // the check. The check reads the unfinished orders first and the debt after, so the debt the delivery creates is seen and the
+    // season is not closed. (With the reads the other way round, both came back clean and the season closed over an open entry.)
+    [CreditDbFact]
+    public async Task A_delivery_committed_between_the_two_reads_of_the_closing_check_does_not_let_the_season_close()
+    {
+        await using var e = await CreditTestDatabase.StartAsync(Token);
+        var (dx, _) = await SeasonsAsync(e);
+        var order = await e.OrderAsync(1, Token);
+        await Run(e, sp => sp.GetRequiredService<IOrderConfirmationService>().ConfirmAsync(order.Id, Token));
+        using (var s = e.Scope())
+        {
+            await s.ServiceProvider.GetRequiredService<AgriSageDbContext>().Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE orders SET crop_season_id = {dx.Id} WHERE id = {order.Id}", Token);
+        }
+        At(e, 2027, 4, 28); // Đông Xuân is collecting
+
+        // The first read of the check (orders or debt entries, whichever comes first) is followed by the delivery.
+        var delivered = false;
+        e.CommandHook.When = sql =>
+            (sql.Contains("FROM orders", StringComparison.Ordinal) && sql.Contains("o.status", StringComparison.Ordinal))
+            || (sql.Contains("FROM debt_entries", StringComparison.Ordinal) && sql.Contains("debt_accounts", StringComparison.Ordinal));
+        e.CommandHook.Then = async () =>
+        {
+            await Run(e, sp => sp.GetRequiredService<IOrderPickupService>()
+                .PickupAsync(order.Id, new([new(order.Items.Single().Id, [new(e.LotId, 1)])]), Token).WaitAsync(TimeSpan.FromSeconds(20), Token));
+            delivered = true;
+        };
+
+        await Assert.ThrowsAsync<BusinessRuleException>(() => CloseAsync(e, dx.Id));
+
+        Assert.True(delivered, "the delivery must have run between the reads");
+        using var check = e.Scope();
+        var db = check.ServiceProvider.GetRequiredService<AgriSageDbContext>();
+        Assert.False((await db.CropSeasons.AsNoTracking().SingleAsync(x => x.Id == dx.Id, Token)).IsClosed);
+        Assert.Equal(1_000_000m, (await db.DebtEntries.AsNoTracking().SingleAsync(Token)).OutstandingAmount);
+    }
+
+    // The season-wide rollover locks the store too: a rollover into a season being closed waits, then is refused.
+    [CreditDbFact]
+    public async Task A_season_rollover_into_a_season_being_closed_waits_and_is_refused()
+    {
+        await using var e = await CreditTestDatabase.StartAsync(Token);
+        var (dx, ht) = await SeasonsAsync(e);
+        var entry = await DebtAsync(e, e.FarmerId, 400_000m, dx.Id, DxDue);
+        At(e, 2027, 9, 20); // Hè Thu is collecting and can be closed; Đông Xuân still holds the entry
+
+        using var closer = e.Scope();
+        var db = closer.ServiceProvider.GetRequiredService<AgriSageDbContext>();
+        await using var tx = await db.Database.BeginTransactionAsync(Token);
+        await closer.ServiceProvider.GetRequiredService<AgriSage.Application.Common.Interfaces.IRowLockService>().LockStoreAsync(e.StoreId, Token);
+        var season = await db.CropSeasons.SingleAsync(x => x.Id == ht.Id, Token);
+        season.Close(e.User.UserId!.Value, e.Clock.UtcNow, "{}", new DateOnly(2027, 9, 20));
+        await db.SaveChangesAsync(Token);
+
+        var roll = Run(e, sp => sp.GetRequiredService<IDebtRolloverService>()
+            .RolloverSeasonAsync(dx.Id, new("MAT_MUA", "Mất mùa", ht.Id), Token));
+        await Task.Delay(TimeSpan.FromSeconds(2), Token);
+        Assert.False(roll.IsCompleted);
+        await tx.CommitAsync(Token);
+
+        await Assert.ThrowsAsync<BusinessRuleException>(() => roll);
+        using var s = e.Scope();
+        Assert.Equal(dx.Id, (await s.ServiceProvider.GetRequiredService<AgriSageDbContext>().DebtEntries.AsNoTracking()
+            .SingleAsync(x => x.Id == entry, Token)).CollectionCropSeasonId);
+    }
+
+    // Reductions, forgiveness and rollovers keep the report equal to the ledger:
+    // originated − collected − returned − reduced − cancelled = outstanding.
+    [CreditDbFact]
+    public async Task The_report_matches_the_ledger()
+    {
+        await using var e = await CreditTestDatabase.StartAsync(Token);
+        var (dx, ht) = await SeasonsAsync(e);
+        var x1 = await DebtAsync(e, e.FarmerId, 2_000_000m, dx.Id, DxDue);
+        var x2 = await DebtAsync(e, e.FarmerId, 1_000_000m, dx.Id, DxDue);
+        var x3 = await DebtAsync(e, e.FarmerId, 1_000_000m, dx.Id, DxDue);
+        var other = await FarmerAsync(e, "Năm");
+        await DebtAsync(e, other, 700_000m, dx.Id, DxDue);
+        await DebtAsync(e, e.FarmerId, 500_000m, ht.Id, HtDue);
+        await DebtAsync(e, e.FarmerId, 250_000m, null, new DateOnly(2027, 12, 1)); // no season, due last: payments skip it
+        await PayAsync(e, e.FarmerId, 500_000m);                                     // x1
+        await Run(e, sp => sp.GetRequiredService<IDebtService>().ActionAsync(x1, "ADJUST", "Tri ân", 300_000m, null, "TRI_AN", Token));
+        await Run(e, sp => sp.GetRequiredService<IDebtService>().ActionAsync(x2, "CANCEL", "Không thu hồi", null, null, "KHONG_THU_HOI", Token));
+        await RollAsync(e, x3, ht.Id);
+
+        var report = await ReportAsync(e, dx.Id);
+        Assert.Equal(new SeasonOriginFigures(4_700_000m, 500_000m, 0m, 300_000m, 1_000_000m, 1_000_000m, 2_900_000m, 4, 2), report.Origin);
+        var o = report.Origin;
+        Assert.Equal(o.OutstandingAmount, o.OriginatedAmount - o.CollectedAmount - o.ReturnedAmount - o.ReducedAmount - o.CancelledAmount);
+        Assert.Equal(new SeasonCollectionFigures(0m, 1_900_000m, 2), report.Collection);
+        Assert.Equal(new SeasonCollectionFigures(1_000_000m, 1_500_000m, 2), (await ReportAsync(e, ht.Id)).Collection);
+
+        using var s = e.Scope();
+        var db = s.ServiceProvider.GetRequiredService<AgriSageDbContext>();
+        var outstanding = await db.DebtEntries.AsNoTracking().Where(x => x.OriginCropSeasonId == dx.Id).SumAsync(x => x.OutstandingAmount, Token);
+        var paid = await (from t in db.DebtTransactions.AsNoTracking()
+                          join x in db.DebtEntries.AsNoTracking() on t.DebtEntryId equals x.Id
+                          where x.OriginCropSeasonId == dx.Id && t.TransactionType == DebtTransactionType.Payment
+                          select -t.AmountDelta).SumAsync(Token);
+        Assert.Equal((outstanding, paid), (o.OutstandingAmount, o.CollectedAmount));
+        var page = await Closing(e, x => x.ReportAsync(new() { Year = 2027, PageSize = 1 }, Token));
+        Assert.Equal((2L, "HT-2027"), (page.TotalCount, Assert.Single(page.Items).Season.Code));
+    }
+
+    // D12 (Lead, 05/11): a season without debt is skipped when counting the last N seasons; the season being closed must hold
+    // debt of the customer; ordered by consecutive on-time seasons (most first) then name; paged.
+    [CreditDbFact]
+    public async Task Limit_suggestions_skip_seasons_without_debt_and_are_ordered_and_paged()
+    {
+        await using var e = await CreditTestDatabase.StartAsync(Token);
+        var (dx, ht) = await SeasonsAsync(e);
+        var dx2Due = new DateOnly(2028, 4, 14);
+        var dx2 = await Run(e, sp => sp.GetRequiredService<ICropSeasonService>().CreateAsync(
+            new("DX-2027", "Đông Xuân 2027–2028", new DateOnly(2028, 2, 15), new DateOnly(2028, 3, 15), 30), Token));
+        var steady = await FarmerAsync(e, "Bình Đều");
+        var skipper = await FarmerAsync(e, "An Nghỉ Vụ");
+        var lateFirst = await FarmerAsync(e, "Dũng Trễ Đầu");
+        var onlyThis = await FarmerAsync(e, "Chỉ Vụ Này");
+        var notThis = await FarmerAsync(e, "Không Nợ Vụ Này");
+        var plain = e.FarmerId;                                                       // "Farmer Test": Đông Xuân and Đông Xuân 2
+
+        At(e, 2026, 12, 1);
+        foreach (var f in new[] { plain, steady, skipper, lateFirst, notThis }) await DebtAsync(e, f, 1_000_000m, dx.Id, DxDue);
+        At(e, 2027, 4, 14);
+        foreach (var f in new[] { plain, steady, skipper, notThis }) await PayAsync(e, f, 1_000_000m);
+        At(e, 2027, 4, 20);                                                          // six days late
+        await PayAsync(e, lateFirst, 1_000_000m);
+        At(e, 2027, 4, 28);
+        await CloseAsync(e, dx.Id);
+
+        At(e, 2027, 5, 1);                                                           // Hè Thu: skipper and plain owe nothing
+        foreach (var f in new[] { steady, lateFirst, notThis }) await DebtAsync(e, f, 2_000_000m, ht.Id, HtDue);
+        At(e, 2027, 9, 10);
+        foreach (var f in new[] { steady, lateFirst, notThis }) await PayAsync(e, f, 2_000_000m);
+        At(e, 2027, 9, 30);
+        await CloseAsync(e, ht.Id);
+
+        At(e, 2027, 11, 1);                                                          // Đông Xuân 2: notThis owes nothing
+        foreach (var f in new[] { plain, steady, skipper, lateFirst, onlyThis }) await DebtAsync(e, f, 500_000m, dx2.Id, dx2Due);
+        At(e, 2028, 4, 1);
+        foreach (var f in new[] { plain, steady, skipper, lateFirst, onlyThis }) await PayAsync(e, f, 500_000m);
+        At(e, 2028, 4, 20);
+        await CloseAsync(e, dx2.Id);
+
+        // N = 2: the last two seasons WITH debt, whichever they are. Streak: steady 3, then name order among 2.
+        var all = await Closing(e, x => x.LimitSuggestionsAsync(dx2.Id, new(), Token));
+        Assert.Equal([steady, skipper, lateFirst, plain], all.Items.Select(i => i.FarmerProfileId).ToList());
+        Assert.Equal([3, 2, 2, 2], all.Items.Select(i => i.OnTimeSeasons).ToList());
+        Assert.Equal(4, all.TotalCount);
+        // lateFirst is late in Đông Xuân, but its last two seasons with debt (Hè Thu, Đông Xuân 2) were on time: 500k + 2M.
+        Assert.Equal(2_500_000m, all.Items.Single(i => i.FarmerProfileId == lateFirst).PaidAmount);
+        Assert.DoesNotContain(all.Items, i => i.FarmerProfileId == onlyThis || i.FarmerProfileId == notThis);
+
+        var page1 = await Closing(e, x => x.LimitSuggestionsAsync(dx2.Id, new() { Page = 1, PageSize = 2 }, Token));
+        var page2 = await Closing(e, x => x.LimitSuggestionsAsync(dx2.Id, new() { Page = 2, PageSize = 2 }, Token));
+        Assert.Equal([steady, skipper], page1.Items.Select(i => i.FarmerProfileId).ToList());
+        Assert.Equal([lateFirst, plain], page2.Items.Select(i => i.FarmerProfileId).ToList());
+        Assert.Equal((4, 4), (page1.TotalCount, page2.TotalCount));
+    }
+
+    // D12 / CS-14: every debt of the customer that arose in each of the last N closed seasons (policy, default 2) was paid by
+    // real payments on or before its original due date, never rolled over, moved, reduced or forgiven.
+    [CreditDbFact]
+    public async Task Limit_suggestions_follow_consecutive_on_time_seasons()
+    {
+        await using var e = await CreditTestDatabase.StartAsync(Token);
+        var (dx, ht) = await SeasonsAsync(e);
+        var onTime = e.FarmerId;
+        var late = await FarmerAsync(e, "Trễ hạn");
+        var reduced = await FarmerAsync(e, "Được giảm");
+        var rolled = await FarmerAsync(e, "Gia hạn");
+        var onlyHt = await FarmerAsync(e, "Chỉ Hè Thu");
+
+        At(e, 2026, 12, 1);
+        foreach (var f in new[] { onTime, late, reduced }) await DebtAsync(e, f, 1_000_000m, dx.Id, DxDue);
+        var rolledDx = await DebtAsync(e, rolled, 1_000_000m, dx.Id, DxDue);
+        At(e, 2027, 4, 14);                                                          // on the due date: on time
+        foreach (var f in new[] { onTime, late, reduced }) await PayAsync(e, f, 1_000_000m);
+        At(e, 2027, 4, 20);
+        await RollAsync(e, rolledDx, ht.Id);
+        At(e, 2027, 4, 28);
+        await CloseAsync(e, dx.Id);
+
+        At(e, 2027, 5, 1);
+        foreach (var f in new[] { onTime, late, onlyHt }) await DebtAsync(e, f, 2_000_000m, ht.Id, HtDue);
+        var reducedHt = await DebtAsync(e, reduced, 2_000_000m, ht.Id, HtDue);
+        await Run(e, sp => sp.GetRequiredService<IDebtService>().ActionAsync(reducedHt, "ADJUST", "Tri ân", 100_000m, null, "TRI_AN", Token));
+        At(e, 2027, 9, 10);
+        foreach (var f in new[] { onTime, onlyHt }) await PayAsync(e, f, 2_000_000m);
+        await PayAsync(e, reduced, 1_900_000m);
+        await PayAsync(e, rolled, 1_000_000m);
+        At(e, 2027, 9, 15);                                                          // one day late
+        await PayAsync(e, late, 2_000_000m);
+
+        // An open season gives no suggestion; Đông Xuân alone is not two seasons yet.
+        await Assert.ThrowsAsync<BusinessRuleException>(() => Closing(e, x => x.LimitSuggestionsAsync(ht.Id, new(), Token)));
+        var first = await Closing(e, x => x.LimitSuggestionsAsync(dx.Id, new(), Token));
+        Assert.Equal((2, 0), (first.RequiredSeasons, first.Items.Count));
+        Assert.Empty(first.Seasons);
+
+        At(e, 2027, 9, 30);
+        await CloseAsync(e, ht.Id);
+        var suggestions = await Closing(e, x => x.LimitSuggestionsAsync(ht.Id, new(), Token));
+        Assert.Equal(["DX-2026", "HT-2027"], suggestions.Seasons.Select(s => s.Code).ToList());
+        var item = Assert.Single(suggestions.Items);
+        Assert.Equal((onTime, "Farmer Test", 20_000_000m, "ACTIVE", 3_000_000m, new DateOnly(2027, 9, 10)),
+            (item.FarmerProfileId, item.FullName, item.CreditLimit, item.CreditStatus, item.PaidAmount, item.LastPaidOn));
+
+        // With one season required, Đông Xuân alone qualifies the customers who paid it on time.
+        using (var s = e.Scope())
+        {
+            var db = s.ServiceProvider.GetRequiredService<AgriSageDbContext>();
+            var policy = new StoreDebtPolicy(e.StoreId);
+            policy.Update(30, DebtReminderOffsets.Default, 1, 2, 1, null, 365);
+            db.StoreDebtPolicies.Add(policy);
+            await db.SaveChangesAsync(Token);
+        }
+        var one = await Closing(e, x => x.LimitSuggestionsAsync(dx.Id, new(), Token));
+        Assert.Equal(new[] { onTime, late, reduced }.Order(), one.Items.Select(i => i.FarmerProfileId).Order());
+        var htOnly = await Closing(e, x => x.LimitSuggestionsAsync(ht.Id, new(), Token));
+        Assert.Equal(new[] { onTime, onlyHt }.Order(), htOnly.Items.Select(i => i.FarmerProfileId).Order());
+        // Nothing changed any credit limit.
+        using var verify = e.Scope();
+        Assert.All(await verify.ServiceProvider.GetRequiredService<AgriSageDbContext>().FarmerCreditProfiles.AsNoTracking().ToListAsync(Token),
+            p => Assert.Equal(20_000_000m, p.CreditLimit));
+    }
+}

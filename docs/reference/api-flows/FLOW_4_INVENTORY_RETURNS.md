@@ -1,7 +1,53 @@
 # Flow L4 — Inventory, Stocktake, Returns and Refunds (owner: Teammate 4)
 
+## Replenishment extension — approved implementation scope (2026-11-02)
+
+The inventory extension keeps one operational store and never posts stock from a recommendation.
+Existing `alerts` adds OUT_OF_STOCK, search and category filters; stock-summary adds `hasSellableStock`
+without changing `hasStock` (physical stock). LOW_STOCK remains sellable stock < configured minimum.
+Store-product PUT accepts an optional nested `replenishment` object; omission preserves configuration.
+The object contains enabled, targetStockLevelBase?, leadTimeDays, safetyStockBase, targetCoverageDays.
+An explicit null target clears the fixed target. Defaults: enabled=true, lead=7, safety=0, coverage=14.
+An unconfigured target is not invented when sales history is insufficient.
+
+New GET `/api/inventory/replenishment/{suggestions|stockout|forecast|seasonal}` accepts search,
+categoryId, storeProductId, priority, reason, dataStatus, historyDays (14–365, default 90),
+horizonDays (1–90, default 30), page/pageSize and sortBy (priority|name|stockout|quantity), descending.
+Response retains PagedResult fields, adding summary, generatedAt, fromDate, toDate and horizonDays.
+Summary covers all filtered matches before paging, never a sum of quantities across different units.
+Forecast uses completed Vietnam days, posted SALE less RETURN_IN and reversals of those movements;
+adjustments, drafts and cancelled orders are excluded. At least 14 observed days and 3 sale days are
+required for a forecast. Zero rate or insufficient history returns null stockout/forecast, not a fake date.
+Exception: zero sellable stock is already known to be unavailable; daysOfStock=0 and stockout date=today
+even when history is insufficient. This is a current stock fact, not a demand forecast.
+Forecast is a simple historical average, not a claim of recovered unmet demand; missing availability
+history is disclosed. Reservations are subtracted once in sellable stock. Draft receipts are not inbound.
+Fixed target or average demand over lead+coverage plus safety determines the target; seasonal targets
+use max, never additive double counting. Packaging rounds suggested purchasing quantities up.
+Overlapping active rules for the same product take the highest target/factor, not the sum.
+
+Seasonal rules: GET/POST `/api/inventory/seasonal-rules`, GET/PUT `/{id}`, POST `/{id}/deactivate`.
+Rule writes contain name, cropType, region?, startsOn, endsOn, prepareDays (0–90), demandFactor
+(0.1–5), and items [{storeProductId, targetStockLevelBase?}]. PUT also accepts isActive and version.
+Dates are explicit per season/year; there is no automatic annual repetition. The inventory rules are
+independent of the proposed credit crop-season APIs. The seasonal list supports search, isActive,
+fromDate, toDate and paging; detail contains all items. Writes are audited, optimistic concurrency
+prevents silently overwriting another operator. Only the current store's products are accepted.
+
+Additional read reports: GET `/api/reports/inventory-turnover` (historyDays, search, category, paging),
+GET `/api/inventory/expiry-risk` (withinDays, search, category, paging), and
+GET `/api/reports/inventory-movement/export` (existing movement-report filters; xlsx attachment).
+Expiry risk allocates expected sales FEFO across eligible free quantities; reserved quantities are not
+predicted as free stock. Expired stock is at risk; held stock is disclosed separately. Insufficient history
+means unknown risk for future expiry, never zero. Turnover describes sales velocity/coverage, not a
+financial turnover ratio without average historical inventory.
+
+Permissions: replenishment reads use REPLENISHMENT.READ (owner/admin, delegable to Sales), seasonal
+rules read/write use SEASONAL_RULES.READ/MANAGE (owner/admin, delegable); reports/export require
+REPORTS.READ; ordinary stock alerts retain INVENTORY.READ. No public/Farmer/Delivery access.
+
 Version 2.0 — 2026-10-03. Conventions, shared shapes, interfaces and ownership rules: [README.md](README.md).
-Sources: `DATABASE_DESIGN.md` §21–29, §52–54, §7.1, §7.5, §VIII, §XXI–XXII, §35.8–35.11, §35.17–35.19;
+Sources: `DATABASE_DESIGN.md` §21–29, §52–54, §7.1, §7.5, §VIII, §XXI–XXII, §35.8–35.11, §35.17–35.19, §35.24;
 `BUSINESS_RULES.md` rules 10, 30–33, 52–58.
 
 Inventory is the mentor's main focus. L4 owns everything that changes or explains stock outside a sale: receiving
@@ -111,14 +157,17 @@ Rules:
   completion otherwise).
 - `reasonCode`: `DAMAGED | EXPIRED | LOST | STOCKTAKE_DIFFERENCE | MANUAL_CORRECTION | OTHER`; required when
   the difference ≠ 0.
-- **Stale line (decision C-D6, design §35.19):** a POSTED stock movement for the line's lot has
-  `posted_at` in (`snapshot_at` − 5 minutes, `counted_at`]. This also catches movements that cancel each
-  other out; a movement after the count does not make the line stale. `GET` marks such lines
-  `isStale: true`. `refresh-stale` re-snapshots only those lines (lock the balance `FOR SHARE`, read on hand
-  and average cost, then `snapshot_at`) through `Stocktake.RefreshItem` (Domain, done) and clears their
-  count, so staff recount just those lots — never the whole stocktake.
-- Creating a stocktake takes each line's snapshot the same way (lock, read, `snapshot_at`) and passes it to
-  `Stocktake.AddItem(lotId, quantity, snapshotAt, unitCost)`.
+- **Stale line (decision C-D6, exact rule since 2026-11-16, design §35.24):** the line's lot has more stock
+  movement items (movement POSTED or REVERSED) with `posted_at` <= `counted_at` than `snapshot_movement_count`,
+  the count seen with the snapshot. So the lot moved between the snapshot and the count; this also catches
+  movements that cancel each other out and a movement that committed just after the snapshot. A movement in the
+  snapshot or after the count does not make the line stale, so counting right after a receipt or sale needs no
+  wait (the old 5-minute margin is gone). `GET` marks such lines `isStale: true`. `refresh-stale` re-snapshots
+  only those lines (lock the balance `FOR SHARE`, take `snapshot_at`, read the movement count, then on hand and
+  average cost) through `Stocktake.RefreshItem` and clears their count, so staff recount just those lots — never
+  the whole stocktake — and may do it at once.
+- Creating a stocktake takes each line's snapshot the same way (lock, `snapshot_at`, movement count, balance) and
+  passes it to `Stocktake.AddItem(lotId, quantity, snapshotAt, snapshotMovementCount, unitCost)`.
 - Complete (one transaction): every line counted (§35.8); lock lot balances; refuse (422, listing the lots) if
   any line is stale; one ADJUSTMENT_IN movement (`ReceiveStock` at the snapshot/entered cost) and one
   ADJUSTMENT_OUT movement (`IssueUnreserved` at average cost), both linked by `stocktake_id`; a decrease below
@@ -413,7 +462,7 @@ their expiry.
 | C-D2 | Cancelling an order reverses the unconsumed ORDER allocations and requests one PENDING refund per payment through the Order aggregate; staff pay back in cash or by bank transfer and complete it (schema: `refunds.order_id`, design §35.18) |
 | C-D3 | Refund proof images use `POST /api/files/delivery-proofs`; a referenced photo cannot be deleted (422) |
 | C-D5 | Stocktake create/count/refresh, return request/receive/inspect = Operate; stocktake completion, manual stock adjustments, return approve/reject/complete-inspection and every refund = Manage — they can decrease stock or pay money out; the person who counts is not the person who approves |
-| C-D6 | Each stocktake line stores `snapshot_at`; a stale line blocks completion; only stale lines are refreshed and recounted (design §35.19) |
+| C-D6 | Each stocktake line stores `snapshot_at` and, since 2026-11-16, `snapshot_movement_count`; a stale line blocks completion; only stale lines are refreshed and recounted, with no waiting time (design §35.19, §35.24) |
 | D5 | Delivery incidents that move stock are posted through `POST /api/inventory/adjustments` and linked by L2 |
 | F-D4 | Every refund endpoint belongs to L4 |
 | F-D5 | Reports are Manage-only and owned by the flow whose data they read |

@@ -1,6 +1,39 @@
 # Flow L3 — Customer Groups, Credit Sale and Debt Collection (owner: Teammate 3)
 
-Version 2.0 — 2026-10-03. Conventions, shared shapes, interfaces and ownership rules: [README.md](README.md).
+Version 2.1 — 2026-11-03 (debt policy, owner-only actions; see the two sections below). Version 2.0 — 2026-10-03.
+Conventions, shared shapes, interfaces and ownership rules: [README.md](README.md).
+
+### Debt policy (approved by the mentor, 2026-11-03)
+
+- **The system never blocks or limits a customer's credit on its own. Every credit suspension or block is done by the
+  store owner, with a reason.** ("Hệ thống không bao giờ tự khóa hay tự hạn chế tín dụng của khách. Mọi việc khóa
+  hoặc ngưng tín dụng đều do Chủ thực hiện và có ghi lý do.")
+- No late fee, penalty or interest (rule 24). Overdue only drives reminders and the owner's follow-up.
+- Debt is repaid by crop season; extensions are allowed; forgiving debt ("xóa nợ") is a real forgiveness, recorded with
+  a reason, never a deleted row. The crop-season design is pending (F3.7, F3.8+): until it ships, the due date is the
+  credit-tier term (F-D2 below).
+- Overdue debt still counts against the credit limit (the limit is set by the owner). An order above the available
+  credit is refused as `INSUFFICIENT_CREDIT` with `availableCredit`, never as an overdue or locked customer.
+
+### Owner-only actions (F3.21, 2026-11-03)
+
+Nine actions change money owed or the customer's credit standing. Only ADMIN or the STORE_OWNER of the active store
+may take them, and they **cannot be delegated**: a permission granted to Sale staff (override, role default or
+inheritance) is refused with `403` and nothing is written. The check is on the server, on every path, including the
+customer form (`PUT /api/customers/{id}` switching `allowCreditPurchase`).
+
+| Action | Route | Permission |
+|---|---|---|
+| Reduce a debt | `POST /api/debt-entries/{id}/adjust` | `DEBT.ADJUST` |
+| Forgive a debt | `POST /api/debt-entries/{id}/cancel` | `DEBT.CANCEL` |
+| Manual debt entry | `POST /api/customers/{farmerProfileId}/debt/manual-entries` | `DEBT.MANUAL` |
+| Change a due date | `POST /api/debt-entries/{id}/change-due-date` (**Operate → Manage, 2026-11-03**) | `DEBT.DUE_DATE` |
+| Confirm / reject a bank transfer | `POST /api/payments/{id}/confirm`, `/reject` | `BANK_PAYMENTS.CONFIRM`, `.REJECT` |
+| Suspend / block / reactivate credit | `POST /api/customers/{farmerProfileId}/credit/suspend`, `/block`, `/activate` | `CREDIT.SUSPEND`, `.BLOCK`, `.ACTIVATE` |
+
+Sale staff still record bank transfers (PENDING, no debt reduction), dispute or keep a debt entry, collect cash and
+sell on credit within the limit. Until F3.21 part 2, the permission screen may still list these nine codes as
+grantable; such grants have no effect.
 
 ### Additive credit/debt contract (2026-10-04 user request)
 
@@ -10,7 +43,9 @@ Version 2.0 — 2026-10-03. Conventions, shared shapes, interfaces and ownership
   confirming/reserving. Drafts remain editable and consume no credit; only confirmed commitments reserve.
 - Existing credit administration routes remain authoritative. Term selection uses `creditTierId`;
   AllowCreditPurchase is derived from profile/customer/account ACTIVE status.
-- `Credit:BlockCreditWhenOverdue` is an optional server policy (default false), using Vietnam dates.
+- Overdue debt (Vietnam dates) is reported in `hasOverdueDebt` / `overdueAmount` but never refuses credit by itself
+  (debt policy above). The former `Credit:BlockCreditWhenOverdue` switch and the `OVERDUE_DEBT` reason were removed
+  on 2026-11-03.
 - All exposure/ledger changes lock FarmerProfile first (also used by customer administration), then
   read profile/account/reservations. Shared steps never save. One debt per successful stock movement,
   protected by a filtered unique index, retains partial delivery/pickup support.
@@ -228,14 +263,14 @@ release the same amount of the order's unused credit reservation (design §XVI-D
 | GET | `/api/debt-accounts` | Operate | query: `search`, `hasOutstanding`, `overdueOnly`, paging | `200 PagedResult<DebtAccountListItem>` |
 | GET | `/api/customers/{farmerProfileId}/debt` | Operate | — | `200 DebtAccountResponse` |
 | GET | `/api/customers/{farmerProfileId}/debt/transactions` | Operate | query: `fromDate`, `toDate`, paging | `200 PagedResult<DebtTransactionResponse>` |
-| POST | `/api/customers/{farmerProfileId}/debt/manual-entries` | Manage | `{ amount, dueDate, reason }` | `201 DebtEntryResponse` |
+| POST | `/api/customers/{farmerProfileId}/debt/manual-entries` | Manage | `{ amount, dueDate?, reason, cropSeasonId? }` (F3.13: `dueDate` may be left out with a season) | `201 DebtEntryResponse` |
 | GET | `/api/debt-entries` | Operate | query: `farmerProfileId`, `status`, `overdueOnly`, `dueFrom`, `dueTo`, `orderId`, paging | `200 PagedResult<DebtEntryListItem>` |
 | GET | `/api/debt-entries/{id}` | Operate | — | `200 DebtEntryResponse` |
 | POST | `/api/debt-entries/{id}/dispute` | Operate | `{ reason }` | `200 DebtEntryResponse` |
 | POST | `/api/debt-entries/{id}/keep` | Operate | `{ reason }` | `200 DebtEntryResponse` |
-| POST | `/api/debt-entries/{id}/change-due-date` | Operate | `{ newDueDate, reason }` | `200 DebtEntryResponse` |
-| POST | `/api/debt-entries/{id}/adjust` | Manage | `{ amount, reason }` | `200 DebtEntryResponse` |
-| POST | `/api/debt-entries/{id}/cancel` | Manage | `{ reason }` | `200 DebtEntryResponse` |
+| POST | `/api/debt-entries/{id}/change-due-date` | Manage (owner-only, not delegable; was Operate until 2026-11-03) | `{ newDueDate, reason, reasonCode }` (F3.14; reasonCode required since A1, 2026-11-05) | `200 DebtEntryResponse` |
+| POST | `/api/debt-entries/{id}/adjust` | Manage | `{ amount, reason, reasonCode }` (F3.14; reasonCode required) | `200 DebtEntryResponse` |
+| POST | `/api/debt-entries/{id}/cancel` | Manage | `{ reason, reasonCode }` (F3.14; reasonCode required) | `200 DebtEntryResponse` |
 | GET | `/api/me/debt` | FARMER | — | `200 DebtAccountResponse` |
 | GET | `/api/me/debt-entries` (+ `/{id}`) | FARMER | query: `status`, paging | own entries only |
 | POST | `/api/me/debt-entries/{id}/dispute` | FARMER | `{ reason }` | `200 DebtEntryResponse` |
@@ -351,6 +386,331 @@ the limit total is 0).
 
 ---
 
+## 8b. F3.11 — Crop seasons for debt collection (new, 2026-11-03)
+
+A season is the store's debt-collection calendar entry (CS-04): credit orders confirmed in its order window
+`[orderWindowStart, harvestStart)` belong to it, and their debt is due on `paymentDueDate = harvestEnd + graceDays`.
+Seasons chain without gap or overlap: only the first season takes `orderWindowStart`; each later one opens on the
+previous `harvestStart`, and a season is only added after the last one. `status` is derived from today's Vietnam date
+(PLANNED → OPEN → HARVESTING (harvest end day included) → COLLECTING → CLOSED); only closing is stored (F3.19).
+Inventory seasonal rules stay a separate calendar; `seasonalRuleId` only links one for shared reporting.
+
+| Method | Route | Role / permission | Body / query | Response |
+|---|---|---|---|---|
+| GET | `/api/crop-seasons` | Operate / `CROP_SEASONS.READ` | `year?` (harvest start year), `status?`, `page`, `pageSize` | `200 PagedResult<CropSeasonResponse>`, newest harvest first |
+| GET | `/api/crop-seasons/{id}` | Operate / `CROP_SEASONS.READ` | — | `200 CropSeasonResponse` / `404` |
+| POST | `/api/crop-seasons` | Manage, owner-only / `CROP_SEASONS.MANAGE` | `{ code, name, harvestStart, harvestEnd, graceDays?, orderWindowStart?, cropType?, seasonalRuleId? }` | `201 CropSeasonResponse`; `409` duplicate code; `422` gap, overlap or missing first `orderWindowStart` |
+| PUT | `/api/crop-seasons/{id}` | Manage, owner-only / `CROP_SEASONS.MANAGE` | `{ name, harvestStart, harvestEnd, graceDays, version, seasonalRuleId?, applyNewDueDateToCollectingDebts?, reason? }` | `200 CropSeasonResponse`; `409` stale `version`; `422` closed season or harvest past the next season |
+| GET | `/api/me/crop-seasons/current` | Farmer / `MY_CROP_SEASONS.READ` | — | `200 MyCurrentCropSeasonResponse` |
+
+```json
+CropSeasonResponse {
+  "id": "uuid", "code": "DX-2026", "name": "Đông Xuân 2026–2027", "cropType": "RICE",
+  "orderWindowStart": "2026-10-01", "harvestStart": "2027-02-15", "harvestEnd": "2027-03-15",
+  "graceDays": 30, "paymentDueDate": "2027-04-14", "status": "OPEN", "seasonalRuleId": null,
+  "closedAt": null, "version": 0,
+  "originated": { "outstandingAmount": 2000000, "openEntryCount": 2 },
+  "collecting": { "outstandingAmount": 1000000, "openEntryCount": 1 }
+}
+MyCurrentCropSeasonResponse {
+  "cropSeasonId": "uuid|null", "code": "DX-2026|null", "name": "…|null", "harvestStart": "…|null", "harvestEnd": "…|null",
+  "expectedDueDate": "2027-04-14|null", "dueRule": "SEASON|CAPPED|TERM_DAYS|NONE", "termDays": 30|null, "isEstimate": true
+}
+```
+
+- `originated` = open debt that arose in the season (reports); `collecting` = open debt collected in it now (it moves
+  there on rollover; used to close the season).
+- Changing `harvestStart` moves the next season's `orderWindowStart` in the same transaction. Orders and debts keep
+  their origin season.
+- By default recorded debt keeps its due date (D17). `applyNewDueDateToCollectingDebts: true` (owner, `reason`
+  required) moves entries collected in this season that are still on its old due date to the new one, only later,
+  each with a `CHANGE_DUE_DATE` action and audit. **Disputed entries are not moved** (the owner decides those), nor paid or
+  cancelled ones. It runs under the store lock and locks every Farmer concerned in id order, then reads the entries, so a
+  payment, adjustment, dispute or rollover running at that moment is never overwritten or missed (F3.20 review).
+  The `200` response of that update carries `debtExtension: { moved, skippedDisputed }` (only then; `null` otherwise, and on a plain
+  read): how many entries got the new date and how many disputed ones were left on the old date for the owner to decide. The audit
+  `CROP_SEASON_UPDATED` records both numbers (`debtsMovedToNewDueDate`, `debtsLeftBecauseDisputed`).
+- `MyCurrentCropSeasonResponse` is an estimate shown before ordering: the debt and its real due date are created at
+  delivery. `CAPPED` = the store's optional term cap applied; `TERM_DAYS` = no season covers today, the credit-tier term
+  applies; `NONE` = no credit profile.
+- Writes are audited (`CROP_SEASON_CREATED`, `CROP_SEASON_UPDATED`, `DEBT_CHANGE_DUE_DATE`).
+
+## 8c. F3.12 — Store debt policy (new, 2026-11-03)
+
+One policy per store (`store_debt_policies`): the default grace of new seasons (CS-05), reminder offsets (CS-09, D10),
+rollover limits (CS-08, D5), the on-time seasons before suggesting a higher limit (CS-14) and the optional term cap (D4).
+A store that has not saved one reads the documented defaults (`isDefault: true`, `version: 0`); the first save creates
+its row.
+
+| Method | Route | Role / permission | Body | Response |
+|---|---|---|---|---|
+| GET | `/api/debt-policy` | Operate / `DEBT_POLICY.READ` | — | `200 DebtPolicyResponse` |
+| PUT | `/api/debt-policy` | Manage, owner-only / `DEBT_POLICY.MANAGE` | `UpdateDebtPolicyRequest` (whole policy) | `200 DebtPolicyResponse`; `400` invalid value; `409` stale `version`; `403` Sale staff |
+
+```json
+DebtPolicyResponse {
+  "defaultGraceDays": 30, "reminderOffsets": { "n2": -7, "n4": 14, "n5": 30 },
+  "staffRolloverLimit": 1, "ownerReviewAfterRollovers": 2, "onTimeSeasonsForLimitRaise": 2,
+  "maxCreditTermDays": null, "maxTotalExtensionDays": 365, "version": 0, "isDefault": true
+}
+UpdateDebtPolicyRequest {
+  "defaultGraceDays": 45, "reminderOffsets": { "n2": -10, "n4": 7, "n5": 21 },
+  "staffRolloverLimit": 1, "ownerReviewAfterRollovers": 2, "onTimeSeasonsForLimitRaise": 2,
+  "maxCreditTermDays": null, "maxTotalExtensionDays": 365, "version": 0, "reason": "…|null"
+}
+```
+
+- Rules (`400` from the request validator, `422` from the Domain if it is bypassed): `defaultGraceDays` 0–365;
+  `n2 < 0 < n4 < n5` (days from the due date; N1 = harvest start and N3 = due date need no setting);
+  `staffRolloverLimit ≥ 0`; `ownerReviewAfterRollovers ≥ max(staffRolloverLimit, 1)`; `onTimeSeasonsForLimitRaise ≥ 1`;
+  `maxCreditTermDays` null (off) or ≥ 1; `maxTotalExtensionDays ≥ 1` (required, default 365); `reason` ≤ 1000.
+- `version` is the one last read. The first save also needs `version: 0` and returns `version: 1` when a value
+  changed, so an editor still holding the default gets `409`. Saving the same values changes nothing and is not audited.
+- Changing `defaultGraceDays` only proposes the grace of seasons created later; existing seasons keep theirs.
+- Audited as `DEBT_POLICY_CHANGED` (`STORE_DEBT_POLICY`, old and new values, optional reason).
+
+## 8d. F3.14 — Rollover of one entry and reason codes (new, 2026-11-03)
+
+A rollover moves an unpaid entry to a later season: only its collection season and due date change (D9). The amount, the
+ledger, the origin season and the original due date stay; `rolloverCount` grows by one.
+
+| Method | Route | Role / permission | Body | Response |
+|---|---|---|---|---|
+| POST | `/api/debt-entries/{id}/rollover` | Operate / `DEBT.ROLLOVER` (delegable) | `{ reasonCode, note, targetCropSeasonId?, overrideExtensionLimit? }` | `200 DebtEntryResponse`; `400` missing/unknown/non-hardship code or note; `403` staff past the rollover limit; `404`; `422` see below |
+
+- `reasonCode` ∈ `MAT_MUA`, `THIEN_TAI`, `KHO_KHAN`, `KHAC` (hardship only); `note` is always required.
+- No `targetCropSeasonId`: the next open season (by harvest start) whose `paymentDueDate` is later than the entry's due
+  date. The new due date is the target season's `paymentDueDate` (no term cap on a rollover).
+- Who (CS-08): Sale staff while `rolloverCount < staffRolloverLimit` of the debt policy (first rollover by default);
+  then only the owner (`403` for staff). ADMIN and STORE_OWNER may always roll over.
+- Total extension (D5): new due date − original due date ≤ `maxTotalExtensionDays` (365). Staff past it → `422`. The
+  owner past it → `422` unless `overrideExtensionLimit: true` (recorded in the audit).
+- `422`: no later open season, target season of another store or closed, same season or not a later due date, entry
+  disputed, paid or cancelled.
+- Concurrent rollovers of one entry are serialized per Farmer: one succeeds, the other gets `422`.
+- Audited as `DEBT_ROLLOVER` (old and new due date and season, `rolloverCount`, `originalDueDate`, `reasonCode`,
+  `overrideExtensionLimit`).
+
+**Reason codes on the owner actions (D7, A1 - mandatory since 2026-11-05).** `adjust`, `cancel` and `change-due-date` require a
+`reasonCode` (the 7 codes: `MAT_MUA`, `THIEN_TAI`, `KHO_KHAN`, `TRI_AN`, `SAI_SOT`, `KHONG_THU_HOI`, `KHAC`); missing or unknown
+-> `400` (and `422` when the service is called without one). `PUT /api/crop-seasons/{id}` with `applyNewDueDateToCollectingDebts: true`
+also requires `reasonCode` (it changes the due date of each entry); every moved entry stores it. `change-due-date` stays owner-only, never in the past, does not
+count as a rollover, and records `exceedsTotalExtension` in its audit when it goes past the limit.
+
+`DebtActionResponse` adds `reasonCode`, `isPrePolicy` (a debt change, i.e. adjust, cancel, due date or rollover,
+recorded without a code: "Trước khi áp dụng chính sách"; since the code is mandatory, only changes made before 2026-11-05 show it), `oldCropSeasonId`, `newCropSeasonId`.
+
+**Farmer notifications** (once per action, through the audit outbox): `DEBT_ROLLOVER` and `DEBT_CHANGE_DUE_DATE` →
+`DEBT_DUE_DATE_CHANGED`; `DEBT_ADJUST` → `DEBT_REDUCED`; `DEBT_CANCEL` → `DEBT_CANCELLED`; `DEBT_KEEP` →
+`DEBT_DISPUTE_RESOLVED`. The owner's season due-date move (8b) notifies through the same `DEBT_CHANGE_DUE_DATE`.
+
+## 8e. F3.17 — Debt by season: entries, Farmer groups, dashboard (new, 2026-11-03)
+
+Fields are only added; existing fields and routes stay. `DebtSeasonReference = { id, code, name }`.
+
+**Entries** (`GET /api/debt-entries`, `/api/customers/{id}/debt/entries`, `/api/me/debt-entries`, and the `/{id}` details)
+add `originSeason` (where the debt arose, never changes), `collectionSeason` (where it is collected now), `originalDueDate`,
+`rolloverCount`, `isRolledOver`, `dueState`, `needsDecision`. New list filters: `originSeasonId`, `collectionSeasonId`,
+`dueState`, `rolledOverOnly`, `needsDecision` (`400` on an unknown `dueState` or an empty id). The Farmer routes still
+force the caller's own customer.
+
+- `dueState` (Vietnam date): `OVERDUE` due before today; `DUE_SOON` due today up to 7 days ahead; `NOT_DUE` later; `null`
+  when nothing is left to pay.
+- `needsDecision` ("Cần quyết định"): still owed, not disputed, and either due + N5 ≤ today or `rolloverCount ≥
+  ownerReviewAfterRollovers` (both from the debt policy, defaults 30 and 2).
+- Actions add `actorName` and `actorRole` (CS-13).
+
+**Farmer debt** (`GET /api/me/debt`, also `GET /api/customers/{id}/debt`) adds `groups[]`: open debt by (collection season,
+due date), earliest first: `{ collectionSeason|null, dueDate, outstandingAmount, entryCount, dueState }`. No season = the
+credit-tier term.
+
+**Dashboard** (`GET /api/debt-entries/dashboard`) adds:
+- `currentSeason` + `currentSeasonOutstanding`: the open season collected next (earliest `paymentDueDate` not yet past)
+  and the open debt collected in it; `null` / `0` without one.
+- `dueSoonAmount`: open debt due today up to 7 days ahead.
+- `needsDecisionCount` + `needsDecision[]` (first 20 by due date, `DebtEntryListItem`).
+- `creditLimitAlertCount` + `creditLimitAlerts[]` (first 20, fullest first): active credit customers whose used credit
+  (outstanding debt + remaining active reservations) reaches 90 % of the limit:
+  `{ farmerProfileId, fullName, phoneNumber, creditLimit, usedCredit, availableCredit, state: NEAR_LIMIT|AT_LIMIT }`. The
+  owner decides: raise the limit, reduce the debt or collect part of it. Nothing changes the limit automatically.
+
+Pending in F3.17: `outstandingBySeason[]` on the debt repayment receipt (payments module).
+
+## 8f. F3.15 — Roll a whole season over (new, 2026-11-03)
+
+| Method | Route | Role / permission | Body | Response |
+|---|---|---|---|---|
+| POST | `/api/crop-seasons/{id}/debt/rollover` | Operate / `DEBT.ROLLOVER` | `{ reasonCode, note, targetCropSeasonId?, entryIds?, dryRun?, overrideExtensionLimit? }` | `200 CropSeasonRolloverResponse`; `400` code, note or list invalid (≤ 500 ids); `404` season; `422` target or size |
+
+```json
+CropSeasonRolloverResponse {
+  "sourceSeasonId": "uuid", "targetSeason": { "id": "uuid", "code": "HT-2027", "name": "Hè Thu 2027" },
+  "newDueDate": "2027-09-14", "dryRun": false,
+  "rolledOver": [ { "entryId": "uuid", "entryNumber": "DE-…", "farmerProfileId": "uuid", "oldDueDate": "2027-04-14",
+                    "newDueDate": "2027-09-14", "outstandingAmount": 2000000 } ],
+  "skipped": [ { "entryId": "uuid", "entryNumber": "DE-…|null", "reason": "DISPUTED" } ]
+}
+```
+
+- `{id}` is the season the debt is collected in. Without `entryIds`: every open entry collected there; with `entryIds`: only
+  those (duplicates ignored). More than 500 open entries → `422`, roll them over in lists.
+- Target: the given season (open, a later due date than the source) or, by default, the next open season whose due date is
+  later than the source's. Closed, unknown, the same or an earlier season → `422`. Every entry gets the target's
+  `paymentDueDate`.
+- Each entry follows F3.14; one that does not qualify is skipped with `reason`: `NOT_FOUND` (not an entry of this store),
+  `NOT_IN_SEASON`, `NOTHING_OWED`, `DISPUTED`, `NOT_LATER` (its own due date is not before the target's), `NEEDS_OWNER`
+  (Sale staff past the staff rollover limit), `EXCEEDS_TOTAL_EXTENSION` (past the limit without the owner's override).
+- The qualifying entries move in one transaction; the store is locked first, then every Farmer in `farmerProfileId` order
+  (the order the credit and customer services use), so it runs safely beside payments. A second call skips what already
+  moved.
+- `dryRun: true` returns the same result and writes nothing (no lock, no audit, no notification). It is a preview: it reads without the store and Farmer locks, so if debts change between the preview and the real run (a payment, a dispute, a season being closed), the real run — which checks again under the locks — can differ or be refused. Show it as "what would happen now".
+- Each moved entry gets a `ROLLOVER` action, a `DEBT_ROLLOVER` audit and a Farmer notification (`DEBT_DUE_DATE_CHANGED`);
+  the run is audited once as `CROP_SEASON_DEBT_ROLLOVER` on the source season.
+
+## 8g. F3.19 — Closing a season, limit suggestions, debt by season (new, 2026-11-03)
+
+| Method | Route | Role / permission | Body / query | Response |
+|---|---|---|---|---|
+| GET | `/api/crop-seasons/{id}/closing-check` | Operate / `CROP_SEASONS.READ` | — | `200 CropSeasonClosingCheckResponse`; `404` |
+| POST | `/api/crop-seasons/{id}/close` | Manage, owner-only / `CROP_SEASONS.MANAGE` | `{ version, note? }` | `200 CropSeasonResponse` (`status: CLOSED`); `409` stale `version`; `422` not closable |
+| GET | `/api/crop-seasons/{id}/limit-suggestions` | Manage / `DEBT.READ_DASHBOARD` | — | `200 LimitSuggestionsResponse`; `422` season not closed |
+| GET | `/api/reports/debt-by-season` | Manage / `DEBT.READ_DASHBOARD` | `year?`, `page`, `pageSize` | `200 PagedResult<DebtBySeasonItem>`, newest harvest first |
+
+```json
+CropSeasonClosingCheckResponse {
+  "seasonId": "uuid", "status": "COLLECTING", "canClose": false, "reasons": ["OPEN_ENTRIES"],
+  "openEntryCount": 2, "openEntries": [ { "entryId": "uuid", "entryNumber": "DE-…", "farmerProfileId": "uuid",
+                                          "fullName": "…", "outstandingAmount": 200000, "status": "PARTIALLY_PAID" } ],
+  "openCreditOrderCount": 0, "openCreditOrders": [ { "orderId": "uuid", "orderNumber": "OD-…", "status": "CONFIRMED" } ]
+}
+DebtBySeasonItem {
+  "season": { "id": "uuid", "code": "DX-2026", "name": "…" }, "harvestStart": "2027-02-15", "paymentDueDate": "2027-04-14",
+  "status": "CLOSED", "closedAt": "…|null", "isFrozen": true,
+  "origin": { "originatedAmount": 2000000, "collectedAmount": 1000000, "returnedAmount": 0, "reducedAmount": 0,
+              "cancelledAmount": 0, "carriedOverAmount": 1000000, "outstandingAmount": 1000000, "entryCount": 2, "customerCount": 1 },
+  "collection": { "carriedInAmount": 0, "toCollectAmount": 0, "openEntryCount": 0 }
+}
+LimitSuggestionsResponse {
+  "seasonId": "uuid", "requiredSeasons": 2, "seasons": [ { "id": "uuid", "code": "DX-2026", "name": "…" }, … ],
+  "items": [ { "farmerProfileId": "uuid", "fullName": "…", "phoneNumber": "…", "creditLimit": 20000000,
+               "creditStatus": "ACTIVE", "paidAmount": 3000000, "lastPaidOn": "2027-09-10", "onTimeSeasons": 3 } ],
+  "page": 1, "pageSize": 20, "totalCount": 1
+}
+```
+
+- **Closing (D11).** `reasons`: `ALREADY_CLOSED`; `HARVEST_NOT_ENDED` (not collecting yet: the harvest end day still counts as
+  harvesting); `OPEN_ENTRIES` (debt still collected in the season, disputed included); `OPEN_CREDIT_ORDERS` (credit orders
+  of the season not completed or cancelled). Lists show at most 50 items; counts are complete. `close` locks the store,
+  checks again, records `closed_summary` (the report figures at that moment), `closed_at`, `closed_by` and audits
+  `CROP_SEASON_CLOSED` (figures, note). A closed season never changes, reopens or receives debt: rollovers lock the store
+  before reading their target, so one that waits behind a closing is refused afterwards.
+- **Report (D9).** `origin`: debt that arose in the season, whatever season collects it now; `originated − collected −
+  returned − reduced − cancelled = outstanding` (posted ledger lines; `reduced` = ADJUST, `cancelled` = CANCEL);
+  `carriedOver` = the part of `outstanding` now collected in a later season. `collection`: debt collected in the season
+  now; `carriedIn` = the part that arose elsewhere (or had no season). A closed season shows its `closed_summary`
+  (`isFrozen: true`); later payments on carried-over debt appear under the season that collects it.
+- **Limit suggestions (D12, CS-14; rule of 05/11 agreed with the Lead).** `GET /api/crop-seasons/{id}/limit-suggestions?page=&pageSize=` (20 by default). A season where the customer owed nothing is skipped when counting. A customer is suggested when the season being closed holds debt of theirs [assumption, pending approval: the customer must have bought on credit this season] and their last `requiredSeasons` (`onTimeSeasonsForLimitRaise`, default 2) seasons with debt were all on time: all the debt that arose in each paid by real payments on or before the original due date, never rolled over, moved, reduced, forgiven or returned. `items[].onTimeSeasons` = consecutive on-time seasons with debt; the list is ordered by it (most first), then by name. `seasons` is a reference (the last N closed seasons up to this one; empty when fewer exist). Read-only: the owner changes the limit through the existing credit-limit API.
+
+## 8h. F3.18 — Debt reminders at fixed milestones (new, 2026-11-03)
+
+No new route. The background job `DebtReminders` (same `BackgroundJobs:DebtReminders` switch) no longer reminds every day
+for every entry due within `DebtReminderDays`; that option is removed. It sends the milestones of the store debt policy
+(D10, CS-09), per customer and group:
+
+| Milestone | When | To | Notification type |
+|---|---|---|---|
+| N1 | harvest start of the season the debt is collected in, until its N2 | the Farmer, one per (Farmer, season) | `DEBT_DUE_SOON` |
+| N2 | due date + `reminderOffsets.n2` (default −7) | the Farmer, per (Farmer, due date) | `DEBT_DUE_SOON` |
+| N3 | the due date | the Farmer; one summary ("N nhóm nợ", counted in debt groups) to the owner and each Sale staff member per day | `DEBT_DUE_SOON`, then `DEBT_OVERDUE` after the day |
+| N4 | due date + `n4` (default 14) | the Farmer; one summary (in debt groups) to the owner and each Sale staff member per day | `DEBT_OVERDUE` |
+| N5 | due date + `n5` (default 30) | the Farmer; one summary (in debt groups) to the owner | `DEBT_OVERDUE` |
+
+- A run sends only the latest milestone reached for each (Farmer, due date): a job that did not run for days sends one
+  reminder, never the missed ones. A milestone is sent once (deduplication keys `debt-reminder:{farmerProfileId}:{seasonId}:N1`,
+  `debt-reminder:{farmerProfileId}:{yyyyMMdd of the due date}:N2..N5`, and `debt-reminder-staff:{storeId:N}:{yyyyMMdd}:N3..N5`).
+- Disputed, paid and cancelled entries are not reminded (a kept dispute is reminded again). A rollover or a due-date change
+  moves the due date, so the schedule follows the new one. Debt without a season keeps N2–N5.
+- Dates are Vietnam's (17:00 UTC = 00:00). Customers are processed in pages of `BatchSize`, saved page by page; the job only
+  writes notifications and never touches the ledger.
+- Reminders sent under the old daily key (`debt:{entryId}:{yyyyMMdd}`) stay as history and do not block the new ones.
+- The summaries are built from the group reminders **saved** per Vietnam day (`[start of the day, start of the next day)`), not from
+  what the current run sent. Their key is `debt-reminder-staff:{storeId:N}:{yyyyMMdd}:N3..N5` — the **store is part of the key**, so
+  two stores never share or suppress each other's summaries. A run that failed after saving the Farmer reminders but before the
+  summaries is repaired by a later run, **on any later day**: every (day, milestone) **since T0** that has Farmer reminders of this
+  store but no summary of this store gets one, once, with **that day's** figures; the text starts with "Ngày dd/MM/yyyy:" for a day
+  before today. There is no limit of days. To bound the work of one run after a long outage, a run writes at most 30 summaries
+  (`BackgroundJobs:DebtSummaryBatch`, default 30, 1–1000; one summary per day and milestone N3/N4/N5, so up to three a day — it is a
+  count of summaries, not of days, and it limits what one run writes, it does not by itself prove the run is light), **oldest first**; the rest is taken by the next runs — a pair already
+  written drops out of the candidates, so nothing is skipped and nothing is written twice. Only Farmers with a debt account in this
+  store are counted (a Farmer with accounts in several stores cannot be told apart by the reminder key — single active store today).
+- Recipients of a recovered summary: members of this store who are still **active**, with an eligible role (owner and Sale staff for
+  N3/N4, owner for N5), when it is written, **and** who already existed at the end of that day; a member who left or lost the role
+  receives nothing, and nobody who joined after the day receives a historic summary. The figures are those at the time of the
+  summary (the text ends with "(tổng hợp lúc HH:mm dd/MM/yyyy)", Vietnam time); a later reminder of the same day is not added to a summary that exists. Nothing is sent to a Farmer twice. A recovered
+  notification is created when the repair runs; its key and text carry the original day (F3.20 review).
+- Rollout: enable the job after the seasons are entered; without seasons only N2–N5 apply.
+
+**Starting reminders (F3.20, new 2026-11-03) — T0.** The job sends **nothing** for a store until its owner starts reminders:
+`store_debt_policies.reminders_start_date` (T0, `null` = not started; one nullable `date` column, the only schema change).
+This stops the first run on existing data from sending every old overdue group a catch-up reminder.
+
+| Route | Who | Notes |
+|---|---|---|
+| `POST /api/debt-reminders/initialize` `{ dryRun?: bool (default true), reason?: string }` | owner only (`DEBT_POLICY.MANAGE`, not delegable; staff 403 even as dry run) | |
+
+- `dryRun: true` (also an empty body) counts and **writes nothing, sends nothing**. `dryRun: false` sets T0 = **today in Vietnam
+  time**, writes the audit `DEBT_REMINDERS_STARTED` (T0, counts) in **one transaction** under the store lock, and sends no
+  notification. A failure rolls everything back (no T0, no policy row). Two starts at once: one start, the others answer
+  `alreadyStarted: true`. Run again: T0 never changes, nothing is written.
+- Response: `{ dryRun, alreadyStarted, startDate, farmers, activeGroups, skipped: { N1..N5 }, skippedTotal, groupsWithLaterMilestones }`.
+  `skipped` counts, per milestone, the catch-up reminders the job would have sent for milestones before T0 and now never will.
+- Rule of the job at every run: a milestone dated **before T0 is never sent** — also for a debt entered, or given a season, after
+  the start (the check is by date, not by a stored mark). N1 follows the same rule by the season's harvest start. Milestones on or
+  after T0 are sent as above.
+- Debts whose milestones were skipped stay on every debt screen and report; only automatic reminding is skipped. An old debt that
+  already passed N5 is not reminded again by this schedule — the owner reviews it ("Cần quyết định") and reminds by hand.
+- `GET /api/debt-policy` adds `remindersStartDate` (`null` = not started). `PUT /api/debt-policy` never changes it.
+- Rollout order: enter the seasons, then **start reminders last**.
+
+## 8i. F3.13 — Orders join a season, debt due date by season (new, 2026-11-03)
+
+Two moments (D15), no new route:
+
+**1. Order confirmation (credit orders only).** The order joins the season whose order window `[orderWindowStart,
+harvestStart)` contains the **Vietnam** day of the confirmation (midnight = 17:00 UTC), under the Farmer lock, and keeps it
+(`orders.crop_season_id`; editing the season later does not move it). No season for that day (none entered, or past the
+last one) → no season, the credit-tier term as before. Credit is reserved at confirmation; **no debt exists yet**.
+`OrderResponse` adds `originSeason` (`{ id, code, name }`) and `expectedDueDate`: while the order can still be delivered
+(confirmed, preparing, ready, partially fulfilled), the due date its debt would get if delivered today; `null` otherwise.
+`ORDER_CONFIRMED` audit carries `cropSeasonId`. The Farmer sees the estimate before ordering in
+`GET /api/me/crop-seasons/current` (8b) and staff in `POST /api/customers/{id}/credit-eligibility`.
+
+**2. Delivery or pickup.** Each fulfilment creates its own debt entry for the unpaid value (a two-part delivery gives two
+entries of the same origin season). Origin season = collection season = the order's season. Due date, with `fulfilledDay`
+the Vietnam day of the delivery (owner L3 choice B, 2026-11-03):
+
+| Case | Due date | `dueRule` |
+|---|---|---|
+| order has a season, `paymentDueDate ≥ fulfilledDay` | the season's `paymentDueDate` | `SEASON` |
+| …and the store cap `maxCreditTermDays` is shorter (`fulfilledDay + cap < paymentDueDate`) | `fulfilledDay + cap` | `CAPPED` |
+| order has a season, delivered **after** its `paymentDueDate` | `fulfilledDay + credit-tier term` | `TERM_DAYS` (`lateForSeason`) |
+| no season | `fulfilledDay + credit-tier term` (as before) | `TERM_DAYS` |
+
+The cap only shortens a season due date, never the tier term. `originalDueDate` = this date. The values the date was computed
+from are stored with the entry (`due_basis`, D17): rule, season id/code, harvest end, grace days, season due date, tier term,
+cap (when it applied), delivery day, `lateForSeason`; later changes of the season or the tier never move an existing debt.
+
+**Credit check** `POST /api/customers/{id}/credit-eligibility` adds `expectedCropSeason` (`{ id, code, name }|null`),
+`expectedDueDate` and `dueRule` (the estimate as if delivered today; `null` without a credit tier). Overdue debt still never
+refuses credit (CS-10).
+
+**Manual debt** `POST /api/customers/{id}/debt/manual-entries` adds optional `cropSeasonId`. With a season (open, of this
+store) the debt belongs to it (origin = collection) and `dueDate` may be left out: it takes the season's due date (cap
+included); a season already past its due date needs an explicit `dueDate` (`422`), a closed or unknown season is `422`. An
+explicit `dueDate` with a season is kept and recorded as `MANUAL`. Without a season `dueDate` is required, as before.
+
+---
+
 ## 9. Tests — must prove
 
 | Task | Must prove |
@@ -371,8 +731,8 @@ the limit total is 0).
 | B-D2 | A Farmer without a group assignment belongs to the store's default group; no assignment row is created at registration |
 | B-D3 | A group without an applicable price list uses the walk-in default list; one order snapshots one price list |
 | B-D4 | A credit profile requires a credit tier; the payment term of a credit order = tier `defaultPaymentTermDays`, snapshotted at confirmation |
-| B-D5 | Roles: groups, price-list links, group tier, credit tiers, credit status changes (activate/suspend/block), debt ADJUST/CANCEL/manual entries = Manage; customer group assignment, credit profile creation and limit changes (rule 22), DISPUTE/KEEP/CHANGE_DUE_DATE = Operate; Farmers only `/api/me/...` |
+| B-D5 | Roles: groups, price-list links, group tier, credit tiers, credit status changes (activate/suspend/block), debt ADJUST/CANCEL/manual entries, CHANGE_DUE_DATE (since 2026-11-03) = Manage; customer group assignment, credit profile creation and limit changes (rule 22), DISPUTE/KEEP = Operate; Farmers only `/api/me/...`. The nine owner-only actions (section above) cannot be delegated to Sale staff (F3.21) |
 | B-D6 | Debt repayment money enters only through payments (L1 cash, L2 payOS); L3 never creates payments, only allocates them |
 | C-D1 | payOS debt repayments are allocated oldest due date first (no entry selection online) |
-| F-D2 | Debt term depends on the customer type: group → default credit tier → term days. No crop seasons |
+| F-D2 | Debt term depends on the customer type: group → default credit tier → term days. ~~No crop seasons~~ — reopened 2026-11-03: debt by crop season is approved by the mentor (lead agreed); seasons reuse the inventory seasonal rules (`inventory_seasonal_rules`) with a debt-side table, design pending F3.7/F3.9. Until then the tier term applies |
 | F-D5 | Reports are Manage-only and owned by the flow whose data they read |

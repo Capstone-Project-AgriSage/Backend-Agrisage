@@ -31,7 +31,7 @@ public sealed class RealtimeOutboxWorker(IServiceScopeFactory scopes, RealtimeWa
                     if (!await DispatchOneAsync(budget.Token)) { full = false; break; }
                 if (full) { wake.Wake(); await Task.Yield(); }
             }
-            catch (OperationCanceledException) when (token.IsCancellationRequested) { return; }
+            catch (Exception) when (token.IsCancellationRequested) { return; }
             catch (Exception e) { logger.LogWarning("Event outbox processing failed ({ErrorType}); recovery will retry.", e.GetType().Name); }
             try { await wake.WaitAsync(TimeSpan.FromSeconds(options.Value.RecoverySeconds), token); }
             catch (OperationCanceledException) when (token.IsCancellationRequested) { return; }
@@ -45,12 +45,13 @@ public sealed class RealtimeOutboxWorker(IServiceScopeFactory scopes, RealtimeWa
         var ids = await dispatcher.DueAsync(options.Value.BatchSize, token);
         foreach (var id in ids)
         {
+            token.ThrowIfCancellationRequested();
             try
             {
                 await using var dispatch = scopes.CreateAsyncScope();
                 await dispatch.ServiceProvider.GetRequiredService<NotificationDispatcher>().DispatchAsync(id, token);
             }
-            catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+            catch (Exception) when (token.IsCancellationRequested) { throw; }
             catch (Exception e)
             {
                 await using var retry = scopes.CreateAsyncScope();
@@ -88,7 +89,7 @@ public sealed class RealtimeOutboxWorker(IServiceScopeFactory scopes, RealtimeWa
             await tx.CommitAsync(token);
             return true;
         }
-        catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+        catch (Exception) when (token.IsCancellationRequested) { throw; }
         catch (Exception e) when (id is not null)
         {
             await using var retry = scopes.CreateAsyncScope();

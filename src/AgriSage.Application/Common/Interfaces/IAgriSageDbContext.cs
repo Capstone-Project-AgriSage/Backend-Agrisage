@@ -88,6 +88,9 @@ public interface IAgriSageDbContext
     // Inventory
     DbSet<InventoryLot> InventoryLots { get; }
 
+    DbSet<SeasonalRule> SeasonalRules { get; }
+    DbSet<SeasonalRuleItem> SeasonalRuleItems { get; }
+
     DbSet<InventoryLotBalance> InventoryLotBalances { get; }
 
     DbSet<StockMovement> StockMovements { get; }
@@ -146,6 +149,10 @@ public interface IAgriSageDbContext
     DbSet<DebtEntryAction> DebtEntryActions { get; }
 
     DbSet<DebtTransaction> DebtTransactions { get; }
+
+    DbSet<CropSeason> CropSeasons { get; }
+
+    DbSet<StoreDebtPolicy> StoreDebtPolicies { get; }
 
     // Returns
     DbSet<SalesReturn> SalesReturns { get; }

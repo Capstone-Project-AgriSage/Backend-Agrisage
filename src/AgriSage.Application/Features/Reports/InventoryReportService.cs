@@ -38,9 +38,14 @@ public sealed class InventoryReportService(IAgriSageDbContext context, IDateTime
         public Guid? ReturnId { get; init; }
     }
 
-    private IQueryable<ProductInfo> Products(Guid storeId, Guid? categoryId = null) =>
-        context.StoreProducts.AsNoTracking().Where(p => p.StoreId == storeId
-            && (categoryId == null || p.Product.CategoryId == categoryId))
+    private IQueryable<ProductInfo> Products(Guid storeId, Guid? categoryId = null, string? search = null)
+    {
+        var term = search?.Trim().ToLowerInvariant();
+        return context.StoreProducts.AsNoTracking().Where(p => p.StoreId == storeId
+            && (categoryId == null || p.Product.CategoryId == categoryId)
+            && (term == null || term == "" || p.Product.Name.ToLower().Contains(term)
+                || p.Product.Sku.ToLower().Contains(term)
+                || (p.StoreSku != null && p.StoreSku.ToLower().Contains(term))))
         .Select(p => new ProductInfo
         {
             Id = p.Id,
@@ -50,6 +55,7 @@ public sealed class InventoryReportService(IAgriSageDbContext context, IDateTime
             CategoryId = p.Product.CategoryId,
             Category = p.Product.Category.Name
         });
+    }
 
     private IQueryable<LedgerEntry> Ledger(Guid storeId) =>
         from m in context.StockMovements.AsNoTracking()
@@ -141,7 +147,7 @@ public sealed class InventoryReportService(IAgriSageDbContext context, IDateTime
         var to = request.ToDate!.Value;
         var start = BusinessCalendar.StartOfDay(from);
         var end = BusinessCalendar.StartOfDay(to).AddDays(1);
-        var products = Products(storeId, request.CategoryId);
+        var products = Products(storeId, request.CategoryId, request.Search);
         var totals = await (from l in Ledger(storeId)
                             join p in products on l.ProductId equals p.Id
                             where l.PostedAt < end
@@ -181,7 +187,7 @@ public sealed class InventoryReportService(IAgriSageDbContext context, IDateTime
                 Value = g.Sum(l => l.Balance.TotalCostValue),
                 Expired = g.Sum(l => l.ExpiryDate < today ? l.Balance.TotalCostValue : 0m)
             });
-        var data = await (from p in Products(storeId, request.CategoryId)
+        var data = await (from p in Products(storeId, request.CategoryId, request.Search)
                           join t in totals on p.Id equals t.ProductId into joined
                           from t in joined.DefaultIfEmpty()
                           orderby p.Sku, p.Id

@@ -1,0 +1,171 @@
+{
+  "description": "Dữ liệu giả lập để trình diễn giao diện AgriSage. Không phải yêu cầu của khách hàng thật.",
+  "articles": [
+    {
+      "targetStatus": "PUBLISHED",
+      "imageFile": "rice-field.jpg",
+      "request": {
+        "title": "Chuẩn bị thông tin ruộng lúa trước vụ mới",
+        "slug": "demo-chuan-bi-thong-tin-ruong-lua-truoc-vu-moi",
+        "summary": "Một danh sách ghi chép đơn giản để bà con trao đổi với cửa hàng trước khi chuẩn bị vật tư cho vụ lúa.",
+        "content": "Trước khi chuẩn bị vật tư cho vụ mới, bà con có thể tổng hợp thông tin về diện tích, giống lúa dự kiến, lịch xuống giống và điều kiện nguồn nước của từng thửa ruộng.\n\nGhi lại các vấn đề từng gặp ở vụ trước: khu vực có triệu chứng bất thường, thời điểm xuất hiện và cách đã xử lý. Nếu có hình ảnh hoặc nhật ký canh tác, bà con nên giữ lại để trao đổi với người tư vấn.\n\nKhi liên hệ cửa hàng, cung cấp diện tích theo mét vuông hoặc hecta và mô tả rõ nhu cầu. Kiểm tra lại tên vật tư, quy cách đóng gói và số lượng trước khi xác nhận đơn.\n\nBà con có thể dùng mục Liên hệ trên AgriSage để gửi câu hỏi và theo dõi phản hồi trong lịch sử yêu cầu khi đã đăng nhập."
+      }
+    },
+    {
+      "targetStatus": "PUBLISHED",
+      "imageFile": "farmer-phone.jpg",
+      "request": {
+        "title": "Cách chuẩn bị ảnh lá lúa để gửi Bác sĩ cây trồng AI",
+        "slug": "demo-chup-anh-la-lua-gui-bac-si-ai",
+        "summary": "Chuẩn bị ảnh rõ, chọn đúng lá cần quan sát và bổ sung thông tin thực tế khi gửi câu hỏi tư vấn.",
+        "content": "Khi cần ghi nhận một lá lúa có biểu hiện bất thường, bà con chọn ảnh rõ nét để người xem quan sát được bề mặt lá và vùng có triệu chứng.\n\nChụp lại nếu ảnh bị mờ, quá tối hoặc bị che khuất. Có thể giữ thêm một ảnh toàn cảnh ruộng để cung cấp bối cảnh khi trao đổi với cửa hàng.\n\nTrong mục Bác sĩ cây trồng AI, tải ảnh và đọc kết quả được hiển thị. Kết quả AI là thông tin tham khảo để tiếp tục trao đổi, không tự thay thế việc kiểm tra tình trạng thực tế ngoài ruộng.\n\nNếu chưa rõ bước tiếp theo, gửi yêu cầu liên hệ kèm mô tả thời điểm phát hiện, vị trí ruộng và các thao tác canh tác gần đây. Không tự suy ra liều sử dụng vật tư chỉ từ một tấm ảnh."
+      }
+    },
+    {
+      "targetStatus": "PUBLISHED",
+      "imageFile": "rice-field.jpg",
+      "request": {
+        "title": "Mẫu nhật ký quan sát ruộng lúa hằng tuần",
+        "slug": "demo-nhat-ky-quan-sat-ruong-lua-hang-tuan",
+        "summary": "Gợi ý các thông tin cần ghi lại để theo dõi diễn biến ngoài ruộng và mô tả tình trạng rõ ràng hơn khi cần hỗ trợ.",
+        "content": "Mỗi lần thăm ruộng, bà con có thể ghi ngày quan sát, tên thửa ruộng, giai đoạn canh tác và tình trạng nguồn nước.\n\nNếu thấy biểu hiện khác thường, ghi khu vực xuất hiện và mô tả bằng những gì quan sát được. Giữ ảnh chụp theo ngày để dễ đối chiếu ở lần kiểm tra tiếp theo.\n\nVới các lần sử dụng vật tư, ghi đúng tên sản phẩm, thời điểm và hướng dẫn đã được tư vấn. Giữ lại bao bì hoặc hình nhãn để tiện trao đổi khi cần làm rõ thông tin.\n\nNhật ký giúp bà con cung cấp một câu hỏi cụ thể hơn: tình trạng bắt đầu khi nào, đã thay đổi ra sao và cần cửa hàng hỗ trợ nội dung nào."
+      }
+    },
+    {
+      "targetStatus": "PUBLISHED",
+      "imageFile": "organic-fertilizer.jpg",
+      "request": {
+        "title": "Kiểm tra thông tin vật tư trước khi nhận hàng",
+        "slug": "demo-kiem-tra-vat-tu-truoc-khi-nhan-hang",
+        "summary": "Đối chiếu tên sản phẩm, quy cách và số lượng với đơn hàng; lưu thông tin để gửi yêu cầu hỗ trợ khi cần.",
+        "content": "Khi nhận vật tư, bà con đối chiếu tên sản phẩm, quy cách đóng gói và số lượng với đơn đã đặt trên AgriSage.\n\nQuan sát tình trạng bao bì và kiểm tra thông tin trên nhãn. Đọc hướng dẫn bảo quản và sử dụng của sản phẩm; hỏi lại cửa hàng nếu có nội dung chưa rõ.\n\nNếu phát hiện thông tin không khớp hoặc bao bì có vấn đề, giữ lại hình ảnh và ghi chú cụ thể. Cung cấp mã đơn khi gửi yêu cầu hỗ trợ để nhân viên tra cứu đúng giao dịch.\n\nTrong mục Liên hệ, chọn chủ đề Đặt vật tư, mô tả sản phẩm cần kiểm tra và thông tin để cửa hàng phản hồi."
+      }
+    },
+    {
+      "targetStatus": "DRAFT",
+      "imageFile": "rice-field.jpg",
+      "request": {
+        "title": "Bản nháp: Chuẩn bị câu hỏi về nguồn nước đầu vụ",
+        "slug": "demo-ban-nhap-cau-hoi-nguon-nuoc-dau-vu",
+        "summary": "Bản nháp để thử chức năng chỉnh sửa và xuất bản; chưa hiển thị cho Farmer.",
+        "content": "Nội dung đang được biên tập.\n\nCác thông tin dự kiến cần hỏi: vị trí ruộng, nguồn cấp nước, lịch xuống giống và các thay đổi bà con đã quan sát được.\n\nNgười biên tập kiểm tra lại nội dung và ảnh đại diện trước khi chuyển bài sang trạng thái Đã xuất bản."
+      }
+    },
+    {
+      "targetStatus": "ARCHIVED",
+      "imageFile": "farmer-phone.jpg",
+      "request": {
+        "title": "Thông báo lưu trữ: Giới thiệu kênh hỗ trợ AgriSage",
+        "slug": "demo-luu-tru-gioi-thieu-kenh-ho-tro-agrisage",
+        "summary": "Bài đã lưu trữ để kiểm tra bộ lọc và việc ẩn nội dung khỏi trang Farmer.",
+        "content": "Đây là thông báo mẫu đã ngừng hiển thị trên trang công khai.\n\nBà con có thể gửi câu hỏi qua mục Liên hệ của AgriSage. Yêu cầu gửi trong khi đăng nhập có thể được theo dõi tại trang Yêu cầu đã gửi.\n\nBài được giữ trong màn quản lý để kiểm tra chức năng lưu trữ, xem lại nội dung và chuyển trạng thái."
+      }
+    }
+  ],
+  "contacts": [
+    {
+      "key": "CR01",
+      "submitAs": "FARMER",
+      "targetStatus": "OPEN",
+      "resolutionNote": null,
+      "request": {
+        "contactName": "Nguyễn Văn An (mẫu)",
+        "contactPhone": "0900001101",
+        "contactEmail": "an.demo@example.test",
+        "subject": "Kỹ thuật canh tác",
+        "message": "Tôi muốn hỏi cần chuẩn bị thông tin gì để được tư vấn cho ruộng lúa đầu vụ. Diện tích khoảng 5.000 m².\n\nKhu vực / Địa chỉ: Thới Lai, Cần Thơ (dữ liệu mẫu)."
+      }
+    },
+    {
+      "key": "CR02",
+      "submitAs": "FARMER",
+      "targetStatus": "IN_PROGRESS",
+      "resolutionNote": "Cửa hàng đang kiểm tra quy cách đóng gói và sẽ phản hồi số lượng phù hợp với nhu cầu đã mô tả.",
+      "request": {
+        "contactName": "Trần Thị Bình (mẫu)",
+        "contactPhone": "0900001102",
+        "contactEmail": null,
+        "subject": "Đặt vật tư",
+        "message": "Nhờ cửa hàng tư vấn quy cách phân hữu cơ đang có và cách xem thông tin sản phẩm trước khi đặt đơn.\n\nKhu vực / Địa chỉ: Cờ Đỏ, Cần Thơ (dữ liệu mẫu)."
+      }
+    },
+    {
+      "key": "CR03",
+      "submitAs": "FARMER",
+      "targetStatus": "RESOLVED",
+      "resolutionNote": "Đã hướng dẫn mở mục Sổ nợ, chọn khoản cần xem và đối chiếu lịch sử thanh toán. Bà con đã xác nhận tìm được thông tin cần tra cứu.",
+      "request": {
+        "contactName": "Lê Văn Cường (mẫu)",
+        "contactPhone": "0900001103",
+        "contactEmail": "cuong.demo@example.test",
+        "subject": "Sổ nợ",
+        "message": "Tôi cần hướng dẫn xem lịch sử thanh toán trong sổ nợ trên AgriSage, hiện chưa biết mở ở đâu.\n\nKhu vực / Địa chỉ: Ô Môn, Cần Thơ (dữ liệu mẫu)."
+      }
+    },
+    {
+      "key": "CR04",
+      "submitAs": "FARMER",
+      "targetStatus": "RESOLVED",
+      "resolutionNote": "Đã hướng dẫn vào mục Đơn hàng, chọn đơn cần xem và đọc thông tin giao hàng trong trang chi tiết.",
+      "request": {
+        "contactName": "Phạm Thị Dung (mẫu)",
+        "contactPhone": "0900001104",
+        "contactEmail": null,
+        "subject": "Đặt vật tư",
+        "message": "Nhờ hướng dẫn cách theo dõi thông tin giao hàng của đơn đã đặt. Đây là yêu cầu minh họa, không tham chiếu đơn hàng thật.\n\nKhu vực / Địa chỉ: Phong Điền, Cần Thơ (dữ liệu mẫu)."
+      }
+    },
+    {
+      "key": "CR05",
+      "submitAs": "FARMER",
+      "targetStatus": "CLOSED",
+      "resolutionNote": "Đã hướng dẫn sử dụng chức năng quên mật khẩu. Người gửi xác nhận không cần hỗ trợ thêm và yêu cầu đóng liên hệ.",
+      "request": {
+        "contactName": "Võ Văn Đông (mẫu)",
+        "contactPhone": "0900001105",
+        "contactEmail": "dong.demo@example.test",
+        "subject": "Khác",
+        "message": "Tôi muốn được hướng dẫn lấy lại mật khẩu tài khoản. Vui lòng chỉ hướng dẫn các bước, không cần thay đổi tài khoản giúp tôi.\n\nKhu vực / Địa chỉ: Ninh Kiều, Cần Thơ (dữ liệu mẫu)."
+      }
+    },
+    {
+      "key": "CR06",
+      "submitAs": "FARMER",
+      "targetStatus": "IN_PROGRESS",
+      "resolutionNote": "Đã đề nghị gửi lại ảnh rõ hơn và bổ sung thời điểm phát hiện triệu chứng. Yêu cầu đang chờ thông tin từ người gửi.",
+      "request": {
+        "contactName": "Đặng Thị Giang (mẫu)",
+        "contactPhone": "0900001106",
+        "contactEmail": null,
+        "subject": "Kỹ thuật canh tác",
+        "message": "Ảnh lá lúa tôi gửi lên chưa rõ. Nhờ hướng dẫn chụp lại và cần mô tả thêm những thông tin nào để được hỗ trợ.\n\nKhu vực / Địa chỉ: Thốt Nốt, Cần Thơ (dữ liệu mẫu)."
+      }
+    },
+    {
+      "key": "CR07",
+      "submitAs": "GUEST",
+      "targetStatus": "OPEN",
+      "resolutionNote": null,
+      "request": {
+        "contactName": "Bùi Văn Hải (khách mẫu)",
+        "contactPhone": null,
+        "contactEmail": "hai.guest.demo@example.test",
+        "subject": "Khác",
+        "message": "Tôi chưa có tài khoản AgriSage. Nhờ hướng dẫn cách đăng ký tài khoản Farmer để theo dõi các yêu cầu hỗ trợ.\n\nKhu vực / Địa chỉ: Bình Thủy, Cần Thơ (dữ liệu mẫu)."
+      }
+    },
+    {
+      "key": "CR08",
+      "submitAs": "GUEST",
+      "targetStatus": "RESOLVED",
+      "resolutionNote": "Đã hướng dẫn xem thông tin liên hệ cửa hàng trên website và cách gửi nhu cầu qua biểu mẫu hỗ trợ.",
+      "request": {
+        "contactName": "Ngô Thị Hoa (khách mẫu)",
+        "contactPhone": "0900001108",
+        "contactEmail": "hoa.guest.demo@example.test",
+        "subject": "Đặt vật tư",
+        "message": "Tôi muốn xem danh mục vật tư và thông tin liên hệ cửa hàng trước khi đăng ký tài khoản.\n\nKhu vực / Địa chỉ: Vĩnh Thạnh, Cần Thơ (dữ liệu mẫu)."
+      }
+    }
+  ]
+}

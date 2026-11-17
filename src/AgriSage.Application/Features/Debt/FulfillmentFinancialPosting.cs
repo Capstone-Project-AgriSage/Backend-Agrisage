@@ -38,15 +38,23 @@ public sealed class FulfillmentFinancialPosting(IAgriSageDbContext db, IRowLockS
         var number = await DocumentNumbers.NextAsync(db.DebtEntries.IgnoreQueryFilters().AsNoTracking().Select(e => e.EntryNumber),
             DocumentNumbers.DebtEntry, BusinessCalendar.Today(c.FulfilledAt), token);
         reservation.Consume(unpaid);
+        // F3.13 (D15): the season is fixed when the order is confirmed; the debt arises now, with the season's due date or,
+        // when the delivery comes after it, the credit-tier term from this day. No season: the tier term, as before.
+        var fulfilledDay = BusinessCalendar.Today(c.FulfilledAt);
+        var season = c.Order.CropSeasonId is { } seasonId
+            ? await db.CropSeasons.AsNoTracking().SingleOrDefaultAsync(s => s.Id == seasonId && s.StoreId == c.Order.StoreId, token)
+            : null;
+        var cap = season is null ? null : await DebtDueLookup.CapAsync(db, c.Order.StoreId, token);
+        var due = DebtDueCalculator.Calculate(season, fulfilledDay, term, cap);
         var posting = account.CreateCreditSaleEntry(number,
             c.Source == FulfillmentSource.Pickup ? DebtEntrySourceType.Pickup : DebtEntrySourceType.Delivery,
-            c.Order.Id, c.StockMovementId, value, prepaid, BusinessCalendar.Today(c.FulfilledAt).AddDays(term), c.ActorId,
-            c.FulfilledAt, c.DeliveryId, c.DeliveryAttemptId);
+            c.Order.Id, c.StockMovementId, value, prepaid, due.DueDate, c.ActorId,
+            c.FulfilledAt, c.DeliveryId, c.DeliveryAttemptId, originCropSeasonId: season?.Id, dueBasis: due.Basis);
         db.DebtEntries.Add(posting.Entry);
         db.DebtTransactions.Add(posting.Transaction);
         if (c.Order.Status is OrderStatus.Completed or OrderStatus.PartiallyCancelled && reservation.RemainingAmount > 0)
             reservation.ReleaseRemaining(c.ActorId, c.FulfilledAt, "Fulfillment completed");
         audit.Record("DEBT_CREATED", "DEBT_ENTRY", posting.Entry.Id, c.Order.StoreId,
-            newValues: new { posting.Entry.EntryNumber, posting.Entry.OriginalAmount, posting.Entry.DueDate, c.StockMovementId });
+            newValues: new { posting.Entry.EntryNumber, posting.Entry.OriginalAmount, posting.Entry.DueDate, c.StockMovementId, dueRule = due.Rule, cropSeasonId = season?.Id });
     }
 }

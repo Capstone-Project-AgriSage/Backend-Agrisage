@@ -5,6 +5,7 @@ using AgriSage.Application.Features.Auth;
 using AgriSage.Application.Features.Auth.Interfaces;
 using AgriSage.Application.Features.Notifications;
 using AgriSage.Infrastructure.Ai;
+using AgriSage.Infrastructure.Caching;
 using AgriSage.Infrastructure.Authentication;
 using AgriSage.Infrastructure.BackgroundJobs;
 using AgriSage.Infrastructure.Messaging;
@@ -69,6 +70,16 @@ public static class DependencyInjection
         services.AddScoped<SoftDeleteInterceptor>();
         services.AddScoped<AuditableEntityInterceptor>();
         services.AddScoped<ConcurrencyVersionInterceptor>();
+        services.AddOptions<RedisOptions>().Bind(configuration.GetSection(RedisOptions.SectionName))
+            .Configure(options =>
+            {
+                if (string.IsNullOrWhiteSpace(options.Url)) options.Url = configuration["REDIS_URL"];
+            });
+        services.AddSingleton<ICatalogCacheBackend, RedisCatalogCacheBackend>();
+        services.AddScoped<ICatalogReadCache, CatalogReadCache>();
+        services.AddScoped<CatalogCacheInvalidation>();
+        services.AddScoped<CatalogCacheSaveInterceptor>();
+        services.AddScoped<CatalogCacheTransactionInterceptor>();
 
         // Non-secret "Database" settings come from appsettings; only Database:Password is a secret
         // (User Secrets / Database__Password). Nothing connects at startup.
@@ -90,7 +101,9 @@ public static class DependencyInjection
             options.AddInterceptors(
                 provider.GetRequiredService<SoftDeleteInterceptor>(),
                 provider.GetRequiredService<AuditableEntityInterceptor>(),
-                provider.GetRequiredService<ConcurrencyVersionInterceptor>());
+                provider.GetRequiredService<ConcurrencyVersionInterceptor>(),
+                provider.GetRequiredService<CatalogCacheSaveInterceptor>(),
+                provider.GetRequiredService<CatalogCacheTransactionInterceptor>());
         });
 
         services.AddScoped<IAgriSageDbContext>(provider => provider.GetRequiredService<AgriSageDbContext>());
@@ -101,6 +114,7 @@ public static class DependencyInjection
 
         services.AddOptions<SeedStoreOptions>().Bind(configuration.GetSection(SeedStoreOptions.SectionName));
         services.AddScoped<DatabaseSeeder>();
+        services.AddScoped<DebtDemoSeeder>();
 
         // Object storage (Supabase); nothing connects at startup and a missing configuration fails only on use.
         services.AddOptions<StorageOptions>().Bind(configuration.GetSection(StorageOptions.SectionName));
@@ -125,6 +139,7 @@ public static class DependencyInjection
 
         // Goods receipt Excel template (ClosedXML, stateless).
         services.AddSingleton<IReceiptSpreadsheet, ClosedXmlReceiptSpreadsheet>();
+        services.AddSingleton<AgriSage.Application.Features.Reports.IInventoryReportSpreadsheet, ClosedXmlInventoryReportSpreadsheet>();
 
         // Objects in the private diagnosis bucket (signed URLs, bytes): the same typed client as the public bucket.
         services.AddTransient<IPrivateFileStore>(provider => (IPrivateFileStore)provider.GetRequiredService<IFileStorageService>());

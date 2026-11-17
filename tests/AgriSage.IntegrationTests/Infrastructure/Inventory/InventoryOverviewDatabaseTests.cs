@@ -109,7 +109,10 @@ public class InventoryOverviewDatabaseTests
         var keys = new[] { $"inventory:LOW_STOCK:{low.Id:N}:20261005", $"inventory:OUT_OF_STOCK:{empty.Id:N}:20261005",
             $"inventory:OUT_OF_STOCK:{expired.Id:N}:20261005",
             $"inventory:EXPIRED:{past.Id:N}:20261005", $"inventory:EXPIRING:{soon.Id:N}:20261005" };
-        var notifications = await db.Notifications.AsNoTracking().Where(n => keys.Contains(n.DeduplicationKey!)).ToListAsync(Token);
+        // The development store may already have other valid staff. Assert only recipients created by this fixture.
+        var fixtureUsers = new[] { owner.Id, staff.Id, locked.Id, delivery.Id };
+        var notifications = await db.Notifications.AsNoTracking().Where(n => keys.Contains(n.DeduplicationKey!)
+            && fixtureUsers.Contains(n.UserId)).ToListAsync(Token);
         Assert.Equal(8, notifications.Count);
         Assert.Equal(5, notifications.Count(n => n.UserId == owner.Id));
         Assert.Equal(3, notifications.Count(n => n.UserId == staff.Id));
@@ -319,9 +322,13 @@ public class InventoryOverviewDatabaseTests
         var summary = await service.GetStockSummaryAsync(new() { CategoryId = f.Category.Id }, Token);
         Assert.Equal(liveProduct.Id, Assert.Single(summary.Items).StoreProductId);
         Assert.Equal(0, summary.Items[0].LotCount);
-        var alerts = await service.GetAlertsAsync(new() { PageSize = 100 }, Token);
-        Assert.DoesNotContain(alerts.Items, r => r.StoreProductId == other.Id || r.StoreProductId == removedProduct.Id
-            || r.StoreProductId == liveProduct.Id);
+        var alerts = await service.GetAlertsAsync(new() { CategoryId = f.Category.Id, PageSize = 100 }, Token);
+        Assert.DoesNotContain(alerts.Items, r => r.StoreProductId == other.Id || r.StoreProductId == removedProduct.Id);
+        // Deleting a lot does not delete its live product: the new zero-sellable-stock alert is legitimate.
+        var liveAlert = Assert.Single(alerts.Items);
+        Assert.Equal(liveProduct.Id, liveAlert.StoreProductId);
+        Assert.Equal("OUT_OF_STOCK", liveAlert.Type);
+        Assert.Null(liveAlert.InventoryLotId);
         var expired = await service.ExpireDueLotsAsync(Token);
         var ids = excludedLots.Select(l => l.Id).ToArray();
         Assert.DoesNotContain(expired.Lots, l => ids.Contains(l.Id));

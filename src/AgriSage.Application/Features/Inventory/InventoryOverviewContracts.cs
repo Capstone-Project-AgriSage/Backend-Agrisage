@@ -8,10 +8,13 @@ public sealed record StockSummaryRequest : PaginationRequest
     public Guid? CategoryId { get; init; }
     public bool LowStockOnly { get; init; }
     public bool? HasStock { get; init; }
+    public bool? HasSellableStock { get; init; }
 }
 
 public sealed record InventoryAlertsRequest : PaginationRequest
 {
+    public string? Search { get; init; }
+    public Guid? CategoryId { get; init; }
     public string? Type { get; init; }
     public int WithinDays { get; init; } = 30;
 }

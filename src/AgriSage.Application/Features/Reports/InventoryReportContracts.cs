@@ -16,11 +16,13 @@ public sealed record StockCardRequest : InventoryPeriodRequest
 
 public sealed record InventoryMovementReportRequest : InventoryPeriodRequest
 {
+    public string? Search { get; init; }
     public Guid? CategoryId { get; init; }
 }
 
 public sealed record InventoryValuationReportRequest
 {
+    public string? Search { get; init; }
     public Guid? CategoryId { get; init; }
 }
 
@@ -87,12 +89,15 @@ public sealed class InventoryMovementReportRequestValidator : AbstractValidator<
     public InventoryMovementReportRequestValidator()
     {
         Include(new InventoryPeriodRequestValidator());
+        RuleFor(r => r.Search).MaximumLength(100);
         RuleFor(r => r.CategoryId).NotEqual(Guid.Empty).When(r => r.CategoryId.HasValue);
     }
 }
 
 public sealed class InventoryValuationReportRequestValidator : AbstractValidator<InventoryValuationReportRequest>
 {
-    public InventoryValuationReportRequestValidator() =>
+    public InventoryValuationReportRequestValidator() {
+        RuleFor(r => r.Search).MaximumLength(100);
         RuleFor(r => r.CategoryId).NotEqual(Guid.Empty).When(r => r.CategoryId.HasValue);
+    }
 }

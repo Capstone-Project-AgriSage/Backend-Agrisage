@@ -92,6 +92,9 @@ public sealed class AgriSageDbContext : DbContext, IAgriSageDbContext
 
     public DbSet<InventoryLot> InventoryLots => Set<InventoryLot>();
 
+    public DbSet<SeasonalRule> SeasonalRules => Set<SeasonalRule>();
+    public DbSet<SeasonalRuleItem> SeasonalRuleItems => Set<SeasonalRuleItem>();
+
     public DbSet<InventoryLotBalance> InventoryLotBalances => Set<InventoryLotBalance>();
 
     public DbSet<StockMovement> StockMovements => Set<StockMovement>();
@@ -145,6 +148,10 @@ public sealed class AgriSageDbContext : DbContext, IAgriSageDbContext
     public DbSet<DebtEntryAction> DebtEntryActions => Set<DebtEntryAction>();
 
     public DbSet<DebtTransaction> DebtTransactions => Set<DebtTransaction>();
+
+    public DbSet<CropSeason> CropSeasons => Set<CropSeason>();
+
+    public DbSet<StoreDebtPolicy> StoreDebtPolicies => Set<StoreDebtPolicy>();
 
     public DbSet<SalesReturn> SalesReturns => Set<SalesReturn>();
 

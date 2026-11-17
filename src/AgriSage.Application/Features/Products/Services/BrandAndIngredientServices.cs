@@ -10,7 +10,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AgriSage.Application.Features.Products.Services;
 
-public sealed class BrandService(IAgriSageDbContext context, IDatabaseErrorClassifier databaseErrors) : IBrandService
+public sealed class BrandService(IAgriSageDbContext context, IDatabaseErrorClassifier databaseErrors, ICatalogReadCache? cache = null) : IBrandService
 {
     public async Task<BrandResponse> CreateAsync(BrandRequest request, CancellationToken cancellationToken)
     {
@@ -37,7 +37,10 @@ public sealed class BrandService(IAgriSageDbContext context, IDatabaseErrorClass
     public async Task<BrandResponse> GetAsync(Guid id, CancellationToken cancellationToken) =>
         ToResponse(await FindAsync(id, cancellationToken, tracking: false));
 
-    public async Task<PagedResult<BrandResponse>> ListAsync(BrandListRequest request, CancellationToken cancellationToken)
+    public Task<PagedResult<BrandResponse>> ListAsync(BrandListRequest request, CancellationToken cancellationToken) =>
+        CatalogCache.ReadAsync(cache, "brands", request, () => LoadListAsync(request, cancellationToken), cancellationToken);
+
+    private async Task<PagedResult<BrandResponse>> LoadListAsync(BrandListRequest request, CancellationToken cancellationToken)
     {
         var query = context.Brands.AsNoTracking().AsQueryable();
 
@@ -117,7 +120,7 @@ public sealed class BrandService(IAgriSageDbContext context, IDatabaseErrorClass
     private static BrandResponse ToResponse(Brand b) => new(b.Id, b.Code, b.Name, b.Description, b.LogoUrl, b.IsActive);
 }
 
-public sealed class ActiveIngredientService(IAgriSageDbContext context) : IActiveIngredientService
+public sealed class ActiveIngredientService(IAgriSageDbContext context, ICatalogReadCache? cache = null) : IActiveIngredientService
 {
     public async Task<ActiveIngredientResponse> CreateAsync(ActiveIngredientRequest request, CancellationToken cancellationToken)
     {
@@ -144,7 +147,10 @@ public sealed class ActiveIngredientService(IAgriSageDbContext context) : IActiv
     public async Task<ActiveIngredientResponse> GetAsync(Guid id, CancellationToken cancellationToken) =>
         ToResponse(await FindAsync(id, cancellationToken, tracking: false));
 
-    public async Task<PagedResult<ActiveIngredientResponse>> ListAsync(
+    public Task<PagedResult<ActiveIngredientResponse>> ListAsync(ActiveIngredientListRequest request, CancellationToken cancellationToken) =>
+        CatalogCache.ReadAsync(cache, "ingredients", request, () => LoadListAsync(request, cancellationToken), cancellationToken);
+
+    private async Task<PagedResult<ActiveIngredientResponse>> LoadListAsync(
         ActiveIngredientListRequest request,
         CancellationToken cancellationToken)
     {
@@ -215,9 +221,12 @@ public sealed class ActiveIngredientService(IAgriSageDbContext context) : IActiv
     private static ActiveIngredientResponse ToResponse(ActiveIngredient i) => new(i.Id, i.Code, i.Name, i.Description, i.IsActive);
 }
 
-public sealed class UnitService(IAgriSageDbContext context) : IUnitService
+public sealed class UnitService(IAgriSageDbContext context, ICatalogReadCache? cache = null) : IUnitService
 {
-    public async Task<PagedResult<UnitResponse>> ListAsync(UnitListRequest request, CancellationToken cancellationToken)
+    public Task<PagedResult<UnitResponse>> ListAsync(UnitListRequest request, CancellationToken cancellationToken) =>
+        CatalogCache.ReadAsync(cache, "units", request, () => LoadListAsync(request, cancellationToken), cancellationToken);
+
+    private async Task<PagedResult<UnitResponse>> LoadListAsync(UnitListRequest request, CancellationToken cancellationToken)
     {
         var query = context.Units.AsNoTracking();
         var total = await query.LongCountAsync(cancellationToken);
