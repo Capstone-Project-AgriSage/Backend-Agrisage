@@ -67,8 +67,9 @@ are computed after aggregation. No edits, ledger writes or external-provider cal
 
 ## Counter sales today — 2026-10-11
 
-`GET /api/reports/counter-sales-today`, no query parameters. `Operate` roles plus `REPORTS.READ`,
-with the same active-store membership scope as other reports. Read-only; no schema change.
+`GET /api/reports/counter-sales-today`, no query parameters. `Operate` roles plus `COUNTER_SALES.SELL`
+(since 2026-11-16, was `REPORTS.READ`: whoever sells at the counter sees the counter's figures of the day;
+every other report keeps `REPORTS.READ`), with the same active-store membership scope as other reports. Read-only; no schema change.
 `CounterSalesTodayResponse`: `date` (Vietnam calendar day), `asOf` (UTC), `paidSalesRevenue`,
 `completedOrderCount`, `receivedAmount`, `creditSalesAmount`. Empty activity returns zero for all four metrics.
 
