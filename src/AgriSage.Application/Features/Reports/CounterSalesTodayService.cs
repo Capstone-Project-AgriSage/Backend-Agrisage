@@ -13,7 +13,7 @@ public sealed class CounterSalesTodayService(IAgriSageDbContext db, ReportScope 
 {
     public async Task<CounterSalesTodayResponse> GetAsync(CancellationToken token)
     {
-        var store = await scope.GetStoreIdAsync(token);
+        var store = await scope.GetStoreIdAsync(token, "COUNTER_SALES.SELL");
         var now = clock.UtcNow;
         var today = BusinessCalendar.Today(now);
         var start = BusinessCalendar.StartOfDay(today);

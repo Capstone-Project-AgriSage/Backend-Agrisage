@@ -98,7 +98,7 @@ public static class PermissionEndpointMap
         ["Report.GetSales"] = "REPORTS.READ",
         ["RevenueReports.Revenue"] = "REPORTS.READ",
         ["RevenueReports.Summary"] = "REPORTS.READ",
-        ["CounterSalesReports.Today"] = "REPORTS.READ",
+        ["CounterSalesReports.Today"] = "COUNTER_SALES.SELL",
         ["ActiveIngredients.List"] = "INGREDIENTS.READ",
         ["ActiveIngredients.Get"] = "INGREDIENTS.READ",
         ["ActiveIngredients.Create"] = "INGREDIENTS.CREATE",

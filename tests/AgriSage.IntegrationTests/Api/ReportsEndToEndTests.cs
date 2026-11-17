@@ -10,8 +10,9 @@ namespace AgriSage.IntegrationTests.Api;
 // A walk-in buys 3 bottles at the counter for cash; a Farmer takes 4 bottles on credit and pays 1 million back through payOS;
 // the same Farmer has a confirmed credit order of 2 bottles not yet handed over. Revenue counts only goods handed over
 // (7 million, gross profit = sales − cost); the credit filter keeps the 4 million; debt aging shows the 3 million still owed;
-// credit exposure = 3 million owed + 2 million reserved; the counter view shows the 3 million cash sale. Without REPORTS.READ
-// (not a sale staff default) sale staff see none of them. Every call goes through HTTP with the real services.
+// credit exposure = 3 million owed + 2 million reserved; the counter view shows the 3 million cash sale. Sale staff see the
+// counter view (it needs COUNTER_SALES.SELL, decision 2026-11-16) but no other report: those need REPORTS.READ, not a sale
+// staff default. Every call goes through HTTP with the real services.
 public sealed class ReportsEndToEndTests(StaffHttpTests.StaffApiFactory factory)
     : IClassFixture<StaffHttpTests.StaffApiFactory>
 {
@@ -83,9 +84,12 @@ public sealed class ReportsEndToEndTests(StaffHttpTests.StaffApiFactory factory)
         Assert.Equal(3_000_000m, counter.GetProperty("paidSalesRevenue").GetDecimal());
         Assert.Equal(1, counter.GetProperty("completedOrderCount").GetInt32());
 
-        // Reports need REPORTS.READ, which sale staff do not have by default (the counter screen shows "—" without it,
-        // CounterSalesReportCards.tsx); the owner may delegate it.
-        Assert.Equal(HttpStatusCode.Forbidden, (await staff.GetAsync("/api/reports/counter-sales-today", token)).StatusCode);
+        // Sale staff selling at the counter see the same counter view (COUNTER_SALES.SELL, a sale staff default).
+        var staffCounter = await OkAsync(await staff.GetAsync("/api/reports/counter-sales-today", token), token);
+        Assert.Equal(3_000_000m, staffCounter.GetProperty("paidSalesRevenue").GetDecimal());
+        Assert.Equal(1, staffCounter.GetProperty("completedOrderCount").GetInt32());
+
+        // The other reports need REPORTS.READ, which sale staff do not have by default; the owner may delegate it.
         Assert.Equal(HttpStatusCode.Forbidden, (await staff.GetAsync($"/api/reports/revenue-summary?{period}", token)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await staff.GetAsync("/api/reports/debt-aging", token)).StatusCode);
     }
