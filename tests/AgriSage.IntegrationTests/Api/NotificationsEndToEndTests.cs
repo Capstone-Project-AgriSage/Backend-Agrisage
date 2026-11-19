@@ -4,6 +4,7 @@ using System.Text.Json;
 using AgriSage.Application.Features.Notifications;
 using AgriSage.Domain.Features.Identity.Enums;
 using AgriSage.IntegrationTests.Infrastructure.Debt;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using static AgriSage.IntegrationTests.Api.EndToEndHost;
 
@@ -70,6 +71,87 @@ public sealed class NotificationsEndToEndTests(StaffHttpTests.StaffApiFactory fa
         Assert.Equal(HttpStatusCode.NoContent, (await farmer.DeleteAsync($"/api/me/notifications/{first}", token)).StatusCode);
         Assert.Equal(items.Count - 1, (await TypesAsync(farmer, token)).Count);
     }
+
+    // The debt notifications name the figures (2026-11-19): the new debt with its amount, order, due date and entry number; an
+    // online repayment with its amount and payer, to the Farmer and the store; a dispute with the Farmer's name, amount and
+    // reason, to the store; the kept dispute, the reduction with what is left, and the new credit limit, to the Farmer.
+    [CreditDbFact]
+    public async Task Debt_notifications_name_the_amount_due_date_order_and_farmer()
+    {
+        var token = TestContext.Current.CancellationToken;
+        await using var e = await CreditTestDatabase.StartAsync(token);
+        await using var host = Start(factory, e);
+        await host.GrantDefaultsAsync(RoleCode.Farmer, "FARMER", token);
+        var staffId = await host.AddMemberAsync(RoleCode.SalesStaff, "SALES_STAFF", "Sale Staff", token);
+        using var owner = await host.ClientAsync(e.User.UserId!.Value, "STORE_OWNER", token);
+        using var farmer = await host.ClientAsync(e.FarmerUserId, "FARMER", token);
+        using var staff = await host.ClientAsync(staffId, "SALES_STAFF", token);
+
+        // A credit pickup of 2 bottles (1 000 000 each): the Farmer is told the debt, its order, due date and number.
+        await OkAsync(await farmer.PostAsJsonAsync("/api/me/cart/items",
+            new { storeProductId = e.StoreProductId, productPackagingId = e.PackagingId, quantity = 2L }, token), token);
+        var order = await OkAsync(await farmer.PostAsJsonAsync("/api/me/orders",
+            new { source = "FARMER_MOBILE", settlementType = "CREDIT", fulfillmentType = "PICKUP" }, token), token);
+        var orderId = order.GetProperty("id").GetGuid();
+        var orderNumber = order.GetProperty("orderNumber").GetString();
+        var confirmed = await OkAsync(await owner.PostAsync($"/api/orders/{orderId}/confirm", null, token), token);
+        await OkAsync(await owner.PostAsJsonAsync($"/api/orders/{orderId}/pickup", new
+        {
+            items = new[] { new { orderItemId = confirmed.GetProperty("items")[0].GetProperty("id").GetGuid(), lots = new[] { new { inventoryLotId = e.LotId, baseQuantity = 2L } } } },
+        }, token), token);
+        await DispatchAsync(host, token);
+        Guid entryId;
+        string entryNumber;
+        DateOnly due;
+        using (var scope = e.Scope())
+        {
+            var entry = await scope.ServiceProvider.GetRequiredService<AgriSage.Infrastructure.Persistence.AgriSageDbContext>()
+                .DebtEntries.AsNoTracking().SingleAsync(x => x.OrderId == orderId, token);
+            (entryId, entryNumber, due) = (entry.Id, entry.EntryNumber, entry.DueDate);
+        }
+        Assert.Equal($"Bạn có khoản nợ mới 2.000.000 đ của đơn {orderNumber}, hạn trả {due:dd/MM/yyyy} (mã {entryNumber}). Vui lòng xem chi tiết công nợ.",
+            Assert.Single(await MessagesAsync(farmer, "DEBT_CREATED", token)));
+
+        // 500 000 paid online: the Farmer, the owner and sale staff read the amount and the payer.
+        var payment = await OkAsync(await farmer.PostAsJsonAsync("/api/me/payments/payos",
+            new { paymentContext = "DEBT_REPAYMENT", amount = 500_000m }, token), token);
+        await OkAsync(await farmer.PostAsync($"/api/payments/{payment.GetProperty("paymentId").GetGuid()}/simulate-paid", null, token), token);
+        await DispatchAsync(host, token);
+        const string paid = "Đã nhận 500.000 đ trả nợ của Farmer Test. Vui lòng xem số nợ còn lại.";
+        foreach (var reader in new[] { farmer, owner, staff })
+            Assert.Equal(paid, Assert.Single(await MessagesAsync(reader, "DEBT_PAYMENT_CONFIRMED", token)));
+
+        // The Farmer disputes the rest: the store team reads who, which debt, how much and why.
+        await OkAsync(await farmer.PostAsJsonAsync($"/api/me/debt-entries/{entryId}/dispute", new { reason = "Tôi chỉ lấy 1 chai." }, token), token);
+        await DispatchAsync(host, token);
+        var dispute = $"Farmer Test khiếu nại khoản nợ của đơn {orderNumber} (1.500.000 đ). Lý do: Tôi chỉ lấy 1 chai. Vui lòng kiểm tra và xử lý.";
+        Assert.Equal(dispute, Assert.Single(await MessagesAsync(owner, "DEBT_DISPUTED", token)));
+        Assert.Equal(dispute, Assert.Single(await MessagesAsync(staff, "DEBT_DISPUTED", token)));
+        Assert.Empty(await MessagesAsync(farmer, "DEBT_DISPUTED", token));
+
+        // The owner keeps it, then reduces it by 200 000; the Farmer reads the kept amount and what is left.
+        await OkAsync(await owner.PostAsJsonAsync($"/api/debt-entries/{entryId}/keep", new { reason = "Phiếu giao ghi 2 chai" }, token), token);
+        await OkAsync(await owner.PostAsJsonAsync($"/api/debt-entries/{entryId}/adjust",
+            new { amount = 200_000m, reason = "Giảm cho khách quen", reasonCode = "TRI_AN" }, token), token);
+        await DispatchAsync(host, token);
+        Assert.Equal($"Cửa hàng đã xem xét khiếu nại và giữ nguyên khoản nợ của đơn {orderNumber} (1.500.000 đ). Vui lòng liên hệ cửa hàng nếu cần.",
+            Assert.Single(await MessagesAsync(farmer, "DEBT_DISPUTE_RESOLVED", token)));
+        Assert.Equal($"Cửa hàng đã giảm khoản nợ của đơn {orderNumber}, số còn nợ 1.300.000 đ. Vui lòng xem chi tiết công nợ.",
+            Assert.Single(await MessagesAsync(farmer, "DEBT_REDUCED", token)));
+
+        // A new credit limit: the Farmer and the owner read the old and new limits.
+        await OkAsync(await owner.PutAsJsonAsync($"/api/customers/{e.FarmerId}/credit/limit",
+            new { creditLimit = 25_000_000m, reason = "Khách trả đúng hạn" }, token), token);
+        await DispatchAsync(host, token);
+        const string limit = "Hạn mức tín dụng của Farmer Test đã đổi từ 20.000.000 đ thành 25.000.000 đ.";
+        Assert.Equal(limit, Assert.Single(await MessagesAsync(farmer, "CREDIT_LIMIT_CHANGED", token)));
+        Assert.Equal(limit, Assert.Single(await MessagesAsync(owner, "CREDIT_LIMIT_CHANGED", token)));
+    }
+
+    private static async Task<List<string>> MessagesAsync(HttpClient client, string type, CancellationToken token) =>
+        (await OkAsync(await client.GetAsync("/api/me/notifications?pageSize=100", token), token)).GetProperty("items")
+        .EnumerateArray().Where(n => n.GetProperty("notificationType").GetString() == type)
+        .Select(n => n.GetProperty("message").GetString()!).ToList();
 
     // What the background worker does: take the due outbox events and dispatch each in its own scope.
     private static async Task<int> DispatchAsync(EndToEndHost host, CancellationToken token)

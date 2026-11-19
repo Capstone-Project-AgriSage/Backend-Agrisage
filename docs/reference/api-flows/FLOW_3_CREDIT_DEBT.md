@@ -504,6 +504,17 @@ recorded without a code: "Trước khi áp dụng chính sách"; since the code 
 `DEBT_DUE_DATE_CHANGED`; `DEBT_ADJUST` → `DEBT_REDUCED`; `DEBT_CANCEL` → `DEBT_CANCELLED`; `DEBT_KEEP` →
 `DEBT_DISPUTE_RESOLVED`. The owner's season due-date move (8b) notifies through the same `DEBT_CHANGE_DUE_DATE`.
 
+**Notification texts name the figures (2026-11-19).** Types and titles are unchanged; the message is built by
+`BusinessNotificationPolicy` from the audit snapshot of the event and from rows that do not change afterwards:
+- new debt (`DEBT_CREATED`, `DEBT_MANUAL_ENTRY`): amount, order, due date and entry number;
+- online or cash debt repayment (`DEBT_PAYMENT_CONFIRMED`, to the Farmer, owner and sale staff): amount and payer;
+- dispute (`DEBT_DISPUTED`, to the store): the Farmer's name, the debt, what is owed and the reason (shortened to 120 characters);
+- new due date, reduction (what is left), cancellation, kept dispute (amount);
+- credit limit change (`CREDIT_LIMIT_CHANGED`): old and new limit.
+
+When a figure is missing (an event recorded before this change), the generic text is used. Order payments
+(`PAYMENT_CONFIRMED`) also name their amount and order.
+
 ## 8e. F3.17 — Debt by season: entries, Farmer groups, dashboard (new, 2026-11-03)
 
 Fields are only added; existing fields and routes stay. `DebtSeasonReference = { id, code, name }`.
