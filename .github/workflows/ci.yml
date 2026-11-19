@@ -19,3 +19,53 @@ jobs:
       # Only the offline suite runs here. Tests that need the real database, Supabase Storage or a provider skip
       # themselves unless AGRISAGE_DB_TESTS / AGRISAGE_STORAGE_TESTS is set, and CI has no secrets.
       - run: dotnet test --no-build
+
+  database-tests:
+    # The whole suite against a throwaway PostgreSQL started by this job (BM04 commitment R2-06): the real-database,
+    # credit-database and end-to-end workflow tests that skip above run here. Migrations, the reference seed and one
+    # Admin account are applied first, as on a new environment. Only Supabase Storage / realtime tests still skip.
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_NOLOGO: true
+      ASPNETCORE_ENVIRONMENT: Development
+      # Every Database field is set, so the Supabase host of appsettings.Development.json is never used. The password
+      # belongs to the container of this job only; it is not a secret and protects nothing.
+      Database__Host: localhost
+      Database__Port: 5432
+      Database__Database: agrisage_ci
+      Database__Username: postgres
+      Database__Password: ci-only-postgres
+      Database__SslMode: Disable
+      AGRISAGE_DB_TESTS: 1
+      AGRISAGE_CREDIT_TEST_CONNECTION_STRING: Host=localhost;Port=5432;Database=agrisage_ci;Username=postgres;Password=ci-only-postgres;SSL Mode=Disable
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      # Same major version as the team's local test database. Many tests build an isolated schema at the same time,
+      # which runs out of lock slots with the default max_locks_per_transaction (64).
+      - name: Start PostgreSQL
+        run: |
+          docker run -d --name postgres -p 5432:5432 -e POSTGRES_PASSWORD="$Database__Password" \
+            -e POSTGRES_DB="$Database__Database" postgres:16 -c max_locks_per_transaction=256 -c max_connections=300
+          for attempt in $(seq 1 30); do docker exec postgres pg_isready -U postgres -d "$Database__Database" && exit 0; sleep 2; done
+          docker logs postgres; exit 1
+      - run: dotnet restore
+      - run: dotnet build --no-restore
+      - run: dotnet tool restore
+      - name: Apply migrations
+        run: dotnet ef database update --project src/AgriSage.Infrastructure --startup-project src/AgriSage.Api --no-build
+      - name: Reference seed and an Admin account
+        run: dotnet run --project src/AgriSage.Api --no-build --no-launch-profile -- --seed --create-admin
+        env:
+          Jwt__SigningKey: ci-only-signing-key-for-a-throwaway-database-0123456789
+          AdminBootstrap__Email: admin@ci.agrisage.test
+          AdminBootstrap__Password: CiOnlyAdmin-2026
+          AdminBootstrap__FullName: CI Admin
+          AdminBootstrap__PhoneNumber: "0900000000"
+      - name: Test
+        run: dotnet test --no-build
+      - name: PostgreSQL log on failure
+        if: failure()
+        run: docker logs postgres | tail -n 200

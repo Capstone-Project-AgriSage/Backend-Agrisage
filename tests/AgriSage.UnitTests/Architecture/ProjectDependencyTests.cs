@@ -41,8 +41,11 @@ public class ProjectDependencyTests
         Assert.Equal(["Microsoft.EntityFrameworkCore"], efPackages);
     }
 
+    // The .csproj files use Windows separators ("..\AgriSage.Domain\AgriSage.Domain.csproj"), which Path does not split
+    // on Linux: normalise them so the test also runs in the Linux CI job.
     private static IEnumerable<string> GetProjectReferences(string project) =>
-        GetIncludes(project, "ProjectReference").Select(Path.GetFileNameWithoutExtension)!;
+        GetIncludes(project, "ProjectReference")
+            .Select(include => Path.GetFileNameWithoutExtension(include.Replace('\\', '/')))!;
 
     private static IEnumerable<string> GetPackageReferences(string project) =>
         GetIncludes(project, "PackageReference");

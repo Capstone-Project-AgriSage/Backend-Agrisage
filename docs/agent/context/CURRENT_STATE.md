@@ -284,8 +284,12 @@ setup documentation
   margin of §35.19): migration `20261116161710_StocktakeItemSnapshotMovementCount` (`stocktake_items.snapshot_movement_count`,
   back-filled to keep every existing line's result), `Stocktake.AddItem` / `RefreshItem` take the count,
   `StocktakeQueries.SnapshotMovementCountsAsync` + `StaleItemIdsAsync` count posted or reversed movement items. Counting
-  and refreshing right after a receipt or sale work at once. Migration review + real-DB back-fill test; not yet applied
-  to `agrisage-dev`.
+  and refreshing right after a receipt or sale work at once. Migration review + real-DB back-fill test; applied to
+  `agrisage-dev` on 2026-11-17 right after the merge.
+- Done (branch `ci/postgresql-tests`) — CI job `database-tests` (BM04 commitment R2-06): Ubuntu, a throwaway PostgreSQL 16
+  container (`max_locks_per_transaction=256`), migrations, `--seed --create-admin`, then the whole suite with
+  `AGRISAGE_DB_TESTS=1` and `AGRISAGE_CREDIT_TEST_CONNECTION_STRING`, so the real-DB, credit-DB and end-to-end workflow
+  tests run on every PR; only Supabase Storage / realtime tests skip. The Windows job keeps the offline suite.
 
 ## Not Yet Implied by Foundation Completion
 
