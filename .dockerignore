@@ -1,0 +1,20 @@
+# Never send developer secrets or build output into an image (Dockerfile).
+**/appsettings.Local.json
+**/secrets.json
+**/*.user
+**/bin/
+**/obj/
+
+# Not needed to build the API.
+.git/
+.github/
+.vs/
+.vscode/
+.idea/
+.agents/
+.claude/
+.codex/
+artifacts/
+docs/
+tests/
+**/node_modules/
