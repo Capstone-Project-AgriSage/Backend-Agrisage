@@ -48,6 +48,8 @@ builder.Services.AddScoped<Microsoft.AspNetCore.Authorization.IAuthorizationHand
 builder.Services.AddApiRateLimiting();
 builder.Services.AddApiCors(builder.Configuration);
 builder.Services.AddApiSwagger();
+// Liveness for a hosting platform (GET /health): the process answers HTTP. It does not touch the database.
+builder.Services.AddHealthChecks();
 
 var app = builder.Build();
 
@@ -82,6 +84,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
 app.MapControllers();
+app.MapHealthChecks("/health").AllowAnonymous();
 app.MapHub<AgriSage.Api.Realtime.EventsHub>("/api/realtime", options => options.CloseOnAuthenticationExpiration = true);
 
 app.Run();

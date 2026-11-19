@@ -3,8 +3,10 @@
 ##
 ## Get latest from `dotnet new gitignore`
 
-# dotenv files
+# dotenv files (staging.env etc. hold real values; only the *.env.example templates are committed)
 .env
+*.env
+!*.env.example
 
 # User-specific files
 *.rsuser
