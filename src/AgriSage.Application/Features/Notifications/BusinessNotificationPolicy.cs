@@ -1,9 +1,11 @@
+using System.Globalization;
 using System.Text.Json;
 
 namespace AgriSage.Application.Features.Notifications;
 
 public static class BusinessNotificationPolicy
 {
+    private static readonly CultureInfo Vietnamese = CultureInfo.GetCultureInfo("vi-VN");
     public static bool Supports(string action) => action is "ORDER_PLACED" or "ORDER_CONFIRMED" or "ORDER_CANCELLED"
         or "ORDER_PREPARING_STARTED" or "ORDER_MARKED_READY" or "ORDER_PICKED_UP"
         or "PAYMENT_RECEIVED" or "DEBT_PAYMENT_CONFIRMED" or "DELIVERY_ASSIGNED"
@@ -16,8 +18,58 @@ public static class BusinessNotificationPolicy
         or "REFUND_FAILED" or "REFUND_CANCELLED" or "ORDER_CREATED" or "COUNTER_SALE_COMPLETED"
         or "ORDER_ITEM_REMAINING_CANCELLED";
 
+    // With `facts`, debt, payment and credit-limit notifications name the amount, due date, order and Farmer (the type and
+    // title stay the same, so the apps need no change); without them, or for other actions, the generic text below.
     public static (string Type, string Title, string Message) Describe(string action, string? newValues = null,
-        bool debtPayment = false) => action switch
+        bool debtPayment = false, NotificationFacts? facts = null)
+    {
+        var generic = Generic(action, newValues, debtPayment);
+        return facts is not null && Detail(action, facts, debtPayment) is { } message ? (generic.Type, generic.Title, message) : generic;
+    }
+
+    private static string? Detail(string action, NotificationFacts f, bool debtPayment)
+    {
+        // The debt is named by its order when it has one ("khoản nợ của đơn DH-0012"), else by its entry number.
+        var debt = f.OrderNumber is not null ? $"khoản nợ của đơn {f.OrderNumber}" : f.EntryNumber is not null ? $"khoản nợ {f.EntryNumber}" : "khoản nợ";
+        var forOrder = f.OrderNumber is null ? "" : $" của đơn {f.OrderNumber}";
+        var code = f.EntryNumber is null ? "" : $" (mã {f.EntryNumber})";
+        var of = f.FarmerName is null ? "" : $" của {f.FarmerName}";
+        return action switch
+        {
+            "DEBT_CREATED" or "DEBT_MANUAL_ENTRY" when f.Amount is { } amount && f.DueDate is { } due =>
+                $"Bạn có khoản nợ mới {Money(amount)}{forOrder}, hạn trả {due:dd/MM/yyyy}{code}. Vui lòng xem chi tiết công nợ.",
+            "PAYMENT_RECEIVED" or "DEBT_PAYMENT_CONFIRMED" when debtPayment && f.Amount is { } paid =>
+                $"Đã nhận {Money(paid)} trả nợ{of}. Vui lòng xem số nợ còn lại.",
+            "PAYMENT_RECEIVED" or "DEBT_PAYMENT_CONFIRMED" when f.Amount is { } paid =>
+                $"Đã nhận {Money(paid)}{(f.OrderNumber is null ? "" : $" cho đơn {f.OrderNumber}")}. Vui lòng xem chi tiết thanh toán.",
+            "DEBT_DISPUTE" when f.Outstanding is { } owed =>
+                $"{f.FarmerName ?? "Nông dân"} khiếu nại {debt} ({Money(owed)}).{ReasonText(f.Reason)} Vui lòng kiểm tra và xử lý.",
+            "DEBT_ROLLOVER" or "DEBT_CHANGE_DUE_DATE" when f.DueDate is { } newDue =>
+                $"Hạn trả {debt} đã đổi sang ngày {newDue:dd/MM/yyyy}. Vui lòng xem chi tiết công nợ.",
+            "DEBT_ADJUST" when f.Outstanding is { } left =>
+                $"Cửa hàng đã giảm {debt}, số còn nợ {Money(left)}. Vui lòng xem chi tiết công nợ.",
+            "DEBT_CANCEL" when f.OrderNumber is not null || f.EntryNumber is not null =>
+                $"Cửa hàng đã xóa {debt}. Bạn không còn phải trả khoản này.",
+            "DEBT_KEEP" when f.Outstanding is { } kept =>
+                $"Cửa hàng đã xem xét khiếu nại và giữ nguyên {debt} ({Money(kept)}). Vui lòng liên hệ cửa hàng nếu cần.",
+            "CUSTOMER_CREDIT_LIMIT_CHANGED" when f.CreditLimit is { } limit => f.PreviousCreditLimit is { } previous
+                ? $"Hạn mức tín dụng{of} đã đổi từ {Money(previous)} thành {Money(limit)}."
+                : $"Hạn mức tín dụng{of} hiện là {Money(limit)}.",
+            _ => null,
+        };
+    }
+
+    internal static string Money(decimal amount) => amount.ToString("N0", Vietnamese) + " đ";
+
+    // The Farmer's own words, shortened: the full reason is in the debt's history.
+    private static string ReasonText(string? reason)
+    {
+        var text = reason?.Trim().TrimEnd('.', ' ');
+        if (string.IsNullOrEmpty(text)) return "";
+        return $" Lý do: {(text.Length > 120 ? text[..117] + "..." : text)}.";
+    }
+
+    private static (string Type, string Title, string Message) Generic(string action, string? newValues, bool debtPayment) => action switch
     {
         "ORDER_PLACED" => ("ORDER_PLACED", "Đơn hàng mới chờ xác nhận", "Nông dân vừa đặt đơn hàng mới. Vui lòng kiểm tra và xác nhận đơn hàng."),
         "ORDER_CREATED" => ("ORDER_PLACED", "Đơn hàng mới chờ xác nhận", "Một đơn hàng mới đã được tạo tại cửa hàng và đang chờ xác nhận."),

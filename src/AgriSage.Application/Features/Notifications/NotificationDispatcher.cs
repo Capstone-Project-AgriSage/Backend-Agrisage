@@ -25,7 +25,8 @@ public sealed class NotificationDispatcher(IAgriSageDbContext context, INotifica
         var log = await context.AuditLogs.AsNoTracking().SingleAsync(a => a.Id == item.AuditLogId, token);
         var subject = await SubjectAsync(log, token);
         var recipients = subject is null ? [] : await RecipientsAsync(log, subject, token);
-        var description = BusinessNotificationPolicy.Describe(log.Action, log.NewValues, subject?.DebtPayment == true);
+        var facts = subject is null || recipients.Count == 0 ? null : await FactsAsync(log, subject, token);
+        var description = BusinessNotificationPolicy.Describe(log.Action, log.NewValues, subject?.DebtPayment == true, facts);
         if (log.EntityId is { } entityId && subject is not null)
             await writer.AddAsync(recipients, description.Type, description.Title, description.Message,
                 $"audit:{log.Id:N}", log.EntityType, entityId, token, subject.OrderId);
@@ -92,6 +93,69 @@ public sealed class NotificationDispatcher(IAgriSageDbContext context, INotifica
             default: return null;
         }
     }
+
+    // Figures for the debt, payment and credit-limit texts: amounts and dates from the audit snapshot of the event, numbers
+    // and names from rows that do not change afterwards. Null for every other action (generic text).
+    private async Task<NotificationFacts?> FactsAsync(AuditLog log, Subject subject, CancellationToken token)
+    {
+        if (log.EntityId is not { } id) return null;
+        var values = Snapshot(log.NewValues);
+        var before = Snapshot(log.OldValues);
+        Task<string?> OrderNumberAsync() => subject.OrderId is { } orderId
+            ? context.Orders.AsNoTracking().Where(o => o.Id == orderId).Select(o => (string?)o.OrderNumber).SingleOrDefaultAsync(token)
+            : Task.FromResult<string?>(null);
+        switch (log.EntityType)
+        {
+            case "DEBT_ENTRY" when log.Action.StartsWith("DEBT_", StringComparison.Ordinal):
+                var orderNumber = await OrderNumberAsync();
+                var entry = await (from e in context.DebtEntries.AsNoTracking()
+                                   join a in context.DebtAccounts.AsNoTracking() on e.DebtAccountId equals a.Id
+                                   join f in context.FarmerProfiles.AsNoTracking() on a.FarmerProfileId equals f.Id
+                                   where e.Id == id
+                                   select new { e.EntryNumber, f.User.FullName }).SingleOrDefaultAsync(token);
+                return new NotificationFacts(entry?.EntryNumber, orderNumber,
+                    Amount: Decimal(values, "originalAmount") ?? Decimal(values, "amount"), DueDate: Date(values, "dueDate"),
+                    Outstanding: Decimal(values, "outstandingAmount"), FarmerName: entry?.FullName, Reason: log.Reason);
+            case "PAYMENT" when log.Action is "PAYMENT_RECEIVED" or "DEBT_PAYMENT_CONFIRMED":
+                var payment = await context.Payments.AsNoTracking().Where(p => p.Id == id)
+                    .Select(p => new
+                    {
+                        p.Amount,
+                        Payer = context.FarmerProfiles.Where(f => f.Id == p.PayerFarmerProfileId).Select(f => f.User.FullName).FirstOrDefault(),
+                    })
+                    .SingleOrDefaultAsync(token);
+                return payment is null ? null
+                    : new NotificationFacts(OrderNumber: await OrderNumberAsync(), Amount: payment.Amount, FarmerName: payment.Payer);
+            case "CREDIT_PROFILE" when log.Action == "CUSTOMER_CREDIT_LIMIT_CHANGED":
+                var name = await context.FarmerCreditProfiles.AsNoTracking().Where(p => p.Id == id)
+                    .Select(p => p.FarmerProfile.User.FullName).SingleOrDefaultAsync(token);
+                return new NotificationFacts(FarmerName: name, CreditLimit: Decimal(values, "creditLimit"),
+                    PreviousCreditLimit: Decimal(before, "creditLimit"));
+            default:
+                return null;
+        }
+    }
+
+    private static JsonElement? Snapshot(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            var element = JsonSerializer.Deserialize<JsonElement>(json);
+            return element.ValueKind == JsonValueKind.Object ? element : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static decimal? Decimal(JsonElement? values, string name) =>
+        values is { } v && v.TryGetProperty(name, out var p) && p.ValueKind == JsonValueKind.Number && p.TryGetDecimal(out var d) ? d : null;
+
+    private static DateOnly? Date(JsonElement? values, string name) =>
+        values is { } v && v.TryGetProperty(name, out var p) && p.ValueKind == JsonValueKind.String
+            && DateOnly.TryParse(p.GetString(), System.Globalization.CultureInfo.InvariantCulture, out var d) ? d : null;
 
     private async Task<List<Guid>> RecipientsAsync(AuditLog log, Subject subject, CancellationToken token)
     {
