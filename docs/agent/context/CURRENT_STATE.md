@@ -280,6 +280,12 @@ setup documentation
   a person; replaces the active-ingredient match. One migration (tables `disease_products`, `advisory_sessions`,
   `advisory_session_items`, two `diseases` columns, permissions). Code follows in separate PRs: backend, then
   Management-Webs, Farmer-Mobile, Farmer-Web. Photo model choice postponed.
+- In progress (branch `feature/crop-diagnosis-claude`, 2026-11-20) — crop-first photo diagnosis with a general model
+  (`api-flows/AI_DIAGNOSIS.md` 2.2): `CropCatalog`, `GET /api/me/diagnosis/crops`, `cropType` on case create and disease
+  create, candidates per crop in `DiagnosisAiRunner`, `ClaudeDiagnosisClient` (Anthropic SDK) and `GeminiDiagnosisClient`
+  (Gemini API REST, 2.3) behind `RoutingDiagnosisClient`, admin `GET /api/admin/ai-providers`, `GET/PUT
+  /api/admin/ai-providers/{provider}` + `/test`, `AesGcmSecretProtector`. One migration
+  `20261120145730_AiProviderSettings` (table + two admin-only permissions), not applied to agrisage-dev yet.
 - Done (branch `feature/stocktake-exact-stale`) — exact stale stocktake lines (design §35.24, replaces the 5-minute
   margin of §35.19): migration `20261116161710_StocktakeItemSnapshotMovementCount` (`stocktake_items.snapshot_movement_count`,
   back-filled to keep every existing line's result), `Stocktake.AddItem` / `RefreshItem` take the count,
