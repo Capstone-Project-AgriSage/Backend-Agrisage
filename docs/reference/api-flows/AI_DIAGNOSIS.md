@@ -1,5 +1,7 @@
-# AI diagnosis — rice leaf disease, AI result shown to the Farmer, suggestions
+# AI diagnosis — crop leaf disease, AI result shown to the Farmer, suggestions
 
+Version 2.2 — 2026-11-20: the Farmer **chooses the crop** before the photo, a **general vision model** answers among that crop's diseases, and the admin enters its **API key** (stored encrypted). See §15 and D16–D18; the FastAPI model keeps working unchanged.
+Version 2.3 — 2026-11-21: the general model can be **Claude** (framework `ANTHROPIC`) **or Gemini** (framework `GOOGLE`, Gemini API key from Google AI Studio); one provider setting each, routes `/api/admin/ai-providers/{provider}` (§15).
 Version 2.1 — 2026-11-02: suggested products now come from reviewed problem-to-product links ([ADVISORY.md](ADVISORY.md), D13 replaced), no longer from an active-ingredient match.
 Version 2.0 — 2026-10-21. **Human Review is removed** (lead's decision, 2026-10-21): the Farmer sees the AI result as
 soon as the photo is analysed; no staff member confirms it. Version 1.0 (2026-10-10) required a `can_review_ai`
@@ -59,7 +61,7 @@ a migration) and are hidden from the permission screens (§11).
 
 | # | Decision |
 |---|---|
-| D1 | **The policy decision lives in the backend.** The AI Service returns calibrated probabilities and never ACCEPTED / INCONCLUSIVE. Backend computes `margin = p1 − p2` and `passed_policy = status SUCCESS AND confidence ≥ minimum_confidence AND (minimum_margin IS NULL OR margin ≥ minimum_margin)`. |
+| D1 | **The policy decision lives in the backend.** The AI Service returns calibrated probabilities and never ACCEPTED / INCONCLUSIVE (a general vision model returns its own probability estimate, not calibrated; its policy thresholds come from an evaluation on labelled photos, 2.2). Backend computes `margin = p1 − p2` and `passed_policy = status SUCCESS AND confidence ≥ minimum_confidence AND (minimum_margin IS NULL OR margin ≥ minimum_margin)`. |
 | D2 | **A failed policy is an UNCERTAIN result, not INCONCLUSIVE.** The case becomes `AI_COMPLETED` with `passed_policy = false`; the Farmer sees the top guess marked `UNCERTAIN` with the hint `RETAKE_PHOTO_OR_ASK_STORE`. `passed_policy` is the value stored at inference time, under the policy effective then; old cases are never re-judged against today's policy. |
 | D3 | **No human review** (2.0). The result of the latest SUCCESS inference is the result. An `UNCERTAIN` result shows no CHEMICAL treatment and no product; a `CONFIDENT` result shows all active treatments and up to five products (D13); the Healthy class never gets products. `requires_human_review` is stored and ignored. |
 | D4 | **The AI is called after the case is saved and outside any transaction.** Transaction 1: number, case, image → commit. Then the HTTP call (timeout `AiService:TimeoutSeconds`, default 15). Transaction 2: `StartProcessing` → `RecordInference` → `CompleteAi`/`FailAi`. A crash in between leaves the case `SUBMITTED`, which the Farmer's retry accepts after two minutes. No transaction is held open across an HTTP call. |
@@ -73,6 +75,9 @@ a migration) and are hidden from the permission screens (§11).
 | D12 | **Case numbers** are `DG-yyyyMMdd-NNNN` (append `DG` to `DocumentNumbers`). |
 | D13 | **Suggested products come from reviewed links and are computed at read time (2.1, replaces the active-ingredient match of 2.0).** Products = the `APPROVED` `PROTECTION` rows of `disease_products` for the predicted disease whose store product passes `CatalogRules.Sellable` and whose stock and price pass [ADVISORY.md](ADVISORY.md) V7; order V8; at most 5; `reason` is the text of the link (e.g. "Đăng ký trị đạo ôn trên lúa"). A product with the same active ingredient but no approved link is **not** offered. `disease_treatments.active_ingredient_id` stays as information. Nothing is stored in `recommendation_items`; each successful AI run still writes a `DIAGNOSIS_AI_RESULT` audit entry with the certainty and the suggested store product ids. |
 | D14 | **The Farmer retries a failed analysis.** `retry` is allowed on a `FAILED` case, or a `SUBMITTED` case older than two minutes (D4 crash). It reruns the AI on the primary image with the active model; an unreachable AI Service gives `503` and records nothing. The store has no rerun any more. |
+| D16 | **The crop comes first (2.2).** The Farmer picks a crop (`CropCatalog`: RICE, DURIAN, COFFEE, CORN, MANGO) before the photo; the case stores it in `diagnosis_cases.crop_type` (RICE when an older app sends none). A crop is offered only when the ACTIVE model can name at least one of its active `DISEASE` problems; another crop is `422` on create. |
+| D17 | **A general model only chooses among the chosen crop's diseases (2.2).** For each case the backend sends the candidates = the active `DISEASE` rows of the case's crop that are in the model's `class_labels`, plus HEALTHY, with their Vietnamese names and symptoms. An answer outside the candidates is a FAILED inference (`CLASS_NOT_FOR_CROP`); a crop without any candidate disease is FAILED without calling the model (`CROP_NOT_SUPPORTED_BY_MODEL`). The model may answer NONE (not this crop, unreadable photo): the result names its likeliest listed disease with confidence 0, so the policy shows UNCERTAIN. A model of framework `ANTHROPIC` or `GOOGLE` registers any active disease codes (HEALTHY required); a model of fixed classes still needs exactly the five rice classes. |
+| D18 | **The admin owns the providers and their keys (2.2, 2.3).** One `ai_provider_settings` row per provider (`ANTHROPIC` = Claude, `GOOGLE` = Gemini) holds the model id, timeout, on/off, and the API key encrypted with AES-256-GCM under a master key from configuration (`SecretEncryption:Key`, never in the database). No response and no audit entry carries the key (the audit redacts any field named like a key); the admin sees only that a key is stored. Clearing the key turns the provider off; it cannot be turned on without one. Which provider diagnoses is decided by the ACTIVE model's framework, not by this setting. |
 | D15 | **Cases decided under 1.0 stay readable.** `VERIFIED` shows the reviewer's final disease and the stored recommendations of the current review (`certainty = VERIFIED`); `INCONCLUSIVE` keeps its comment and retake hint; an old `UNDER_REVIEW` case reads like `AI_COMPLETED`. No status is added or removed (the status check constraint stays). |
 
 ---
@@ -369,3 +374,60 @@ Controller and action names that key the map: `MeDiagnosisCases.{Create,List,Get
    knows rice diseases before a demo (the approval is the human check, ADVISORY.md V1).
 3. Correct the AI master document (`AgriSage_AI_Disease_Diagnosis_Master_v2.0.md`, Agent Review and AC-03/AC-05) and
    the use-case diagrams to the 2.0 flow.
+
+---
+
+## 15. Versions 2.2–2.3 — crop first, general vision model (Claude or Gemini), provider settings (2026-11-20/21)
+
+| Method | Route | Role / permission | Body / query | Response |
+|---|---|---|---|---|
+| GET | `/api/me/diagnosis/crops` | Farmer / `MY_DIAGNOSIS.CREATE` | — | `200 CropResponse[]`: the crops a photo can be sent for now (D16) |
+| GET | `/api/diagnosis/crops` | Operate / `DISEASES.READ` | — | `200 CropResponse[]`: every catalog crop, `photoDiagnosis` tells whether it is offered |
+| POST | `/api/me/diagnosis-cases` | Farmer / `MY_DIAGNOSIS.CREATE` | multipart: `image`, `note?`, **`cropType?`** | as before; `400` unknown crop, `422` crop not offered |
+| GET | `/api/me/diagnosis-cases`, `/api/me/diagnosis-cases/{id}` | Farmer | as before | list items and the case add **`cropType`, `cropName`** (the crop chosen before the photo; RICE / Lúa for older cases) |
+| POST | `/api/diseases` | Manage / `DISEASES.CREATE` | adds **`cropType?`** (default RICE, catalog code) | `400` unknown crop |
+| GET | `/api/admin/ai-providers` | **Admin** / `AI_PROVIDER.READ` | — | `200 AiProviderSettingsResponse[]`: ANTHROPIC then GOOGLE, saved or defaults (`version: 0`) |
+| GET | `/api/admin/ai-providers/{provider}` | **Admin** / `AI_PROVIDER.READ` | provider `ANTHROPIC` \| `GOOGLE` (any case) | `200 AiProviderSettingsResponse`; `404` other provider |
+| PUT | `/api/admin/ai-providers/{provider}` | **Admin** / `AI_PROVIDER.MANAGE` | `{ modelId, isEnabled, timeoutSeconds, version, apiKey?, clearApiKey? }` | `200`; `409` stale version; `422` on without a key or no master key; `400` key and clear together; `404` other provider |
+| POST | `/api/admin/ai-providers/{provider}/test` | **Admin** / `AI_PROVIDER.MANAGE` | — | `200 { ok, message }`: the stored key and model are checked with that provider's models API (no content generated, no cost) |
+
+```json
+CropResponse { "code": "DURIAN", "name": "Sầu riêng", "diseaseCount": 2, "photoDiagnosis": true,
+               "diseases": [ { "code": "DURIAN_PHYTOPHTHORA", "name": "Thối gốc chảy nhựa" } ] }
+AiProviderSettingsResponse { "provider": "ANTHROPIC", "modelId": "claude-opus-5-5", "isEnabled": true, "timeoutSeconds": 60,
+  "hasApiKey": true, "apiKeyHint": "WXYZ", "encryptionConfigured": true,
+  "suggestedModels": ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"], "updatedAt": "…", "version": 1 }
+// GOOGLE starts on "gemini-3.8-flash", suggests ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"]; the admin may type another id.
+```
+
+- `AiPredictionRequest` adds `Framework`, `CropType`, `CropName` and `Candidates (code, name, symptoms, isHealthy)`. The
+  `RoutingDiagnosisClient` sends a model of framework `ANTHROPIC` to `ClaudeDiagnosisClient`, `GOOGLE` to
+  `GeminiDiagnosisClient`, and every other model to the FastAPI client as before.
+- Both general clients use the same prompt and answer rules (`GeneralModelPrompt`): the photo and the case text (crop,
+  candidate codes with names and symptoms, NONE) go with a fixed system prompt; the answer is constrained by a JSON schema
+  (`label` ∈ candidates + NONE, `confidence`, `alternatives`, `reason`). `model_version` = the configured model id, so the
+  ACTIVE model's `version` must equal it (D10). Any failure (no key, provider off, network, rate limit, refusal or block,
+  answer outside the schema) is `AiServiceUnavailableException`: the case is FAILED and the Farmer retries (D14). The key is
+  never logged.
+- `ClaudeDiagnosisClient`: official Anthropic SDK, beta Messages endpoint, effort `medium`; for Opus/Sonnet 5.5 the
+  server-side refusal fallback (`fallbacks: "default"`) is on.
+- `GeminiDiagnosisClient`: Gemini API REST `POST v1beta/models/{model}:generateContent` on
+  `generativelanguage.googleapis.com`, key in the `x-goog-api-key` header only (never in the URL), `systemInstruction`, the
+  photo as `inlineData`, `generationConfig.responseMimeType = application/json` + `responseJsonSchema`. No `temperature`
+  (ignored by newer Gemini models and announced to become an error). Thought parts are skipped; a `promptFeedback.blockReason`
+  fails the case. Logs keep the HTTP status and the error status/reason, never the error message. The connection check is
+  `GET v1beta/models/{model}` (must support `generateContent`).
+- Gemini free tier (Google AI Studio key without billing): the Gemini API terms let Google use submitted content to improve
+  its products, human reviewers may read it, and personal data must not be sent. Use a key of a project with billing
+  (paid service) when Farmers' real photos are sent; the admin page says so on the Gemini tab.
+- Turning a provider on: the admin saves its key and model (`PUT`), checks them (`POST …/test`), registers a model of
+  framework `ANTHROPIC` or `GOOGLE` whose `version` is that provider's model id and whose labels are the active diseases to
+  answer (+ HEALTHY), adds a policy with thresholds from the evaluation and activates it (the previous model is retired, D5).
+- Configuration: `SecretEncryption:Key` = 32 random bytes in base64 (User Secrets or environment); without it no key can
+  be stored and a stored key cannot be read. Changing it makes the stored key unreadable: enter the key again.
+- Migration `20261120145730_AiProviderSettings`: table `ai_provider_settings` and the admin-only permissions
+  `AI_PROVIDER.READ` / `AI_PROVIDER.MANAGE` (not delegable).
+- Tests: `CropAndAiProviderTests` (unit), `ClaudeDiagnosisClientTests` (shared prompt rules) + `AesGcmSecretProtectorTests`,
+  `GeminiDiagnosisClientTests` (request shape, key only in the header, every failure unavailable, connection check),
+  `AiProviderEndToEndTests` (admin only, one setting per provider, key never returned or audited, version, clear, 404), and
+  `DiagnosisToAdvisoryEndToEndTests.A_crop_chosen_before_the_photo_narrows_a_general_model_to_that_crops_diseases`.

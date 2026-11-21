@@ -1,5 +1,6 @@
 # Advisory — from a problem (known or diagnosed) to products, quantity and the cart
 
+Version 1.1 — 2026-11-20: problems belong to a crop (`cropType` filter and field; crop list in `AI_DIAGNOSIS.md` §15); growth stages are rice stages and are ignored for another crop's problem.
 Version 1.0 — 2026-11-02. User-requested extension after Review 2 (the lecturers asked the team to go deeper on one
 part: input consultation). Conventions, shared shapes and ownership rules: [README.md](README.md). Authorization of
 every route below follows [DYNAMIC_PERMISSIONS.md](DYNAMIC_PERMISSIONS.md). The AI photo diagnosis
@@ -132,14 +133,15 @@ The migration also carries the permission rows (§8) as data (`HasData`), like `
 
 ## 5. A4 — Farmer API (`/api/me/advisory`)
 
-`GET /api/me/advisory/problems?search=&type=&page=&pageSize=` → `PagedResult<AdvisoryProblem>`:
+`GET /api/me/advisory/problems?search=&type=&cropType=&page=&pageSize=` → `PagedResult<AdvisoryProblem>` (`cropType`, 1.1: only that crop's problems; `400` for a code outside the crop catalog):
 
 ```json
 { "id": "…", "code": "LEAF_BLAST", "name": "Bệnh đạo ôn lá", "problemType": "DISEASE",
-  "summary": "Vết hình thoi, tâm xám trắng, viền nâu đỏ", "matchedBy": "NAME" }
+  "summary": "Vết hình thoi, tâm xám trắng, viền nâu đỏ", "matchedBy": "NAME", "cropType": "RICE" }
 ```
 
-`matchedBy` is `NAME`, `KEYWORD`, `SYMPTOM` or `null` (no search). Only active, non-Healthy problems.
+`matchedBy` is `NAME`, `KEYWORD`, `SYMPTOM` or `null` (no search). Only active, non-Healthy problems. The recommendation's
+`problem` also carries `cropType`; `growthStage` (SEEDLING … RIPENING) only applies to a RICE problem and is ignored otherwise.
 
 `POST /api/me/advisory/recommendations`:
 

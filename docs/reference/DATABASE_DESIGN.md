@@ -7,7 +7,7 @@ notification deduplication. InitialCreate remains the historical 67-table baseli
 > **Database:** PostgreSQL (Supabase)  
 > **ORM:** Entity Framework Core + Npgsql  
 > **Design approach:** Detailed Database Design First → EF Core Code First → Migrations → Supabase  
-> **Current baseline:** 67 tables (`promotions` removed; `delivery_attempt_items` added); later migrations add tables, e.g. the three advisory tables of section XXIV-A (2026-11-02)  
+> **Current baseline:** 67 tables (`promotions` removed; `delivery_attempt_items` added); later migrations add tables, e.g. the three advisory tables of section XXIV-A (2026-11-02) and `ai_provider_settings` (§63a, 2026-11-20)  
 > **Review status:** Relationship + FK + Constraint + Index review applied.  
 > **Candidate status:** Ready for final approval before EF Core entities / Initial Migration.  
 > **This document currently details tables 1–31.**  
@@ -5055,6 +5055,39 @@ No recommendation for INCONCLUSIVE cases.
 
 Healthy class normally receives preventive/care guidance only,
 not disease-treatment product recommendations.
+```
+
+## 63a. `ai_provider_settings` (added 2026-11-20; contract: `api-flows/AI_DIAGNOSIS.md` §15)
+
+How the backend reaches a general vision model (Claude or Gemini) for photo diagnosis. One row per provider, written only by the
+administrator. The API key is stored **encrypted** (AES-256-GCM, format `v1:` + base64(nonce | ciphertext | tag)) with a
+master key from configuration (`SecretEncryption:Key`), which is never stored in the database; only its last four
+characters are kept in clear. Migration `20261120145730_AiProviderSettings`.
+
+```text
+ai_provider_settings
+--------------------
+id                      uuid PK DEFAULT gen_random_uuid()
+provider                varchar(30) NOT NULL             CHECK provider IN ('ANTHROPIC', 'GOOGLE')
+model_id                varchar(100) NOT NULL            e.g. claude-opus-5-5, gemini-3.6-flash
+encrypted_api_key       text NULL                        ciphertext only; NULL = no key yet
+api_key_hint            varchar(4) NULL                  last characters of the key
+is_enabled              boolean NOT NULL DEFAULT false   CHECK is_enabled = false OR encrypted_api_key IS NOT NULL
+timeout_seconds         integer NOT NULL DEFAULT 60      CHECK timeout_seconds BETWEEN 10 AND 300
+version                 bigint NOT NULL DEFAULT 0        optimistic concurrency (the first save stores the defaults, then changes them)
+created_at, updated_at, deleted_at, deleted_by (FK users)
+
+UNIQUE (provider) WHERE deleted_at IS NULL   -- ux_ai_provider_settings_provider
+```
+
+Rules:
+
+```text
+Only the administrator reads or writes it (AI_PROVIDER.READ / AI_PROVIDER.MANAGE, not delegable).
+No API response and no audit entry contains the key.
+Clearing the key turns the provider off.
+An ai_models row of framework ANTHROPIC (Claude) or GOOGLE (Gemini) is answered through the row of that provider; its
+version is that row's model id.
 ```
 
 ---
