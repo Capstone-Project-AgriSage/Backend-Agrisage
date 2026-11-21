@@ -41,9 +41,10 @@ public sealed class DiagnosisAiRunner(
         Guid caseId, byte[] photo, string contentType, string fileName, CancellationToken cancellationToken,
         bool failWhenUnavailable = false)
     {
-        var caseNumber = await context.DiagnosisCases.AsNoTracking()
-            .Where(c => c.Id == caseId).Select(c => c.CaseNumber).FirstOrDefaultAsync(cancellationToken)
+        var caseInfo = await context.DiagnosisCases.AsNoTracking()
+            .Where(c => c.Id == caseId).Select(c => new { c.CaseNumber, c.CropType }).FirstOrDefaultAsync(cancellationToken)
             ?? throw new NotFoundException("Diagnosis case", caseId);
+        var caseNumber = caseInfo.CaseNumber;
 
         var now = clock.UtcNow;
         var model = await context.AiModels.AsNoTracking()
@@ -72,21 +73,34 @@ public sealed class DiagnosisAiRunner(
 
         AiPredictionResult? result = null;
         string? error = null;
-        try
+        // The model may only answer a disease of the crop the Farmer chose, or healthy (AI_DIAGNOSIS.md 2.2).
+        var candidates = await CandidatesAsync(model, caseInfo.CropType, cancellationToken);
+        if (!candidates.Any(c => !c.IsHealthy))
         {
-            using var stream = new MemoryStream(photo, writable: false);
-            result = await client.PredictAsync(
-                new AiPredictionRequest(stream, fileName, contentType, RequestedTopK, caseNumber), cancellationToken);
+            // The active model cannot name any disease of this crop: asking it would only return a wrong crop's disease.
+            error = "CROP_NOT_SUPPORTED_BY_MODEL";
         }
-        catch (AiServiceUnavailableException) when (!failWhenUnavailable)
+        else
         {
-            error = "AI_SERVICE_UNAVAILABLE";
+            try
+            {
+                using var stream = new MemoryStream(photo, writable: false);
+                result = await client.PredictAsync(
+                    new AiPredictionRequest(
+                        stream, fileName, contentType, RequestedTopK, caseNumber, model.Framework, caseInfo.CropType,
+                        CropCatalog.Find(caseInfo.CropType)?.Name ?? caseInfo.CropType, candidates),
+                    cancellationToken);
+            }
+            catch (AiServiceUnavailableException) when (!failWhenUnavailable)
+            {
+                error = "AI_SERVICE_UNAVAILABLE";
+            }
         }
 
         Guid? predictedDiseaseId = null;
         if (result is not null)
         {
-            (error, predictedDiseaseId) = await CheckAsync(result, model, cancellationToken);
+            (error, predictedDiseaseId) = await CheckAsync(result, model, candidates, cancellationToken);
         }
 
         // Read the case again under its row lock: it may have been cancelled, or completed by a second retry, while the AI
@@ -143,7 +157,8 @@ public sealed class DiagnosisAiRunner(
     // The answer is evidence only if it comes from the ACTIVE model, is not a simulation outside Development and names
     // one of the model's classes that is a known disease.
     private async Task<(string? Error, Guid? DiseaseId)> CheckAsync(
-        AiPredictionResult result, Domain.Features.Diagnosis.Entities.AiModel model, CancellationToken cancellationToken)
+        AiPredictionResult result, Domain.Features.Diagnosis.Entities.AiModel model, IReadOnlyList<AiCandidate> candidates,
+        CancellationToken cancellationToken)
     {
         if (!string.Equals(result.ModelVersion, model.Version, StringComparison.Ordinal))
         {
@@ -169,6 +184,12 @@ public sealed class DiagnosisAiRunner(
         if (modelLabels is null || labels.Any(l => !modelLabels.Contains(l)))
         {
             return ("UNKNOWN_CLASS_LABEL", null);
+        }
+
+        // A disease of another crop is never a result for this photo.
+        if (!candidates.Any(c => c.Code == result.PredictedClassLabel))
+        {
+            return ("CLASS_NOT_FOR_CROP", null);
         }
 
         var disease = await context.Diseases.AsNoTracking()
@@ -197,6 +218,31 @@ public sealed class DiagnosisAiRunner(
         audit.Record(
             "DIAGNOSIS_AI_RESULT", "DIAGNOSIS_CASE", caseId, storeId,
             newValues: new { Certainty = EnumText.Format(certainty), DiseaseCode = classLabel, SuggestedStoreProductIds = suggested });
+    }
+
+    // The classes this case may be answered with: the active diseases of its crop that the model knows, plus the healthy
+    // class. A model of fixed classes (the FastAPI one) only knows rice, so another crop gets no disease candidate.
+    private async Task<IReadOnlyList<AiCandidate>> CandidatesAsync(
+        Domain.Features.Diagnosis.Entities.AiModel model, string cropType, CancellationToken cancellationToken)
+    {
+        HashSet<string> modelLabels;
+        try
+        {
+            modelLabels = (JsonSerializer.Deserialize<List<string>>(model.ClassLabels) ?? []).ToHashSet(StringComparer.Ordinal);
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+
+        var diseases = await context.Diseases.AsNoTracking()
+            .Where(d => d.IsActive && modelLabels.Contains(d.Code)
+                && (d.IsHealthyClass || (d.CropType == cropType && d.ProblemType == ProblemType.Disease)))
+            .OrderBy(d => d.IsHealthyClass).ThenBy(d => d.Code)
+            .Select(d => new AiCandidate(d.Code, d.Name, d.Symptoms, d.IsHealthyClass))
+            .ToListAsync(cancellationToken);
+
+        return diseases;
     }
 
     private async Task<Domain.Features.Diagnosis.Entities.DiagnosisCase> LoadCaseAsync(Guid caseId, CancellationToken cancellationToken) =>

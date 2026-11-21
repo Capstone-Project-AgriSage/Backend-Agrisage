@@ -10,10 +10,16 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The Claude answer parsing and the secret protector are tested directly. -->
+    <InternalsVisibleTo Include="AgriSage.IntegrationTests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
     <PackageReference Include="ClosedXML" />
     <PackageReference Include="payOS" />
+    <PackageReference Include="Anthropic" />
     <PackageReference Include="StackExchange.Redis" />
   </ItemGroup>
 

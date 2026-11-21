@@ -22,6 +22,8 @@
     <PackageVersion Include="ClosedXML" Version="0.105.1" />
     <!-- Official payOS .NET SDK (F2.4, decision C-D7). Used only in Infrastructure/Payments/PayOsPaymentGateway. -->
     <PackageVersion Include="payOS" Version="2.1.0" />
+    <!-- Official Anthropic SDK: photo diagnosis with a general vision model (AI_DIAGNOSIS.md 2.2). -->
+    <PackageVersion Include="Anthropic" Version="13.11.0" />
   </ItemGroup>
 
   <ItemGroup Label="Application">

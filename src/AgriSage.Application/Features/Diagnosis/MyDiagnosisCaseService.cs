@@ -27,6 +27,7 @@ public sealed class MyDiagnosisCaseService(
     DiagnosisAiRunner runner,
     DiagnosisResultBuilder results,
     DiagnosisImageUrls imageUrls,
+    ICropService crops,
     AuditTrail audit,
     ILogger<MyDiagnosisCaseService> logger) : IMyDiagnosisCaseService
 {
@@ -34,10 +35,26 @@ public sealed class MyDiagnosisCaseService(
     private const int MaxFileNameLength = 255;
 
     public async Task<MyDiagnosisCaseResponse> CreateAsync(
-        Stream image, string? fileName, string? note, CancellationToken cancellationToken)
+        Stream image, string? fileName, string? note, CancellationToken cancellationToken, string? cropType = null)
     {
         var farmer = await currentFarmer.GetAsync(cancellationToken);
         var storeId = await ActiveStore.GetIdAsync(context, cancellationToken);
+
+        // The crop narrows what the model may answer (AI_DIAGNOSIS.md 2.2). It must be offered for photo diagnosis now:
+        // a crop without diseases, or one the active model cannot name, would only produce a failed case.
+        var crop = CropCatalog.Normalize(cropType) ?? CropCatalog.Rice;
+        if (!CropCatalog.IsKnown(crop))
+        {
+            throw new ValidationException(new Dictionary<string, string[]>
+            {
+                ["cropType"] = [$"cropType must be one of: {string.Join(", ", CropCatalog.All.Select(c => c.Code))}."]
+            });
+        }
+
+        if (!(await crops.ListForPhotoDiagnosisAsync(cancellationToken)).Any(c => c.Code == crop))
+        {
+            throw new BusinessRuleException($"Photo diagnosis is not available for {CropCatalog.Find(crop)!.Name} yet.");
+        }
 
         var cleanNote = Texts.Clean(note);
         if (cleanNote is { Length: > MaxNoteLength })
@@ -59,11 +76,11 @@ public sealed class MyDiagnosisCaseService(
                 context.DiagnosisCases.IgnoreQueryFilters().AsNoTracking().Select(c => c.CaseNumber),
                 DocumentNumbers.DiagnosisCase, BusinessCalendar.Today(now), cancellationToken);
 
-            diagnosisCase = new DiagnosisCase(farmer.FarmerProfileId, number, now, cleanNote);
+            diagnosisCase = new DiagnosisCase(farmer.FarmerProfileId, number, now, cleanNote, crop);
             diagnosisCase.AddImage(
                 stored.StorageKey, stored.Url, now, isPrimary: true, CleanFileName(fileName), type.ContentType, stored.SizeBytes);
             context.DiagnosisCases.Add(diagnosisCase);
-            audit.Record("DIAGNOSIS_CASE_CREATED", "DIAGNOSIS_CASE", diagnosisCase.Id, storeId, newValues: new { diagnosisCase.CaseNumber });
+            audit.Record("DIAGNOSIS_CASE_CREATED", "DIAGNOSIS_CASE", diagnosisCase.Id, storeId, newValues: new { diagnosisCase.CaseNumber, diagnosisCase.CropType });
             await context.SaveChangesAsync(cancellationToken);
         }
         catch
@@ -103,6 +120,7 @@ public sealed class MyDiagnosisCaseService(
                 c.Status,
                 c.SubmittedAt,
                 c.CompletedAt,
+                c.CropType,
                 FinalCode = c.FinalDisease != null ? c.FinalDisease.Code : null,
                 FinalName = c.FinalDisease != null ? c.FinalDisease.Name : null
             })
@@ -133,7 +151,7 @@ public sealed class MyDiagnosisCaseService(
 
             return new MyDiagnosisCaseListItem(
                 r.Id, r.CaseNumber, EnumText.Format(r.Status), r.SubmittedAt, r.CompletedAt, code, name,
-                code is null || certainty is null ? null : EnumText.Format(certainty.Value));
+                code is null || certainty is null ? null : EnumText.Format(certainty.Value), r.CropType, CropNameOf(r.CropType));
         }).ToList();
 
         return new PagedResult<MyDiagnosisCaseListItem>(items, request.Page, request.PageSize, total);
@@ -172,8 +190,13 @@ public sealed class MyDiagnosisCaseService(
             images.FirstOrDefault(),
             result,
             inconclusive,
-            DiagnosisResultPolicy.CanRetry(diagnosisCase.Status, diagnosisCase.SubmittedAt, clock.UtcNow));
+            DiagnosisResultPolicy.CanRetry(diagnosisCase.Status, diagnosisCase.SubmittedAt, clock.UtcNow),
+            diagnosisCase.CropType,
+            CropNameOf(diagnosisCase.CropType));
     }
+
+    // The Vietnamese name from the catalog; a code the catalog no longer has is shown as it is.
+    private static string CropNameOf(string cropType) => CropCatalog.Find(cropType)?.Name ?? cropType;
 
     public async Task<MyDiagnosisCaseResponse> CancelAsync(Guid id, CancelDiagnosisRequest request, CancellationToken cancellationToken)
     {

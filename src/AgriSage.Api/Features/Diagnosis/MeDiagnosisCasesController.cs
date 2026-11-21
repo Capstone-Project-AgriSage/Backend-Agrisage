@@ -14,7 +14,8 @@ namespace AgriSage.Api.Features.Diagnosis;
 [Authorize(Roles = ApiRoles.Farmer)]
 public sealed class MeDiagnosisCasesController(IMyDiagnosisCaseService service) : ControllerBase
 {
-    // multipart/form-data: field "image" (JPEG, PNG or WebP, at most 5 MB) and an optional text field "note".
+    // multipart/form-data: field "image" (JPEG, PNG or WebP, at most 5 MB), optional text fields "note" and "cropType"
+    // (RICE when left out; AI_DIAGNOSIS.md 2.2).
     // The answer is the case after the AI ran: AI_COMPLETED with its result, or FAILED (retry later).
     [HttpPost]
     [EnableRateLimiting(RateLimitingExtensions.UploadPolicy)]
@@ -22,10 +23,11 @@ public sealed class MeDiagnosisCasesController(IMyDiagnosisCaseService service) 
     [RequestFormLimits(MultipartBodyLengthLimit = ImageRules.MaxDiagnosisBytes + 512 * 1024)]
     [Consumes("multipart/form-data")]
     [ProducesResponseType<MyDiagnosisCaseResponse>(StatusCodes.Status201Created)]
-    public async Task<IActionResult> Create(IFormFile image, [FromForm] string? note, CancellationToken cancellationToken)
+    public async Task<IActionResult> Create(
+        IFormFile image, [FromForm] string? note, [FromForm] string? cropType, CancellationToken cancellationToken)
     {
         await using var stream = image.OpenReadStream();
-        var response = await service.CreateAsync(stream, image.FileName, note, cancellationToken);
+        var response = await service.CreateAsync(stream, image.FileName, note, cancellationToken, cropType);
 
         return CreatedAtAction(nameof(Get), new { id = response.Id }, response);
     }

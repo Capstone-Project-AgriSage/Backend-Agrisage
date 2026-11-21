@@ -242,6 +242,9 @@ public static class PermissionCatalog
         // Advisory (docs/reference/api-flows/ADVISORY.md section 8).
         new(new Guid("6685ff65-dfae-4548-b4ae-45cf3b5516e1"), "MY_ADVISORY.READ", "MY_ADVISORY", "Xem", false, ["FARMER"]),
         new(new Guid("3ef7a81d-d4b6-4765-95a7-25fe71f50077"), "DISEASES.CREATE", "DISEASES", "Tạo", false, ["ADMIN", "STORE_OWNER"]),
+        // AI provider for photo diagnosis (AI_DIAGNOSIS.md 2.2): the admin sets the model and its API key.
+        new(new Guid("a1c0b7e2-5d4f-4b3a-9e61-2c7d00a10001"), "AI_PROVIDER.READ", "AI_PROVIDER", "Xem nhà cung cấp AI", false, ["ADMIN"]),
+        new(new Guid("a1c0b7e2-5d4f-4b3a-9e61-2c7d00a10002"), "AI_PROVIDER.MANAGE", "AI_PROVIDER", "Cấu hình nhà cung cấp AI", false, ["ADMIN"]),
         new(new Guid("744b80a0-66dc-43ee-82c3-94cc495b379d"), "DISEASE_PRODUCTS.READ", "DISEASE_PRODUCTS", "Xem", false, ["ADMIN", "SALES_STAFF", "STORE_OWNER"]),
         new(new Guid("ee3bc3cf-0d99-45bd-912c-ea87589bc125"), "DISEASE_PRODUCTS.CREATE", "DISEASE_PRODUCTS", "Tạo", false, ["ADMIN", "STORE_OWNER"]),
         new(new Guid("0b105d26-9577-4d4a-b543-da6462da3239"), "DISEASE_PRODUCTS.UPDATE", "DISEASE_PRODUCTS", "Sửa", false, ["ADMIN", "STORE_OWNER"]),

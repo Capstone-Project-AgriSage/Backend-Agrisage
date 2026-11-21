@@ -130,7 +130,7 @@ public sealed class DiagnosisDatabaseTests
                 db, Ai, clock, new RowLockService(db), results, audit, Options, NullLogger<DiagnosisAiRunner>.Instance);
             var urls = new DiagnosisImageUrls(Files, clock, NullLogger<DiagnosisImageUrls>.Instance);
             var service = new MyDiagnosisCaseService(
-                db, new CurrentFarmer(db, Session.CurrentUser), Files, Files, clock, runner, results, urls, audit,
+                db, new CurrentFarmer(db, Session.CurrentUser), Files, Files, clock, runner, results, urls, new CropService(db), audit,
                 NullLogger<MyDiagnosisCaseService>.Instance);
 
             return await call(service);

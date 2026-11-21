@@ -4,7 +4,9 @@ using AgriSage.Application.Features.GoodsReceipts.Import;
 using AgriSage.Application.Features.Auth;
 using AgriSage.Application.Features.Auth.Interfaces;
 using AgriSage.Application.Features.Notifications;
+using AgriSage.Domain.Features.Diagnosis.Entities;
 using AgriSage.Infrastructure.Ai;
+using AgriSage.Infrastructure.Security;
 using AgriSage.Infrastructure.Caching;
 using AgriSage.Infrastructure.Authentication;
 using AgriSage.Infrastructure.BackgroundJobs;
@@ -149,12 +151,36 @@ public static class DependencyInjection
         if (AiServiceMode.IsSimulated(configuration))
         {
             // Development only (Program refuses this elsewhere): no call, deterministic made-up predictions.
-            services.AddSingleton<IAiDiagnosisClient, SimulatedDiagnosisClient>();
+            services.AddSingleton<SimulatedDiagnosisClient>();
+            services.AddScoped<IFixedClassDiagnosisClient>(provider =>
+                new FixedClassDiagnosisClient(provider.GetRequiredService<SimulatedDiagnosisClient>()));
         }
         else
         {
-            services.AddHttpClient<IAiDiagnosisClient, FastApiDiagnosisClient>(client => client.Timeout = TimeSpan.FromSeconds(130));
+            services.AddHttpClient<FastApiDiagnosisClient>(client => client.Timeout = TimeSpan.FromSeconds(130));
+            services.AddScoped<IFixedClassDiagnosisClient>(provider =>
+                new FixedClassDiagnosisClient(provider.GetRequiredService<FastApiDiagnosisClient>()));
         }
+
+        // General vision models for an ACTIVE model of framework ANTHROPIC (Claude) or GOOGLE (Gemini); the admin enters each
+        // provider's key, stored encrypted with SecretEncryption:Key (AI_DIAGNOSIS.md 2.2). Gemini's timeout is set per call
+        // from the admin's setting, so the HttpClient's own limit only stops a call that hangs past the largest allowed one.
+        services.AddSingleton<ISecretProtector, AesGcmSecretProtector>();
+        services.AddScoped<ClaudeDiagnosisClient>();
+        services.AddHttpClient<GeminiDiagnosisClient>(client =>
+        {
+            client.BaseAddress = new Uri(GeminiDiagnosisClient.BaseUrl);
+            client.Timeout = TimeSpan.FromSeconds(AiProviderSetting.MaxTimeoutSeconds + 10);
+        });
+        services.AddHttpClient<GeminiConnectionTester>(client =>
+        {
+            client.BaseAddress = new Uri(GeminiDiagnosisClient.BaseUrl);
+            client.Timeout = TimeSpan.FromSeconds(60);
+        });
+        services.AddScoped<IProviderConnectionTester, AnthropicConnectionTester>();
+        services.AddScoped<IProviderConnectionTester>(provider => provider.GetRequiredService<GeminiConnectionTester>());
+        services.AddScoped<IAiProviderConnectionTester, AiProviderConnectionTester>();
+        services.AddScoped<IAiDiagnosisClient, RoutingDiagnosisClient>();
 
         return services;
     }

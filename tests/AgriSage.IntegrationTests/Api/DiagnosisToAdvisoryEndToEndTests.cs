@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -119,18 +120,154 @@ public sealed class DiagnosisToAdvisoryEndToEndTests(StaffHttpTests.StaffApiFact
         Assert.Equal(3, mine.GetProperty("items").GetArrayLength());
     }
 
-    private static AiPredictionResult Answer(params (string Label, decimal Score)[] top) =>
-        new(top[0].Label, top[0].Score, top.Select(t => new AiClassScore(t.Label, t.Score)).ToList(), ModelVersion, 12,
+    // AI_DIAGNOSIS.md 2.2: with a general vision model (framework ANTHROPIC), the Farmer picks the crop first; the model is only
+    // offered that crop's diseases and healthy, and an answer naming another crop's disease is refused.
+    [CreditDbFact]
+    public async Task A_crop_chosen_before_the_photo_narrows_a_general_model_to_that_crops_diseases()
+    {
+        var token = TestContext.Current.CancellationToken;
+        await using var e = await CreditTestDatabase.StartAsync(token);
+        var ai = new FakeAi();
+        await using var host = Start(factory, e, services =>
+        {
+            services.RemoveAll<IAiDiagnosisClient>();
+            services.AddSingleton<IAiDiagnosisClient>(ai);
+            services.RemoveAll<IPrivateFileStore>();
+            services.AddSingleton<IPrivateFileStore>(new FakePrivateStore());
+        });
+        await host.GrantDefaultsAsync(RoleCode.Farmer, "FARMER", token);
+        using var owner = await host.ClientAsync(e.User.UserId!.Value, "STORE_OWNER", token);
+        using var farmer = await host.ClientAsync(e.FarmerUserId, "FARMER", token);
+
+        Guid productId;
+        using (var s = e.Scope())
+        {
+            var db = s.ServiceProvider.GetRequiredService<AgriSageDbContext>();
+            foreach (var code in Classes)
+                db.Diseases.Add(new Disease(code, code, isHealthyClass: code == "HEALTHY"));
+            await db.SaveChangesAsync(token);
+            productId = (await db.StoreProducts.AsNoTracking().SingleAsync(x => x.Id == e.StoreProductId, token)).ProductId;
+        }
+
+        // The store adds two durian diseases through the API (the crop is new in the create request).
+        var rot = await OkAsync(await owner.PostAsJsonAsync("/api/diseases", new
+        {
+            code = "DURIAN_PHYTOPHTHORA", name = "Thối gốc chảy nhựa", problemType = "DISEASE", cropType = "durian",
+            symptoms = "Vỏ thân nứt, chảy nhựa nâu đỏ",
+        }, token), token);
+        Assert.Equal("DURIAN", rot.GetProperty("cropType").GetString());
+        await OkAsync(await owner.PostAsJsonAsync("/api/diseases", new
+        {
+            code = "DURIAN_ANTHRACNOSE", name = "Thán thư", problemType = "DISEASE", cropType = "DURIAN",
+        }, token), token);
+        Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync("/api/diseases",
+            new { code = "PEPPER_ROT", name = "Thối rễ", problemType = "DISEASE", cropType = "PEPPER" }, token)).StatusCode);
+        var rotId = rot.GetProperty("id").GetGuid();
+        var link = await OkAsync(await owner.PostAsJsonAsync($"/api/diseases/{rotId}/products", new
+        {
+            productId, recommendationGroup = "PROTECTION", doseText = "Theo nhãn", registrationSource = "TT 75/2025 Phụ lục I",
+        }, token), token);
+        await OkAsync(await owner.PostAsync($"/api/disease-products/{link.GetProperty("id").GetGuid()}/approve", null, token), token);
+
+        // A general model is registered with the codes it may answer: unknown codes are refused, HEALTHY is required.
+        string[] general = [.. Classes, "DURIAN_PHYTOPHTHORA", "DURIAN_ANTHRACNOSE"];
+        Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync("/api/ai-models", new
+        {
+            name = "claude", version = "claude-opus-5-5", framework = "ANTHROPIC", modelStorageUrl = "https://api.anthropic.com",
+            classLabels = new[] { "DURIAN_PHYTOPHTHORA", "PEPPER_ROT", "HEALTHY" },
+        }, token)).StatusCode);
+        var registered = await OkAsync(await owner.PostAsJsonAsync("/api/ai-models", new
+        {
+            name = "claude", version = "claude-opus-5-5", framework = "ANTHROPIC", modelStorageUrl = "https://api.anthropic.com",
+            classLabels = general,
+        }, token), token);
+        using (var s = e.Scope())
+        {
+            var db = s.ServiceProvider.GetRequiredService<AgriSageDbContext>();
+            var model = await db.AiModels.SingleAsync(m => m.Id == registered.GetProperty("id").GetGuid(), token);
+            model.Activate(DateTimeOffset.UtcNow.AddMinutes(-5));
+            var policy = new AiPolicyConfig(model.Id, "p1", 0.70m, DateTimeOffset.UtcNow.AddDays(-1), e.User.UserId!.Value, topK: 3);
+            policy.Activate();
+            db.Add(policy);
+            await db.SaveChangesAsync(token);
+        }
+
+        // The Farmer's crop picker: rice and durian (they have diseases the model knows), not coffee (no disease yet).
+        var crops = await OkAsync(await farmer.GetAsync("/api/me/diagnosis/crops", token), token);
+        Assert.Equal(["RICE", "DURIAN"], crops.EnumerateArray().Select(c => c.GetProperty("code").GetString()));
+        var durianCrop = crops.EnumerateArray().Single(c => c.GetProperty("code").GetString() == "DURIAN");
+        Assert.Equal("Sầu riêng", durianCrop.GetProperty("name").GetString());
+        Assert.Equal(2, durianCrop.GetProperty("diseases").GetArrayLength());
+        var all = await OkAsync(await owner.GetAsync("/api/diagnosis/crops", token), token);
+        Assert.Equal(5, all.GetArrayLength());
+
+        // 1. A durian photo: the model is offered only durian diseases and healthy, and is sure of the rot.
+        ai.Next = Answer("claude-opus-5-5", ("DURIAN_PHYTOPHTHORA", 0.88m), ("DURIAN_ANTHRACNOSE", 0.06m));
+        var sure = (await SendPhotoAsync(farmer, token, "DURIAN")).Case.GetProperty("result");
+        Assert.Equal("CONFIDENT", sure.GetProperty("certainty").GetString());
+        Assert.Equal("DURIAN_PHYTOPHTHORA", sure.GetProperty("disease").GetProperty("code").GetString());
+        Assert.Equal(e.StoreProductId, Assert.Single(sure.GetProperty("products").EnumerateArray()).GetProperty("storeProductId").GetGuid());
+        var request = ai.Last!;
+        Assert.Equal("ANTHROPIC", request.Framework);
+        Assert.Equal("DURIAN", request.CropType);
+        Assert.Equal("Sầu riêng", request.CropName);
+        Assert.Equal(["DURIAN_ANTHRACNOSE", "DURIAN_PHYTOPHTHORA", "HEALTHY"], request.Candidates!.Select(c => c.Code));
+        Assert.Equal("Vỏ thân nứt, chảy nhựa nâu đỏ", request.Candidates!.Single(c => c.Code == "DURIAN_PHYTOPHTHORA").Symptoms);
+
+        // 2. An answer naming a rice disease for a durian photo is not a result: the case fails and can be retried.
+        ai.Next = Answer("claude-opus-5-5", ("LEAF_BLAST", 0.95m));
+        var wrongCrop = (await SendPhotoAsync(farmer, token, "DURIAN")).Case;
+        Assert.Equal("FAILED", wrongCrop.GetProperty("status").GetString());
+
+        // 3. A crop without diseases, or an unknown crop, is refused before any upload; no crop means rice.
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await PostPhotoAsync(farmer, token, "COFFEE")).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await PostPhotoAsync(farmer, token, "PEPPER")).StatusCode);
+        ai.Next = Answer("claude-opus-5-5", ("BROWN_SPOT", 0.9m));
+        await SendPhotoAsync(farmer, token);
+        Assert.Equal("RICE", ai.Last!.CropType);
+        Assert.DoesNotContain(ai.Last!.Candidates!, c => c.Code.StartsWith("DURIAN", StringComparison.Ordinal));
+
+        // The Farmer's history and case page say which crop each photo was of.
+        var history = (await OkAsync(await farmer.GetAsync("/api/me/diagnosis-cases?pageSize=10", token), token)).GetProperty("items").EnumerateArray().ToList();
+        Assert.Equal(["DURIAN", "DURIAN", "RICE"], history.Select(i => i.GetProperty("cropType").GetString()).Order());
+        Assert.All(history, i => Assert.Equal(i.GetProperty("cropType").GetString() == "DURIAN" ? "Sầu riêng" : "Lúa", i.GetProperty("cropName").GetString()));
+        var durianCase = await OkAsync(await farmer.GetAsync($"/api/me/diagnosis-cases/{wrongCrop.GetProperty("id").GetGuid()}", token), token);
+        Assert.Equal("DURIAN", durianCase.GetProperty("cropType").GetString());
+        Assert.Equal("Sầu riêng", durianCase.GetProperty("cropName").GetString());
+
+        // 4. Typed advice filters by crop (ADVISORY.md 1.1); rice growth stages do not apply to a durian problem.
+        var durianProblems = await OkAsync(await farmer.GetAsync("/api/me/advisory/problems?cropType=durian", token), token);
+        Assert.Equal(["DURIAN_ANTHRACNOSE", "DURIAN_PHYTOPHTHORA"],
+            durianProblems.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("code").GetString()).Order());
+        Assert.All(durianProblems.GetProperty("items").EnumerateArray(), i => Assert.Equal("DURIAN", i.GetProperty("cropType").GetString()));
+        Assert.Equal(HttpStatusCode.BadRequest, (await farmer.GetAsync("/api/me/advisory/problems?cropType=PEPPER", token)).StatusCode);
+        var durianAdvice = await OkAsync(await farmer.PostAsJsonAsync("/api/me/advisory/recommendations",
+            new { diseaseId = rotId, growthStage = "TILLERING" }, token), token);
+        Assert.Equal(JsonValueKind.Null, durianAdvice.GetProperty("growthStage").ValueKind);
+        Assert.Equal("DURIAN", durianAdvice.GetProperty("problem").GetProperty("cropType").GetString());
+        Assert.Single(durianAdvice.GetProperty("protection").EnumerateArray());
+    }
+
+    private static AiPredictionResult Answer(params (string Label, decimal Score)[] top) => Answer(ModelVersion, top);
+
+    private static AiPredictionResult Answer(string version, params (string Label, decimal Score)[] top) =>
+        new(top[0].Label, top[0].Score, top.Select(t => new AiClassScore(t.Label, t.Score)).ToList(), version, 12,
             top[0].Score, "agrisage-rice-classifier");
 
-    private static async Task<(JsonElement Case, string Json)> SendPhotoAsync(HttpClient farmer, CancellationToken token)
+    private static async Task<HttpResponseMessage> PostPhotoAsync(HttpClient farmer, CancellationToken token, string? cropType = null)
     {
         using var form = new MultipartFormDataContent();
         var photo = new ByteArrayContent(Png);
         photo.Headers.ContentType = new MediaTypeHeaderValue("image/png");
         form.Add(photo, "image", "la-lua.png");
         form.Add(new StringContent("Lá có vết hình thoi"), "note");
-        var created = await OkAsync(await farmer.PostAsync("/api/me/diagnosis-cases", form, token), token);
+        if (cropType is not null) form.Add(new StringContent(cropType), "cropType");
+        return await farmer.PostAsync("/api/me/diagnosis-cases", form, token);
+    }
+
+    private static async Task<(JsonElement Case, string Json)> SendPhotoAsync(HttpClient farmer, CancellationToken token, string? cropType = null)
+    {
+        var created = await OkAsync(await PostPhotoAsync(farmer, token, cropType), token);
         var response = await farmer.GetAsync($"/api/me/diagnosis-cases/{created.GetProperty("id").GetGuid()}", token);
         var json = await response.Content.ReadAsStringAsync(token);
         return (await OkAsync(response, token), json);
@@ -140,8 +277,13 @@ public sealed class DiagnosisToAdvisoryEndToEndTests(StaffHttpTests.StaffApiFact
     {
         public AiPredictionResult? Next { get; set; }
 
-        public Task<AiPredictionResult> PredictAsync(AiPredictionRequest request, CancellationToken cancellationToken) =>
-            Task.FromResult(Next ?? throw new InvalidOperationException("No AI answer set."));
+        public AiPredictionRequest? Last { get; private set; }
+
+        public Task<AiPredictionResult> PredictAsync(AiPredictionRequest request, CancellationToken cancellationToken)
+        {
+            Last = request;
+            return Task.FromResult(Next ?? throw new InvalidOperationException("No AI answer set."));
+        }
     }
 
     private sealed class FakePrivateStore : IPrivateFileStore

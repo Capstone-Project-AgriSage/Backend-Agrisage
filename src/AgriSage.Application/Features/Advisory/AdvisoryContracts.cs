@@ -34,9 +34,13 @@ public sealed record AdvisoryProblemListRequest : PaginationRequest
     public string? Search { get; init; }
 
     public string? Type { get; init; }
+
+    // A crop code (RICE, DURIAN, ...; AI_DIAGNOSIS.md 2.2): only that crop's problems. Empty = every crop.
+    public string? CropType { get; init; }
 }
 
-public sealed record AdvisoryProblem(Guid Id, string Code, string Name, string ProblemType, string? Summary, string? MatchedBy);
+public sealed record AdvisoryProblem(
+    Guid Id, string Code, string Name, string ProblemType, string? Summary, string? MatchedBy, string CropType = "RICE");
 
 public sealed record AdvisoryRecommendationRequest(
     Guid DiseaseId,
@@ -46,7 +50,8 @@ public sealed record AdvisoryRecommendationRequest(
     string? QueryText = null);
 
 public sealed record AdvisoryProblemDetail(
-    Guid Id, string Code, string Name, string ProblemType, string? Description, string? Symptoms, string? Causes, string? Prevention);
+    Guid Id, string Code, string Name, string ProblemType, string? Description, string? Symptoms, string? Causes, string? Prevention,
+    string CropType = "RICE");
 
 public sealed record AdvisoryPlanLine(Guid ProductPackagingId, string PackagingName, long Quantity, decimal UnitPrice, decimal LineAmount);
 
