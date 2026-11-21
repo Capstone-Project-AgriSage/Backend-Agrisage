@@ -1,4 +1,5 @@
 using AgriSage.Application.Common;
+using AgriSage.Domain.Features.Diagnosis;
 using AgriSage.Application.Common.Exceptions;
 using AgriSage.Application.Common.Interfaces;
 using AgriSage.Application.Common.Models;
@@ -23,7 +24,7 @@ public sealed class MyAdvisoryService(
     ICatalogReadCache? cache = null) : IMyAdvisoryService
 {
     private sealed record ProblemRow(Guid Id, string Code, string Name, ProblemType ProblemType,
-        string? SearchKeywords, string? Symptoms, string? Description);
+        string? SearchKeywords, string? Symptoms, string? Description, string CropType);
 
     // V11: a later call for the same Farmer and problem inside this window updates the latest session.
     private static readonly TimeSpan SessionReuseWindow = TimeSpan.FromMinutes(30);
@@ -36,14 +37,19 @@ public sealed class MyAdvisoryService(
         await currentFarmer.GetAsync(cancellationToken);
 
         // Authenticate every caller; only the shared reference DTOs are cached, never the farmer or an advice session.
-        var catalog = await CatalogCache.ReadAsync(cache, "advisory-problem-catalog", new { },
+        var catalog = await CatalogCache.ReadAsync(cache, "advisory-problem-catalog-v2", new { },
             () => context.Diseases.AsNoTracking().Where(d => d.IsActive && !d.IsHealthyClass)
-                .Select(d => new ProblemRow(d.Id, d.Code, d.Name, d.ProblemType, d.SearchKeywords, d.Symptoms, d.Description))
+                .Select(d => new ProblemRow(d.Id, d.Code, d.Name, d.ProblemType, d.SearchKeywords, d.Symptoms, d.Description, d.CropType))
                 .ToListAsync(cancellationToken), cancellationToken);
         IEnumerable<ProblemRow> rows = catalog;
         if (EnumText.TryParse<ProblemType>(request.Type, out var type))
         {
             rows = rows.Where(d => d.ProblemType == type);
+        }
+
+        if (CropCatalog.Normalize(request.CropType) is { } crop)
+        {
+            rows = rows.Where(d => d.CropType == crop);
         }
 
         var filtered = rows.ToList();
@@ -59,7 +65,7 @@ public sealed class MyAdvisoryService(
 
                 return new AdvisoryProblem(
                     row.Id, row.Code, row.Name, EnumText.Format(row.ProblemType), Summarize(row.Symptoms ?? row.Description),
-                    hit.MatchedBy == ProblemSearch.Match.None ? null : EnumText.Format(hit.MatchedBy));
+                    hit.MatchedBy == ProblemSearch.Match.None ? null : EnumText.Format(hit.MatchedBy), row.CropType);
             })
             .ToList();
 
@@ -86,7 +92,9 @@ public sealed class MyAdvisoryService(
             throw new NotFoundException("Diagnosis case", caseId);
         }
 
-        GrowthStage? stage = EnumText.TryParse<GrowthStage>(request.GrowthStage, out var parsed) ? parsed : null;
+        // Growth stages are rice stages (ADVISORY.md, 2.2): another crop's problem ignores them.
+        GrowthStage? stage = disease.CropType == CropCatalog.Rice && EnumText.TryParse<GrowthStage>(request.GrowthStage, out var parsed)
+            ? parsed : null;
         var outcome = await engine.BuildAsync(disease, farmer.FarmerProfileId, request.AreaSqm, stage, cancellationToken);
 
         var session = await SaveSessionAsync(farmer.FarmerProfileId, storeId, disease, request, stage, outcome, cancellationToken);
@@ -96,7 +104,7 @@ public sealed class MyAdvisoryService(
             session.Id,
             new AdvisoryProblemDetail(
                 disease.Id, disease.Code, disease.Name, EnumText.Format(disease.ProblemType),
-                disease.Description, disease.Symptoms, disease.Causes, disease.Prevention),
+                disease.Description, disease.Symptoms, disease.Causes, disease.Prevention, disease.CropType),
             care,
             request.AreaSqm,
             stage is null ? null : EnumText.Format(stage.Value),

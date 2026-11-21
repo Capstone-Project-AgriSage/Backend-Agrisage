@@ -59,7 +59,20 @@ public sealed class AiModelService(
         var userId = currentUser.UserId ?? throw new AuthenticationFailedException("Authentication is required.");
 
         var labels = request.ClassLabels.Select(l => l.Trim()).ToList();
-        if (labels.Count != RequiredLabels.Length || !labels.ToHashSet().SetEquals(RequiredLabels))
+        if (AiFrameworks.IsGeneralModel(request.Framework))
+        {
+            // A general vision model (AI_DIAGNOSIS.md 2.2) answers any active disease it is given, of any crop, and healthy.
+            var known = await context.Diseases.AsNoTracking()
+                .Where(d => d.IsActive && labels.Contains(d.Code)).Select(d => d.Code).ToListAsync(cancellationToken);
+            var unknown = labels.Except(known).ToList();
+            if (labels.Count == 0 || labels.Count != labels.Distinct().Count() || unknown.Count > 0 || !labels.Contains("HEALTHY"))
+            {
+                throw Invalid("classLabels",
+                    "classLabels must be distinct codes of active diseases and include HEALTHY"
+                    + (unknown.Count > 0 ? $"; unknown: {string.Join(", ", unknown)}." : "."));
+            }
+        }
+        else if (labels.Count != RequiredLabels.Length || !labels.ToHashSet().SetEquals(RequiredLabels))
         {
             throw Invalid("classLabels", $"classLabels must be exactly: {string.Join(", ", RequiredLabels)}.");
         }

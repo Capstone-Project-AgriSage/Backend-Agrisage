@@ -162,6 +162,9 @@ public static class DependencyInjection
         services.AddScoped<IDiagnosisCaseService, DiagnosisCaseService>();
         services.AddScoped<IAiModelService, AiModelService>();
         services.AddScoped<IDiseaseService, DiseaseService>();
+        // Crop chosen before a photo, and the general vision model the admin configures (AI_DIAGNOSIS.md 2.2).
+        services.AddScoped<ICropService, CropService>();
+        services.AddScoped<IAiProviderSettingsService, AiProviderSettingsService>();
 
         // Advisory: problem to products, quantity for the field and the cart (api-flows/ADVISORY.md).
         services.AddScoped<AdvisoryEngine>();

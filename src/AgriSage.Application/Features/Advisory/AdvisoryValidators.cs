@@ -1,4 +1,5 @@
 using AgriSage.Application.Common;
+using AgriSage.Domain.Features.Diagnosis;
 using AgriSage.Application.Common.Validators;
 using AgriSage.Domain.Features.Advisory.Entities;
 using AgriSage.Domain.Features.Advisory.Enums;
@@ -16,6 +17,9 @@ public sealed class AdvisoryProblemListRequestValidator : AbstractValidator<Advi
         RuleFor(r => r.Type).Must(type => EnumText.TryParse<ProblemType>(type, out _))
             .When(r => !string.IsNullOrWhiteSpace(r.Type))
             .WithMessage("Type must be DISEASE, PEST, WEED, NUTRITION or GROWTH.");
+        RuleFor(r => r.CropType).Must(crop => CropCatalog.IsKnown(CropCatalog.Normalize(crop)))
+            .When(r => !string.IsNullOrWhiteSpace(r.CropType))
+            .WithMessage($"CropType must be one of: {string.Join(", ", CropCatalog.All.Select(c => c.Code))}.");
     }
 }
 

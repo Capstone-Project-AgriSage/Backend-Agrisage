@@ -1,6 +1,7 @@
 using AgriSage.Application.Common;
 using AgriSage.Application.Common.Exceptions;
 using AgriSage.Application.Common.Interfaces;
+using AgriSage.Domain.Features.Diagnosis;
 using AgriSage.Domain.Features.Diagnosis.Entities;
 using AgriSage.Domain.Features.Diagnosis.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -44,6 +45,7 @@ public sealed class DiseaseService(IAgriSageDbContext context, AuditTrail? audit
             code,
             request.Name.Trim(),
             isHealthyClass: false,
+            cropType: CropCatalog.Normalize(request.CropType) ?? CropCatalog.Rice,
             scientificName: Texts.Clean(request.ScientificName),
             description: Texts.Clean(request.Description),
             symptoms: Texts.Clean(request.Symptoms),
@@ -54,7 +56,7 @@ public sealed class DiseaseService(IAgriSageDbContext context, AuditTrail? audit
         context.Diseases.Add(disease);
         audit?.Record(
             "DISEASE_CREATED", "DISEASE", disease.Id, await ActiveStore.GetIdAsync(context, cancellationToken),
-            newValues: new { disease.Code, disease.Name, ProblemType = EnumText.Format(disease.ProblemType) });
+            newValues: new { disease.Code, disease.Name, disease.CropType, ProblemType = EnumText.Format(disease.ProblemType) });
         await context.SaveChangesAsync(cancellationToken);
 
         return ToResponse(disease, [], new Dictionary<Guid, string>());

@@ -27,9 +27,10 @@ public sealed record MyDiagnosisCaseListRequest : PaginationRequest
 
 // DiseaseCode / DiseaseName: the predicted disease of an AI result, or the final disease of a case reviewed before 2.0.
 // Certainty: CONFIDENT, UNCERTAIN or VERIFIED, null while there is no result.
+// CropType / CropName: the crop the Farmer chose before the photo (AI_DIAGNOSIS.md 2.2; RICE for older cases).
 public sealed record MyDiagnosisCaseListItem(
     Guid Id, string CaseNumber, string Status, DateTimeOffset SubmittedAt, DateTimeOffset? CompletedAt,
-    string? DiseaseCode, string? DiseaseName, string? Certainty);
+    string? DiseaseCode, string? DiseaseName, string? Certainty, string CropType, string CropName);
 
 // Certainty: CONFIDENT (the AI passed the policy), UNCERTAIN (it did not: Hint = RETAKE_PHOTO_OR_ASK_STORE, no chemical
 // treatment, no product) or VERIFIED (decided by a reviewer before 2.0). ReviewerComment only for VERIFIED.
@@ -45,6 +46,7 @@ public sealed record DiagnosisInconclusiveResponse(string? Comment, string Hint)
 
 // What the Farmer sees (AI_DIAGNOSIS.md 2.0, section 7): a disease and a certainty, never a probability, a top-k, a model
 // or a policy (D8). CanRetry: the AI failed (or the case was interrupted) and may be run again by the Farmer (D14).
+// CropType / CropName: the crop chosen before the photo (2.2).
 public sealed record MyDiagnosisCaseResponse(
     Guid Id,
     string CaseNumber,
@@ -55,13 +57,17 @@ public sealed record MyDiagnosisCaseResponse(
     DiagnosisImageResponse? Image,
     DiagnosisResultResponse? Result,
     DiagnosisInconclusiveResponse? Inconclusive,
-    bool CanRetry);
+    bool CanRetry,
+    string CropType,
+    string CropName);
 
 public sealed record CancelDiagnosisRequest(string? Reason = null);
 
 public interface IMyDiagnosisCaseService
 {
-    Task<MyDiagnosisCaseResponse> CreateAsync(Stream image, string? fileName, string? note, CancellationToken cancellationToken);
+    // cropType: the crop the Farmer chose (AI_DIAGNOSIS.md 2.2); null = RICE, as before crops could be chosen.
+    Task<MyDiagnosisCaseResponse> CreateAsync(
+        Stream image, string? fileName, string? note, CancellationToken cancellationToken, string? cropType = null);
 
     Task<PagedResult<MyDiagnosisCaseListItem>> ListAsync(MyDiagnosisCaseListRequest request, CancellationToken cancellationToken);
 
@@ -283,7 +289,8 @@ public sealed record DiseaseCreateRequest(
     string? Symptoms = null,
     string? Causes = null,
     string? Prevention = null,
-    string? SearchKeywords = null);
+    string? SearchKeywords = null,
+    string? CropType = null);
 
 // TreatmentType: CULTURAL, CHEMICAL, PREVENTIVE or OTHER.
 public sealed record TreatmentRequest(

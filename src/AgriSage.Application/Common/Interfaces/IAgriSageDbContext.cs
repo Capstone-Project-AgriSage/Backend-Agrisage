@@ -177,6 +177,8 @@ public interface IAgriSageDbContext
 
     DbSet<AiPolicyConfig> AiPolicyConfigs { get; }
 
+    DbSet<AiProviderSetting> AiProviderSettings { get; }
+
     DbSet<DiagnosisCase> DiagnosisCases { get; }
 
     DbSet<DiagnosisImage> DiagnosisImages { get; }

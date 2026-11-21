@@ -2829,6 +2829,84 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AgriSage.Domain.Features.Diagnosis.Entities.AiProviderSetting", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("ApiKeyHint")
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)")
+                        .HasColumnName("api_key_hint");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("DeletedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<string>("EncryptedApiKey")
+                        .HasColumnType("text")
+                        .HasColumnName("encrypted_api_key");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_enabled");
+
+                    b.Property<string>("ModelId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("model_id");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("provider");
+
+                    b.Property<int>("TimeoutSeconds")
+                        .HasColumnType("integer")
+                        .HasDefaultValue(60)
+                        .HasColumnName("timeout_seconds");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_ai_provider_settings");
+
+                    b.HasIndex(new[] { "Provider" }, "ux_ai_provider_settings_provider")
+                        .IsUnique()
+                        .HasDatabaseName("ux_ai_provider_settings_provider")
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.ToTable("ai_provider_settings", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_ai_provider_settings_enabled_needs_key", "is_enabled = FALSE OR encrypted_api_key IS NOT NULL");
+
+                            t.HasCheckConstraint("ck_ai_provider_settings_provider", "provider IN ('ANTHROPIC', 'GOOGLE')");
+
+                            t.HasCheckConstraint("ck_ai_provider_settings_timeout_seconds", "timeout_seconds BETWEEN 10 AND 300");
+                        });
+                });
+
             modelBuilder.Entity("AgriSage.Domain.Features.Diagnosis.Entities.DiagnosisCase", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5796,6 +5874,24 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                             IsDelegable = false,
                             Module = "DISEASES",
                             Name = "Tạo"
+                        },
+                        new
+                        {
+                            Id = new Guid("a1c0b7e2-5d4f-4b3a-9e61-2c7d00a10001"),
+                            Code = "AI_PROVIDER.READ",
+                            IsActive = true,
+                            IsDelegable = false,
+                            Module = "AI_PROVIDER",
+                            Name = "Xem nhà cung cấp AI"
+                        },
+                        new
+                        {
+                            Id = new Guid("a1c0b7e2-5d4f-4b3a-9e61-2c7d00a10002"),
+                            Code = "AI_PROVIDER.MANAGE",
+                            IsActive = true,
+                            IsDelegable = false,
+                            Module = "AI_PROVIDER",
+                            Name = "Cấu hình nhà cung cấp AI"
                         },
                         new
                         {
@@ -10611,6 +10707,15 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_ai_policy_configs_deleted_by");
 
                     b.Navigation("AiModel");
+                });
+
+            modelBuilder.Entity("AgriSage.Domain.Features.Diagnosis.Entities.AiProviderSetting", b =>
+                {
+                    b.HasOne("AgriSage.Domain.Features.Identity.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("DeletedBy")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_ai_provider_settings_deleted_by");
                 });
 
             modelBuilder.Entity("AgriSage.Domain.Features.Diagnosis.Entities.DiagnosisCase", b =>

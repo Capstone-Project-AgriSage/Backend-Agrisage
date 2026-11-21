@@ -173,6 +173,8 @@ public sealed class AgriSageDbContext : DbContext, IAgriSageDbContext
 
     public DbSet<AiPolicyConfig> AiPolicyConfigs => Set<AiPolicyConfig>();
 
+    public DbSet<AiProviderSetting> AiProviderSettings => Set<AiProviderSetting>();
+
     public DbSet<DiagnosisCase> DiagnosisCases => Set<DiagnosisCase>();
 
     public DbSet<DiagnosisImage> DiagnosisImages => Set<DiagnosisImage>();

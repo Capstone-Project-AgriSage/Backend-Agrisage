@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AgriSage.Application.Common;
 using AgriSage.Application.Common.Validators;
+using AgriSage.Domain.Features.Diagnosis;
 using AgriSage.Domain.Features.Diagnosis.Enums;
 using FluentValidation;
 
@@ -107,6 +108,8 @@ public sealed class DiseaseCreateRequestValidator : AbstractValidator<DiseaseCre
         RuleFor(r => r.Causes).MaximumLength(4000);
         RuleFor(r => r.Prevention).MaximumLength(4000);
         RuleFor(r => r.SearchKeywords).MaximumLength(1000);
+        RuleFor(r => r.CropType).Must(crop => crop is null || CropCatalog.IsKnown(CropCatalog.Normalize(crop)))
+            .WithMessage($"CropType must be one of: {string.Join(", ", CropCatalog.All.Select(c => c.Code))}.");
     }
 }
 
