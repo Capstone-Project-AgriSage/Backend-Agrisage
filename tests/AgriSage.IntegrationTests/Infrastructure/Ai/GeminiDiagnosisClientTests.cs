@@ -148,6 +148,7 @@ public sealed class GeminiDiagnosisClientTests
             var caseText = sentBody.RootElement.GetProperty("contents")[0].GetProperty("parts")[1].GetProperty("text").GetString();
             Assert.Contains("Thối gốc chảy nhựa", caseText);
             Assert.Contains("Crop chosen by the farmer: Sầu riêng", caseText);
+            Assert.Contains("<<<Gốc cây chảy nhựa nâu sau đợt mưa>>>", caseText);
         }
 
         Assert.Equal("DURIAN_PHYTOPHTHORA", result.PredictedClassLabel);
@@ -229,7 +230,8 @@ public sealed class GeminiDiagnosisClientTests
 
     private static AiPredictionRequest Request() =>
         new(new MemoryStream([0xFF, 0xD8, 0xFF, 0xE0, 1, 2, 3]), "leaf.jpg", "image/jpeg", 5, "DG-20261121-0001",
-            Framework: "GOOGLE", CropType: "DURIAN", CropName: "Sầu riêng", Candidates: Durian);
+            Framework: "GOOGLE", CropType: "DURIAN", CropName: "Sầu riêng", Candidates: Durian,
+            FarmerNote: "Gốc cây chảy nhựa nâu sau đợt mưa");
 
     private static HttpClient Http(Handler handler) => new(handler) { BaseAddress = new Uri(GeminiDiagnosisClient.BaseUrl) };
 

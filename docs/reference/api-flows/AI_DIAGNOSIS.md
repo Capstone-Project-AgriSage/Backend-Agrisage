@@ -404,7 +404,10 @@ AiProviderSettingsResponse { "provider": "ANTHROPIC", "modelId": "claude-opus-5-
   `RoutingDiagnosisClient` sends a model of framework `ANTHROPIC` to `ClaudeDiagnosisClient`, `GOOGLE` to
   `GeminiDiagnosisClient`, and every other model to the FastAPI client as before.
 - Both general clients use the same prompt and answer rules (`GeneralModelPrompt`): the photo and the case text (crop,
-  candidate codes with names and symptoms, NONE) go with a fixed system prompt; the answer is constrained by a JSON schema
+  candidate codes with names and symptoms, NONE, and the Farmer's note when there is one) go with a fixed system prompt.
+  The note (`AiPredictionRequest.FarmerNote`, from the case's `farmer_note`) is sent as one framed line of at most 500
+  characters, marked as context only and never an instruction; the photo decides. It goes to the external provider
+  together with the photo. The FastAPI model does not use it. The answer is constrained by a JSON schema
   (`label` ∈ candidates + NONE, `confidence`, `alternatives`, `reason`). `model_version` = the configured model id, so the
   ACTIVE model's `version` must equal it (D10). Any failure (no key, provider off, network, rate limit, refusal or block,
   answer outside the schema) is `AiServiceUnavailableException`: the case is FAILED and the Farmer retries (D14). The key is

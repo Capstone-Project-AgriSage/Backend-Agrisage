@@ -37,7 +37,7 @@ public sealed class GeminiDiagnosisClient(
         var photo = await GeneralModelPrompt.ReadPhotoAsync(request.Image, cancellationToken);
         var labels = candidates.Select(c => c.Code).Append(GeneralModelPrompt.NoneLabel).ToList();
         var body = RequestBody(request.ContentType, photo,
-            GeneralModelPrompt.CaseText(request.CropName ?? request.CropType ?? "", candidates), labels);
+            GeneralModelPrompt.CaseText(request.CropName ?? request.CropType ?? "", candidates, request.FarmerNote), labels);
 
         var watch = Stopwatch.StartNew();
         HttpStatusCode status;

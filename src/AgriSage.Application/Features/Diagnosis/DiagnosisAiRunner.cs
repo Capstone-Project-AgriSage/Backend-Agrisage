@@ -42,7 +42,7 @@ public sealed class DiagnosisAiRunner(
         bool failWhenUnavailable = false)
     {
         var caseInfo = await context.DiagnosisCases.AsNoTracking()
-            .Where(c => c.Id == caseId).Select(c => new { c.CaseNumber, c.CropType }).FirstOrDefaultAsync(cancellationToken)
+            .Where(c => c.Id == caseId).Select(c => new { c.CaseNumber, c.CropType, c.FarmerNote }).FirstOrDefaultAsync(cancellationToken)
             ?? throw new NotFoundException("Diagnosis case", caseId);
         var caseNumber = caseInfo.CaseNumber;
 
@@ -88,7 +88,7 @@ public sealed class DiagnosisAiRunner(
                 result = await client.PredictAsync(
                     new AiPredictionRequest(
                         stream, fileName, contentType, RequestedTopK, caseNumber, model.Framework, caseInfo.CropType,
-                        CropCatalog.Find(caseInfo.CropType)?.Name ?? caseInfo.CropType, candidates),
+                        CropCatalog.Find(caseInfo.CropType)?.Name ?? caseInfo.CropType, candidates, caseInfo.FarmerNote),
                     cancellationToken);
             }
             catch (AiServiceUnavailableException) when (!failWhenUnavailable)
