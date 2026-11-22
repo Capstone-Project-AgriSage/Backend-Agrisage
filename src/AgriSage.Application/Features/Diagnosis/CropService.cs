@@ -8,7 +8,8 @@ namespace AgriSage.Application.Features.Diagnosis;
 
 public sealed record CropDiseaseItem(string Code, string Name);
 
-// PhotoDiagnosis: the ACTIVE model can name at least one disease of this crop, so a Farmer may send a photo of it.
+// DiseaseCount: every active disease of the crop. Diseases: only those the ACTIVE model can name (what the Farmer's app lists
+// as "AI nhận diện được"; all of them while no model is active). PhotoDiagnosis: at least one, so a photo may be sent.
 public sealed record CropResponse(string Code, string Name, int DiseaseCount, bool PhotoDiagnosis, IReadOnlyList<CropDiseaseItem> Diseases);
 
 public interface ICropService
@@ -50,7 +51,7 @@ public sealed class CropService(IAgriSageDbContext context) : ICropService
             var answerable = modelLabels is null ? own : own.Where(d => modelLabels.Contains(d.Code)).ToList();
             return new CropResponse(
                 crop.Code, crop.Name, own.Count, answerable.Count > 0,
-                own.Select(d => new CropDiseaseItem(d.Code, d.Name)).ToList());
+                answerable.Select(d => new CropDiseaseItem(d.Code, d.Name)).ToList());
         }).ToList();
     }
 
