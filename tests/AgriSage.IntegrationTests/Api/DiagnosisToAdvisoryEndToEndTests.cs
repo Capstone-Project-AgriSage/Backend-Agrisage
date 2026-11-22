@@ -160,6 +160,11 @@ public sealed class DiagnosisToAdvisoryEndToEndTests(StaffHttpTests.StaffApiFact
         {
             code = "DURIAN_ANTHRACNOSE", name = "Thán thư", problemType = "DISEASE", cropType = "DURIAN",
         }, token), token);
+        // A third durian disease the general model below is NOT registered for.
+        await OkAsync(await owner.PostAsJsonAsync("/api/diseases", new
+        {
+            code = "DURIAN_ALGAL_SPOT", name = "Đốm rong", problemType = "DISEASE", cropType = "DURIAN",
+        }, token), token);
         Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync("/api/diseases",
             new { code = "PEPPER_ROT", name = "Thối rễ", problemType = "DISEASE", cropType = "PEPPER" }, token)).StatusCode);
         var rotId = rot.GetProperty("id").GetGuid();
@@ -197,7 +202,10 @@ public sealed class DiagnosisToAdvisoryEndToEndTests(StaffHttpTests.StaffApiFact
         Assert.Equal(["RICE", "DURIAN"], crops.EnumerateArray().Select(c => c.GetProperty("code").GetString()));
         var durianCrop = crops.EnumerateArray().Single(c => c.GetProperty("code").GetString() == "DURIAN");
         Assert.Equal("Sầu riêng", durianCrop.GetProperty("name").GetString());
-        Assert.Equal(2, durianCrop.GetProperty("diseases").GetArrayLength());
+        // The app lists what the AI can name: not the disease the model was not registered for, which still counts.
+        Assert.Equal(["DURIAN_ANTHRACNOSE", "DURIAN_PHYTOPHTHORA"],
+            durianCrop.GetProperty("diseases").EnumerateArray().Select(d => d.GetProperty("code").GetString()).Order());
+        Assert.Equal(3, durianCrop.GetProperty("diseaseCount").GetInt32());
         var all = await OkAsync(await owner.GetAsync("/api/diagnosis/crops", token), token);
         Assert.Equal(5, all.GetArrayLength());
 
@@ -237,7 +245,7 @@ public sealed class DiagnosisToAdvisoryEndToEndTests(StaffHttpTests.StaffApiFact
 
         // 4. Typed advice filters by crop (ADVISORY.md 1.1); rice growth stages do not apply to a durian problem.
         var durianProblems = await OkAsync(await farmer.GetAsync("/api/me/advisory/problems?cropType=durian", token), token);
-        Assert.Equal(["DURIAN_ANTHRACNOSE", "DURIAN_PHYTOPHTHORA"],
+        Assert.Equal(["DURIAN_ALGAL_SPOT", "DURIAN_ANTHRACNOSE", "DURIAN_PHYTOPHTHORA"],
             durianProblems.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("code").GetString()).Order());
         Assert.All(durianProblems.GetProperty("items").EnumerateArray(), i => Assert.Equal("DURIAN", i.GetProperty("cropType").GetString()));
         Assert.Equal(HttpStatusCode.BadRequest, (await farmer.GetAsync("/api/me/advisory/problems?cropType=PEPPER", token)).StatusCode);

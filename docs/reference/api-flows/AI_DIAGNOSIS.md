@@ -381,7 +381,7 @@ Controller and action names that key the map: `MeDiagnosisCases.{Create,List,Get
 
 | Method | Route | Role / permission | Body / query | Response |
 |---|---|---|---|---|
-| GET | `/api/me/diagnosis/crops` | Farmer / `MY_DIAGNOSIS.CREATE` | — | `200 CropResponse[]`: the crops a photo can be sent for now (D16) |
+| GET | `/api/me/diagnosis/crops` | Farmer / `MY_DIAGNOSIS.CREATE` | — | `200 CropResponse[]`: the crops a photo can be sent for now (D16); `diseases` = only those the ACTIVE model can name, `diseaseCount` = every active disease of the crop |
 | GET | `/api/diagnosis/crops` | Operate / `DISEASES.READ` | — | `200 CropResponse[]`: every catalog crop, `photoDiagnosis` tells whether it is offered |
 | POST | `/api/me/diagnosis-cases` | Farmer / `MY_DIAGNOSIS.CREATE` | multipart: `image`, `note?`, **`cropType?`** | as before; `400` unknown crop, `422` crop not offered |
 | GET | `/api/me/diagnosis-cases`, `/api/me/diagnosis-cases/{id}` | Farmer | as before | list items and the case add **`cropType`, `cropName`** (the crop chosen before the photo; RICE / Lúa for older cases) |
