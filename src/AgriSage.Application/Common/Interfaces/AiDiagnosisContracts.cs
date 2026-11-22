@@ -13,7 +13,9 @@ public sealed record AiPredictionRequest(
     string? Framework = null,
     string? CropType = null,
     string? CropName = null,
-    IReadOnlyList<AiCandidate>? Candidates = null);
+    IReadOnlyList<AiCandidate>? Candidates = null,
+    // What the Farmer wrote with the photo. A general vision model gets it as context only (AI_DIAGNOSIS.md 2.2).
+    string? FarmerNote = null);
 
 // A class the model may answer: an active disease of the chosen crop (code, Vietnamese name and symptoms from the knowledge
 // base), or the healthy class.

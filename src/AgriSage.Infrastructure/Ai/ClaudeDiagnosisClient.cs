@@ -62,7 +62,7 @@ public sealed class ClaudeDiagnosisClient(
                         {
                             Source = new BetaBase64ImageSource { Data = Convert.ToBase64String(photo), MediaType = request.ContentType },
                         },
-                        new BetaTextBlockParam { Text = GeneralModelPrompt.CaseText(request.CropName ?? request.CropType ?? "", candidates) },
+                        new BetaTextBlockParam { Text = GeneralModelPrompt.CaseText(request.CropName ?? request.CropType ?? "", candidates, request.FarmerNote) },
                     },
                 },
             ],

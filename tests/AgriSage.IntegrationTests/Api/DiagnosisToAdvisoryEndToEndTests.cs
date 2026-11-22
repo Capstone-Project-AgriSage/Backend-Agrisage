@@ -219,6 +219,7 @@ public sealed class DiagnosisToAdvisoryEndToEndTests(StaffHttpTests.StaffApiFact
         Assert.Equal("ANTHROPIC", request.Framework);
         Assert.Equal("DURIAN", request.CropType);
         Assert.Equal("Sầu riêng", request.CropName);
+        Assert.Equal("Lá có vết hình thoi", request.FarmerNote);
         Assert.Equal(["DURIAN_ANTHRACNOSE", "DURIAN_PHYTOPHTHORA", "HEALTHY"], request.Candidates!.Select(c => c.Code));
         Assert.Equal("Vỏ thân nứt, chảy nhựa nâu đỏ", request.Candidates!.Single(c => c.Code == "DURIAN_PHYTOPHTHORA").Symptoms);
 
