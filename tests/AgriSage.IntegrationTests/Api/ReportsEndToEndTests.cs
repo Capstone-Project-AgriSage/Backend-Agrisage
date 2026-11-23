@@ -12,7 +12,8 @@ namespace AgriSage.IntegrationTests.Api;
 // (7 million, gross profit = sales − cost); the credit filter keeps the 4 million; debt aging shows the 3 million still owed;
 // credit exposure = 3 million owed + 2 million reserved; the counter view shows the 3 million cash sale. Sale staff see the
 // counter view (it needs COUNTER_SALES.SELL, decision 2026-11-16) but no other report: those need REPORTS.READ, not a sale
-// staff default. Every call goes through HTTP with the real services.
+// staff default. My sales (also COUNTER_SALES.SELL) gives each seller only their own orders, sales and payments, never cost;
+// the advisory and diagnosis report is the owner's. Every call goes through HTTP with the real services.
 public sealed class ReportsEndToEndTests(StaffHttpTests.StaffApiFactory factory)
     : IClassFixture<StaffHttpTests.StaffApiFactory>
 {
@@ -92,5 +93,32 @@ public sealed class ReportsEndToEndTests(StaffHttpTests.StaffApiFactory factory)
         // The other reports need REPORTS.READ, which sale staff do not have by default; the owner may delegate it.
         Assert.Equal(HttpStatusCode.Forbidden, (await staff.GetAsync($"/api/reports/revenue-summary?{period}", token)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await staff.GetAsync("/api/reports/debt-aging", token)).StatusCode);
+
+        // My sales: the staff member created and took the cash for the 3 million counter sale. The Farmer created the credit
+        // orders and payOS confirmed the repayment, so the owner, who only confirmed and handed over, has none of it.
+        var mine = await OkAsync(await staff.GetAsync($"/api/reports/my-sales?{period}", token), token);
+        Assert.Equal(1, mine.GetProperty("orders").GetProperty("createdCount").GetInt32());
+        Assert.Equal(1, mine.GetProperty("orders").GetProperty("completedCount").GetInt32());
+        var mySales = mine.GetProperty("sales");
+        Assert.Equal(1, mySales.GetProperty("orderCount").GetInt32());
+        Assert.Equal(3_000_000m, mySales.GetProperty("netSales").GetDecimal());
+        Assert.False(mySales.TryGetProperty("costOfGoods", out _));
+        Assert.False(mySales.TryGetProperty("grossProfit", out _));
+        Assert.Equal(3_000_000m, mine.GetProperty("payments").GetProperty("receivedAmount").GetDecimal());
+        Assert.Equal(0m, mine.GetProperty("payments").GetProperty("debtRepaymentAmount").GetDecimal());
+        var ownerMine = await OkAsync(await owner.GetAsync($"/api/reports/my-sales?{period}", token), token);
+        Assert.Equal(0, ownerMine.GetProperty("orders").GetProperty("createdCount").GetInt32());
+        Assert.Equal(0m, ownerMine.GetProperty("sales").GetProperty("netSales").GetDecimal());
+        Assert.Equal(0, ownerMine.GetProperty("payments").GetProperty("paymentCount").GetInt32());
+        Assert.Equal(HttpStatusCode.BadRequest, (await staff.GetAsync("/api/reports/my-sales", token)).StatusCode);
+
+        // Advice and diagnosis is the owner's report (REPORTS.READ). Delivery staff get neither report.
+        var advice = await OkAsync(await owner.GetAsync($"/api/reports/advisory-diagnosis?{period}", token), token);
+        Assert.Equal(7, advice.GetProperty("attributionDays").GetInt32());
+        Assert.Equal(HttpStatusCode.Forbidden, (await staff.GetAsync($"/api/reports/advisory-diagnosis?{period}", token)).StatusCode);
+        var driverId = await host.AddMemberAsync(RoleCode.DeliveryStaff, "DELIVERY_STAFF", "Driver", token);
+        using var driver = await host.ClientAsync(driverId, "DELIVERY_STAFF", token);
+        Assert.Equal(HttpStatusCode.Forbidden, (await driver.GetAsync($"/api/reports/my-sales?{period}", token)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await driver.GetAsync($"/api/reports/advisory-diagnosis?{period}", token)).StatusCode);
     }
 }

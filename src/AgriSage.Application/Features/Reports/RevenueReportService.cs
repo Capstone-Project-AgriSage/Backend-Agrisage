@@ -29,7 +29,7 @@ public sealed class RevenueReportService(IAgriSageDbContext db, ReportScope scop
             orders == 0 ? 0m : CostRounding.RoundMoney(value / orders),
             value == 0 ? null : CostRounding.RoundMoney((value - cost) * 100m / value));
 
-    private static async Task<RevenueMetrics> TotalsAsync(IQueryable<RevenueLedger.Entry> query, CancellationToken token)
+    internal static async Task<RevenueMetrics> TotalsAsync(IQueryable<RevenueLedger.Entry> query, CancellationToken token)
     {
         var total = await query.GroupBy(e => 1).Select(g => new
         {

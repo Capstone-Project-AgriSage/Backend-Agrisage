@@ -10,7 +10,10 @@ namespace AgriSage.Application.Features.Advisory;
 // Read only: AsNoTracking, filters and paging in SQL.
 public sealed class AdvisorySessionService(IAgriSageDbContext context) : IAdvisorySessionService
 {
-    private static readonly TimeSpan PurchaseWindow = TimeSpan.FromDays(7);
+    // Also the conversion window of the advisory report (REPORTS.md "Advisory and diagnosis").
+    internal const int PurchaseWindowDays = 7;
+
+    private static readonly TimeSpan PurchaseWindow = TimeSpan.FromDays(PurchaseWindowDays);
 
     public async Task<PagedResult<AdvisorySessionResponse>> ListAsync(
         AdvisorySessionListRequest request, CancellationToken cancellationToken)
