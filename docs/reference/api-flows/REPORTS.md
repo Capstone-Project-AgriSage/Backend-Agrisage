@@ -92,6 +92,59 @@ every other report keeps `REPORTS.READ`), with the same active-store membership 
 The backend clock defines today and the reporting cutoff. The frontend shows exactly four cards above the
 counter workspace, supports refresh, and reloads after successful relevant business writes.
 
+## Advisory and diagnosis — 2026-11-23
+
+`GET /api/reports/advisory-diagnosis?fromDate&toDate`: `Manage` roles plus `REPORTS.READ`, the same active-store scope
+and period rules as the other reports. Read-only; no schema change. It feeds the owner dashboard's
+"Tư vấn & chẩn đoán AI" row.
+
+`AdvisoryDiagnosisReportResponse`: `fromDate`, `toDate`, `attributionDays` (7), `advisory`, `topProblems`, `diagnosis`.
+
+- `advisory`: `sessionCount`, `farmerCount`, `textSessionCount`, `diagnosisSessionCount`, `sessionsWithProducts`,
+  `estimatedValue`, `convertedSessions`, `conversionPercent`, `convertedOrderValue`.
+  - Sessions are the store's live `advisory_sessions` whose `created_at` falls on the Vietnam days of the period.
+    `farmerCount` counts distinct Farmers; the two source counts split by `source` (TEXT, DIAGNOSIS_CASE).
+  - `sessionsWithProducts` = sessions with at least one `advisory_session_items` row; `estimatedValue` = the sum of
+    their `estimated_amount` (a missing amount counts 0). This is what the advice priced, not money received.
+  - A session is **converted** when the same Farmer created an order of the store that is not CANCELLED, at or after
+    the session time and within `attributionDays` × 24 h of it, with at least one order line for a store product the
+    session suggested: the `boughtWithin7Days` rule of the staff session list (ADVISORY.md section 7). Nothing links an order to an advisory session, so this is an attribution, not proof that the
+    advice caused the order; the dashboard says so. A partially cancelled order still counts. An order of a session
+    near the end of the period may arrive after `toDate`, so recent figures can still grow.
+  - `convertedOrderValue` = the sum of `line_total_amount` of those matching lines (suggested products only), each
+    order line counted once even when several sessions match it. Order value, not recognized revenue.
+  - `conversionPercent` = convertedSessions / sessionsWithProducts × 100 (2 decimals), null when no session had products.
+- `topProblems`: at most 5 rows `diseaseId`, `code`, `name`, `cropType`, `sessionCount`; most sessions first, then code.
+- `diagnosis`: `caseCount` and `byCrop` rows `cropType`, `cropName` (catalog name), `caseCount`, `confidentCount`,
+  `uncertainCount`, `verifiedCount`, `noResultCount`.
+  - Cases are `diagnosis_cases` whose `submitted_at` falls on the Vietnam days of the period. Diagnosis cases carry
+    no store (one operational store, as in the staff case list), so every case counts.
+  - The certainty is the one the Farmer reads (`DiagnosisResultPolicy.CertaintyOf` with the latest SUCCESS
+    inference's `passed_policy`): CONFIDENT, UNCERTAIN, or VERIFIED for a case confirmed by the store before
+    2026-10-21. `noResultCount` = everything else (submitted, processing, failed, cancelled, inconclusive).
+  - Rows follow the crop catalog order and list only crops with a case; a crop code outside the catalog keeps its
+    code as `cropName` and comes last.
+
+## My sales — 2026-11-23
+
+`GET /api/reports/my-sales?fromDate&toDate`: `Operate` roles plus `COUNTER_SALES.SELL` (like
+`/counter-sales-today`, decision 2026-11-23), the same active-store scope and period rules. It answers only for the
+signed-in user (from the token; no user id is accepted). Read-only; no schema change. It feeds the sales staff
+dashboard's "Kết quả của tôi".
+
+`MySalesReportResponse`: `fromDate`, `toDate`, `orders`, `sales`, `payments`.
+
+- `orders`: `createdCount`, `completedCount`, `cancelledCount`, `openCount` for the store's orders with
+  `created_by` = me and `created_at` on the Vietnam days of the period, by current status. CANCELLED and
+  PARTIALLY_CANCELLED count as cancelled, COMPLETED as completed, every other status as open.
+- `sales`: `orderCount`, `fulfilledValue`, `returnValue`, `netSales`, `averageOrderValue`, with the `/revenue`
+  definitions filtered to orders I created (`staffUserId` = me). **No cost of goods, gross profit or margin**: sale
+  staff do not see cost.
+- `payments`: `paymentCount`, `receivedAmount`, `orderPaymentAmount`, `debtRepaymentAmount` for the store's payments
+  with `confirmed_by` = me, confirmed on the Vietnam days of the period, status PAID, PARTIALLY_REFUNDED or REFUNDED
+  (as `/payments`). Gross receipts; refunds are not subtracted. payOS payments confirmed by the webhook have no
+  confirming person and are not anyone's.
+
 ## Calling the APIs
 
 Bearer authentication is required. For example:
@@ -103,8 +156,10 @@ GET /api/reports/revenue?fromDate=2026-10-01&toDate=2026-10-31&groupBy=PRODUCT&s
 GET /api/reports/payments?fromDate=2026-10-01&toDate=2026-10-31&groupBy=METHOD
 GET /api/reports/purchases?fromDate=2026-10-01&toDate=2026-10-31&groupBy=SUPPLIER
 GET /api/reports/credit-exposure
+GET /api/reports/advisory-diagnosis?fromDate=2026-11-01&toDate=2026-11-30
+GET /api/reports/my-sales?fromDate=2026-11-01&toDate=2026-11-30
 ```
 
 The existing reports remain available: `/sales`, `/deliveries`, `/debt-aging`, `/debt-collections`,
 `/debt-by-customer-group`, `/inventory-movement`, `/inventory-valuation`. Together with the eight new routes,
-and `/counter-sales-today`, there are 16 report endpoints. Interactive schemas and query parameters are in `/swagger` in Development.
+`/counter-sales-today`, `/advisory-diagnosis` and `/my-sales`, there are 18 report endpoints. Interactive schemas and query parameters are in `/swagger` in Development.
