@@ -101,6 +101,8 @@ internal sealed class CreditTestDatabase : IAsyncDisposable
         s.AddSingleton<IDatabaseErrorClassifier, NpgsqlErrorClassifier>();
         // OrderPaymentCancellation (flow 2, F2.4) closes payOS links through the gateway; tests never reach payOS.
         s.AddSingleton<IPaymentGateway, AgriSage.IntegrationTests.Infrastructure.Payments.FakePaymentGateway>();
+        // DebtFollowUpService takes the SMS sender since the staff-triggered debt SMS; these tests never send one.
+        s.AddSingleton<ISmsTextSender, UnconfiguredSmsSender>();
         s.AddDbContext<AgriSageDbContext>(o => o.UseNpgsql(connection).AddInterceptors(new SoftDeleteInterceptor(User, Clock),
             new AuditableEntityInterceptor(Clock), new ConcurrencyVersionInterceptor(), CommandHook));
         s.AddScoped<IAgriSageDbContext>(p => p.GetRequiredService<AgriSageDbContext>());
