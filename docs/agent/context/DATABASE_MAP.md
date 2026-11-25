@@ -114,6 +114,12 @@ Use it to locate the correct domain, then open the exact authoritative table sec
 - `debt_sms_outbox` — one durable delivery row per Farmer debt reminder milestone, with phone and text snapshot,
   retry schedule and sent timestamp. Separate from the manual follow-up log.
 
+### Added after the baseline (seasonal product suggestions, 2026-11-25) — see `DATABASE_DESIGN.md` §35.25
+- `inventory_seasonal_suggestion_runs` — one row per upcoming crop season the hourly reminder prepared a suggestion for
+  (one per schedule key), with the history window and the candidate data it read.
+- `inventory_seasonal_suggestion_items` — the ranked products of a run (carried by the Store or not), reason, evidence
+  and suggested target, all written by the server. Nothing here changes stock, rules or store products.
+
 ## Global DB Conventions
 
 ```text

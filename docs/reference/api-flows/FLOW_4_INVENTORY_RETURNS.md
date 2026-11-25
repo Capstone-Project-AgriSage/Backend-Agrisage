@@ -46,6 +46,70 @@ Permissions: replenishment reads use REPLENISHMENT.READ (owner/admin, delegable 
 rules read/write use SEASONAL_RULES.READ/MANAGE (owner/admin, delegable); reports/export require
 REPORTS.READ; ordinary stock alerts retain INVENTORY.READ. No public/Farmer/Delivery access.
 
+## Seasonal product suggestions — F4.7, approved scope (2026-11-25, changed the same day: notification only)
+
+Before a crop season the store is told which products are worth stocking, each with a reason and the data behind it.
+The server alone decides this: data and rules choose what may be suggested and every number. There is **no AI call and
+no screen where the store asks for a suggestion** (the first design used the AI; the user changed it to notifications
+only). A suggestion changes nothing by itself: no stock, rule, store product, price or receipt. Table design:
+`DATABASE_DESIGN.md` §35.25.
+
+Decisions (lead and L4 owner with the user, 2026-11-25):
+- Permissions are the seasonal-rule ones: SEASONAL_RULES.READ lists and reads suggestions, SEASONAL_RULES.MANAGE
+  receives the reminders. No new permission.
+- Products the store does not carry yet are suggested too, only through an approved `disease_products` link for the
+  crop. They come back with `inStore=false` and no quantity; the store adds them with the existing
+  `POST /api/store-products`.
+- Every run and its items are saved, so the dashboard and the product management page can show them.
+- Only a background reminder prepares suggestions (one per upcoming season) and notifies; the store reads them on the
+  dashboard and the product management page and from the notification.
+
+| Method | Route | Permission | Body / query | Response |
+|---|---|---|---|---|
+| GET | `/api/inventory/seasonal-suggestions` | SEASONAL_RULES.READ | `page, pageSize, cropType?, fromDate?, toDate?` (earliest season start first) | `200 SeasonalSuggestionPage` |
+| GET | `/api/inventory/seasonal-suggestions/{id}` | SEASONAL_RULES.READ | — | `200 SeasonalSuggestionResponse` |
+
+Roles: `Operate` (ADMIN, STORE_OWNER, SALES_STAFF) with the permission above; a Sale member has it only when the
+owner delegates it; no Farmer or Delivery access. No endpoint creates, changes or decides a run.
+
+- `SeasonalSuggestionResponse`: `id, cropType, cropName, region, startsOn, endsOn, prepareDays, comparedFrom,
+  comparedTo, candidateCount, seasonalRuleId?, createdAt, items[]`. Item: `id, rank, productId, storeProductId?,
+  inStore, sku, productName, baseUnit, group (FERTILIZER|CROP_PROTECTION|SEED|OTHER), confidence (HIGH|MEDIUM|LOW),
+  reason, evidence[] {kind, text}, soldLastSeasonBase?, sellableBase?, suggestedTargetBase?, orderByDate?`.
+  Evidence kinds: SALES, LINK, DIAGNOSIS, ADVISORY, RULE, STOCK.
+- `SeasonalSuggestionPage`: the usual paged shape of list rows `id, cropType, cropName, startsOn, endsOn, itemCount,
+  createdAt`.
+
+Rules:
+1. History window: the same calendar days in the latest year whose window ended before today (29 Feb reads as
+   28 Feb). Sold quantities follow the replenishment forecast: posted SALE less RETURN_IN and their reversals.
+2. Candidates (deterministic, at most 200): the Store's active, sellable products with at least one signal (sold in
+   the history window, an approved link for an active problem of the crop, advised for the crop in the last 365 days,
+   an item of a seasonal rule of the crop in the last two years); and up to 50 active catalog products the Store does
+   not carry that have an approved link for the crop. A crop-protection product (one with an active ingredient or a
+   PROTECTION link for any crop) is eligible only with an approved link for this crop. Candidates are ordered by a
+   fixed score (sales, links, problem cases in the history window, advice, rules); the top 20 with a signal are kept.
+   Reasons and evidence texts are written by the server.
+3. Numbers come from the server: `suggestedTargetBase` uses the replenishment rules (`ReplenishmentMath`: daily demand
+   of the history window when it has ≥ 14 observed days and ≥ 3 sale days, the product's lead time, coverage, safety
+   and minimum); null when the history is sparse or the Store does not carry the product. `orderByDate` =
+   `startsOn − prepareDays − lead time` (7 days for a product not carried).
+4. Reminders (background task, hourly, one instance at a time): upcoming seasons come from last year's seasonal rules
+   of the Store (the same dates this year) and from open crop seasons (order window start → day before harvest start).
+   A season is upcoming when it starts within 30 days and no active seasonal rule of the same crop overlaps it (for a
+   crop season: and it has no linked rule). At 30 days the server makes one run per season and notifies the
+   holders of SEASONAL_RULES.MANAGE (`SEASONAL_SUGGESTION_READY`, entity `SEASONAL_SUGGESTION_RUN`); at 14 days,
+   while still no rule covers it, it sends one more notice for the same run. Each notice is sent once; nothing else
+   is created.
+5. Audit: `SEASONAL_SUGGESTION_CREATED`.
+
+Errors: `400` validation, `404` run not in this Store.
+
+Must prove (F4.7): history-window dates (leap day), eligibility (crop protection without a link for the crop is never
+suggested; products not carried only through an approved link), null quantity on sparse history, reminders (upcoming
+detection, one scheduled run per season, each notice once, none when a rule exists), permission map and roles, no
+endpoint that creates or changes a run, migration review.
+
 Version 2.0 — 2026-10-03. Conventions, shared shapes, interfaces and ownership rules: [README.md](README.md).
 Sources: `DATABASE_DESIGN.md` §21–29, §52–54, §7.1, §7.5, §VIII, §XXI–XXII, §35.8–35.11, §35.17–35.19, §35.24;
 `BUSINESS_RULES.md` rules 10, 30–33, 52–58.

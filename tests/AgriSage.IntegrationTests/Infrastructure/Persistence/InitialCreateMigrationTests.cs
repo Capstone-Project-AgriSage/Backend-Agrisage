@@ -45,7 +45,8 @@ public class InitialCreateMigrationTests
                 "20261123071131_SalesInvoices",
                 "20261124232200_DebtFollowUps",
                 "20261125060116_SalesExchanges",
-                "20261125170025_DebtSmsOutbox"
+                "20261125170025_DebtSmsOutbox",
+                "20261125174054_SeasonalSuggestions"
             ],
             context.Database.GetMigrations());
     }

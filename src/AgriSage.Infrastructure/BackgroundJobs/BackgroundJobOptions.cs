@@ -22,4 +22,6 @@ public sealed class BackgroundJobOptions
     public bool InventoryAlerts { get; init; } = true;
     public bool ReconcilePayments { get; init; } = true;
     public bool ExpireAuthentication { get; init; } = true;
+    // F4.7: prepares suggestions for upcoming seasons and reminds (hourly, AlertSeconds).
+    public bool SeasonalSuggestions { get; init; } = true;
 }

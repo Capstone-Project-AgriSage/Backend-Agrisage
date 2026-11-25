@@ -523,3 +523,9 @@ All on the branch `feature/f3-21-debt-permission-lock`, not merged to `main`; th
 | F3.23 | Debt follow-ups: log of reminders made outside the system (team task 3, 2026-11-25) | contract in FLOW_3 §8j, table in DATABASE_DESIGN §35.24 |
 
 Exchange extension: [EXCHANGES.md](EXCHANGES.md) (2026-11-25).
+
+## 9. Task F4.7 — seasonal product suggestions (notification only), 2026-11-25
+
+| Task | What | Status |
+|---|---|---|
+| F4.7 | Suggestions of products to stock before a crop season, prepared by the hourly reminder from data only (no AI) and shown as notifications on the dashboard and product management page (lead and L4 owner agreed; the user then dropped the AI and the manual screen) | contract in FLOW_4 "Seasonal product suggestions", tables in DATABASE_DESIGN §35.25, migration `SeasonalSuggestions`; branch `feature/f4-7-seasonal-suggestions` |

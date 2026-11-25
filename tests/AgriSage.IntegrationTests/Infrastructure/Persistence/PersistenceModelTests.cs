@@ -21,6 +21,7 @@ public class PersistenceModelTests
         "suppliers", "goods_receipts", "goods_receipt_items",
         "inventory_lots", "inventory_lot_balances", "stock_movements", "stock_movement_items",
         "inventory_seasonal_rules", "inventory_seasonal_rule_items",
+        "inventory_seasonal_suggestion_runs", "inventory_seasonal_suggestion_items",
         "stocktakes", "stocktake_items", "inventory_reservations", "inventory_reservation_items",
         "carts", "cart_items", "orders", "order_items", "payments", "payment_allocations",
         "deliveries", "delivery_items", "delivery_item_lot_allocations", "delivery_attempts",
@@ -58,11 +59,11 @@ public class PersistenceModelTests
         Table(table).GetCheckConstraints().Single(check => check.Name == $"ck_{table}_{name}");
 
     [Fact]
-    public void Model_maps_exactly_the_89_documented_tables()
+    public void Model_maps_exactly_the_91_documented_tables()
     {
         var tables = Model.GetEntityTypes().Select(entityType => entityType.GetTableName()).ToList();
 
-        Assert.Equal(89, DocumentedTables.Length);
+        Assert.Equal(91, DocumentedTables.Length);
         Assert.Equal(DocumentedTables.Order(), tables.Order());
         Assert.DoesNotContain(Model.GetEntityTypes(), entityType => entityType.IsOwned());
     }

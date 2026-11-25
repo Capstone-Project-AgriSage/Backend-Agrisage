@@ -61,6 +61,8 @@ public sealed class OperationsWorker(IServiceScopeFactory scopes, IOptions<Backg
                 await services.GetRequiredService<OperationalAlertsService>().InventoryAlertsAsync(o.BatchSize, o.ExpiryWarningDays, token); break;
             case BackgroundTask.ExpireAuthentication:
                 await services.GetRequiredService<AuthMaintenanceService>().ExpireAsync(o.BatchSize, token); break;
+            case BackgroundTask.SeasonalSuggestions:
+                await services.GetRequiredService<SeasonalSuggestionReminder>().RemindAsync(token); break;
             case BackgroundTask.ReconcilePayments:
                 var payments = await services.GetRequiredService<PaymentReconciliationService>().PendingAsync(o.BatchSize, token);
                 foreach (var id in payments)
@@ -82,7 +84,8 @@ public sealed class OperationsWorker(IServiceScopeFactory scopes, IOptions<Backg
     {
         BackgroundTask.ExpireLots => o.ExpireLots, BackgroundTask.DebtReminders => o.DebtReminders,
         BackgroundTask.InventoryAlerts => o.InventoryAlerts, BackgroundTask.ReconcilePayments => o.ReconcilePayments,
-        BackgroundTask.ExpireAuthentication => o.ExpireAuthentication, BackgroundTask.DebtSms => o.DebtSms, _ => true
+        BackgroundTask.ExpireAuthentication => o.ExpireAuthentication, BackgroundTask.DebtSms => o.DebtSms,
+        BackgroundTask.SeasonalSuggestions => o.SeasonalSuggestions, _ => true
     };
     private static int Interval(BackgroundTask task, BackgroundJobOptions o) => task switch
     {
