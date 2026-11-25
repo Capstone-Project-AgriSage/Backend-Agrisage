@@ -724,6 +724,15 @@ explicit `dueDate` with a season is kept and recorded as `MANUAL`. Without a sea
 
 ## 8j. F3.23 — Debt follow-ups: reminders made outside the system (new, 2026-11-25)
 
+**Additional action — staff-triggered debt SMS.** `POST /api/customers/{farmerProfileId}/debt/send-sms`
+requires the same `DEBT.FOLLOW_UP` permission as recording a follow-up. The server reads the active store's debt
+account and the customer's stored phone number, refuses zero balance or an invalid/missing phone, and sends a fixed
+balance reminder through the same configured SMS gateway and cost guards as password recovery. The recipient and
+message are server-owned; the request has no body. After the gateway accepts the message, the system records a
+`MESSAGE` / `OTHER` follow-up and returns its `DebtFollowUpResponse`. Gateway failure returns 503 and records no
+follow-up. `MessageDelivery:SmsProvider=Simulated` shows the text in the development SMS outbox without sending it.
+The normal `POST /follow-ups` route below remains a log of contact made outside the system and never sends SMS.
+
 Team task 3: "after a debt is overdue the store reminds the customer itself and logs it; the system only logs". The owner or
 Sale staff record each manual reminder of a customer: a call, a visit, the customer at the counter, a message. Each record
 has its outcome and, optionally, a promise to pay. **Nothing else happens**: no notification, no SMS, no change to the debt,
