@@ -6646,6 +6646,50 @@ result of the old rule, so a stocktake being counted during the migration neithe
 loses a stale line; refreshed lines then follow the exact rule. Down drops the column.
 ```
 
+## 35.25 Seasonal product suggestions (new tables inventory_seasonal_suggestion_runs, inventory_seasonal_suggestion_items) — migration SeasonalSuggestions
+
+```text
+F4.7 (2026-11-25, lead and L4 owner with the user; the user then dropped the AI and the manual screen): before a crop
+season the store is told which products to stock, computed from data by the hourly reminder; contract FLOW_4 "Seasonal
+product suggestions". Two new tables; no existing table, column or permission changes (SEASONAL_RULES.READ/MANAGE are
+reused). Rows are written once by the reminder and never updated.
+
+inventory_seasonal_suggestion_runs (new; one row per upcoming season; soft delete columns by convention)
+  id uuid PK, store_id uuid NOT NULL FK stores (RESTRICT)
+  schedule_key varchar(120) NOT NULL   RULE:{rule}:{year} or SEASON:{crop season}; one run per upcoming season
+  crop_type varchar(50) NOT NULL       a CropCatalog code
+  region varchar(150) NULL
+  starts_on date NOT NULL, ends_on date NOT NULL, prepare_days integer NOT NULL
+  compared_from date NOT NULL, compared_to date NOT NULL   the past window the history was read from
+  seasonal_rule_id uuid NULL FK inventory_seasonal_rules (NO ACTION)   last year's rule that announced the season
+  crop_season_id uuid NULL FK crop_seasons (NO ACTION)                 the crop season that announced it
+  candidate_count integer NOT NULL
+  candidates jsonb NOT NULL            the aggregated data the ranking read; no personal data
+  created_at, updated_at, deleted_at, deleted_by
+  CHECK ends_on >= starts_on; CHECK compared_to >= compared_from; CHECK prepare_days BETWEEN 0 AND 90;
+  CHECK candidate_count >= 0
+  UNIQUE (store_id, schedule_key) WHERE deleted_at IS NULL
+  Index (store_id, starts_on).
+
+inventory_seasonal_suggestion_items (new; children of a run)
+  id uuid PK, run_id uuid NOT NULL FK inventory_seasonal_suggestion_runs (RESTRICT)
+  product_id uuid NOT NULL FK products (RESTRICT)
+  store_product_id uuid NULL FK store_products (NO ACTION)   NULL when the Store did not carry the product at run time
+  rank integer NOT NULL
+  product_group varchar(20) NOT NULL   CHECK IN ('FERTILIZER','CROP_PROTECTION','SEED','OTHER')
+  confidence varchar(10) NOT NULL      CHECK IN ('HIGH','MEDIUM','LOW')
+  reason varchar(500) NOT NULL         written by the server
+  evidence jsonb NOT NULL              array of {kind, text} written by the server
+  sold_last_season_base bigint NULL, sellable_base bigint NULL, suggested_target_base bigint NULL
+  order_by_date date NULL
+  created_at, updated_at, deleted_at, deleted_by
+  CHECK rank > 0; CHECK sold_last_season_base IS NULL OR sold_last_season_base >= 0;
+  CHECK suggested_target_base IS NULL OR suggested_target_base >= 0
+  UNIQUE (run_id, product_id) WHERE deleted_at IS NULL; UNIQUE (run_id, rank) WHERE deleted_at IS NULL.
+
+Never automatic: a run creates no stock movement, seasonal rule, store product or goods receipt.
+```
+
 ## 35.24 Debt follow-ups: manual reminders after overdue (table 48; new table debt_follow_ups) — migration DebtFollowUps
 
 ```text
