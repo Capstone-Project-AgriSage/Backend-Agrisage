@@ -96,6 +96,8 @@ public sealed class AgriSageDbContext : DbContext, IAgriSageDbContext
 
     public DbSet<SeasonalRule> SeasonalRules => Set<SeasonalRule>();
     public DbSet<SeasonalRuleItem> SeasonalRuleItems => Set<SeasonalRuleItem>();
+    public DbSet<SeasonalSuggestionRun> SeasonalSuggestionRuns => Set<SeasonalSuggestionRun>();
+    public DbSet<SeasonalSuggestionItem> SeasonalSuggestionItems => Set<SeasonalSuggestionItem>();
 
     public DbSet<InventoryLotBalance> InventoryLotBalances => Set<InventoryLotBalance>();
 

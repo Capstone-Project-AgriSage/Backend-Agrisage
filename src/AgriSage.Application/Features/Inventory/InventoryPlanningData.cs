@@ -70,4 +70,39 @@ public sealed class InventoryPlanningData(IAgriSageDbContext context, IDateTimeP
             .Select(g => new SaleDay(g.Key.ProductId, g.Key.Day, g.Sum(x => x.Net), g.Sum(x => x.Sale))).ToListAsync(token);
         return new(store, now, today, products, lots, sales, observations);
     }
+
+    // F4.7 seasonal suggestions: net sold per store product between two instants, by the same rule as the forecast
+    // above (posted SALE less RETURN_IN and reversals of those), with its sale days and the first ledger movement of the
+    // product (when its history starts). Products without movements come back with zeros.
+    public sealed record WindowSale(Guid ProductId, long NetQuantity, int SaleDays, DateTimeOffset? FirstMovementAt);
+
+    public async Task<IReadOnlyList<WindowSale>> SalesBetweenAsync(Guid store, IReadOnlyCollection<Guid> productIds,
+        DateTimeOffset start, DateTimeOffset end, CancellationToken token)
+    {
+        var ids = productIds.Distinct().ToArray();
+        if (ids.Length == 0) return [];
+        var ledger = from m in context.StockMovements.AsNoTracking()
+                     where m.StoreId == store && m.Status == StockMovementStatus.Posted
+                     join i in context.StockMovementItems on m.Id equals i.StockMovementId
+                     join l in context.InventoryLots on i.InventoryLotId equals l.Id
+                     where ids.Contains(l.StoreProductId)
+                     select new { ProductId = l.StoreProductId, m.PostedAt, m.MovementType, m.ReversalOfMovementId, i.QuantityDeltaBase };
+        var first = await ledger.GroupBy(x => x.ProductId)
+            .Select(g => new { ProductId = g.Key, FirstAt = g.Min(x => x.PostedAt!.Value) }).ToListAsync(token);
+        var demand = from x in ledger
+                     where x.PostedAt >= start && x.PostedAt < end
+                     join original in context.StockMovements on x.ReversalOfMovementId equals original.Id into originals
+                     from original in originals.DefaultIfEmpty()
+                     where x.MovementType == StockMovementType.Sale || x.MovementType == StockMovementType.ReturnIn
+                         || (x.MovementType == StockMovementType.Reversal && original != null
+                             && (original.MovementType == StockMovementType.Sale || original.MovementType == StockMovementType.ReturnIn))
+                     select new { x.ProductId, Day = DateOnly.FromDateTime(x.PostedAt!.Value.UtcDateTime.AddHours(7)),
+                         Net = -x.QuantityDeltaBase, Sale = x.MovementType == StockMovementType.Sale ? -x.QuantityDeltaBase : 0 };
+        var days = await demand.GroupBy(x => new { x.ProductId, x.Day })
+            .Select(g => new { g.Key.ProductId, Net = g.Sum(x => x.Net), Sale = g.Sum(x => x.Sale) }).ToListAsync(token);
+        return ids.Select(id => new WindowSale(id,
+            days.Where(d => d.ProductId == id).Sum(d => d.Net),
+            days.Count(d => d.ProductId == id && d.Sale > 0),
+            first.Where(f => f.ProductId == id).Select(f => (DateTimeOffset?)f.FirstAt).FirstOrDefault())).ToList();
+    }
 }

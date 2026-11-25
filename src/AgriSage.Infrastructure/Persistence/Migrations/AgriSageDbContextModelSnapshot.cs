@@ -7192,6 +7192,230 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AgriSage.Domain.Features.Inventory.Entities.SeasonalSuggestionItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("Confidence")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("confidence");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("DeletedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<string>("Evidence")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("evidence");
+
+                    b.Property<DateOnly?>("OrderByDate")
+                        .HasColumnType("date")
+                        .HasColumnName("order_by_date");
+
+                    b.Property<string>("ProductGroup")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("product_group");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_id");
+
+                    b.Property<int>("Rank")
+                        .HasColumnType("integer")
+                        .HasColumnName("rank");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("reason");
+
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("run_id");
+
+                    b.Property<long?>("SellableBase")
+                        .HasColumnType("bigint")
+                        .HasColumnName("sellable_base");
+
+                    b.Property<long?>("SoldLastSeasonBase")
+                        .HasColumnType("bigint")
+                        .HasColumnName("sold_last_season_base");
+
+                    b.Property<Guid?>("StoreProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("store_product_id");
+
+                    b.Property<long?>("SuggestedTargetBase")
+                        .HasColumnType("bigint")
+                        .HasColumnName("suggested_target_base");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_inventory_seasonal_suggestion_items");
+
+                    b.HasIndex("ProductId")
+                        .HasDatabaseName("ix_inventory_seasonal_suggestion_items_product_id");
+
+                    b.HasIndex("RunId")
+                        .HasDatabaseName("ix_inventory_seasonal_suggestion_items_run_id");
+
+                    b.HasIndex("StoreProductId")
+                        .HasDatabaseName("ix_inventory_seasonal_suggestion_items_store_product_id");
+
+                    b.HasIndex("RunId", "ProductId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_inventory_seasonal_suggestion_items_run_id_product_id")
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.HasIndex("RunId", "Rank")
+                        .IsUnique()
+                        .HasDatabaseName("ux_inventory_seasonal_suggestion_items_run_id_rank")
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.ToTable("inventory_seasonal_suggestion_items", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_inventory_seasonal_suggestion_items_confidence", "confidence IN ('HIGH', 'MEDIUM', 'LOW')");
+
+                            t.HasCheckConstraint("ck_inventory_seasonal_suggestion_items_product_group", "product_group IN ('FERTILIZER', 'CROP_PROTECTION', 'SEED', 'OTHER')");
+
+                            t.HasCheckConstraint("ck_inventory_seasonal_suggestion_items_rank", "\"rank\" > 0");
+
+                            t.HasCheckConstraint("ck_inventory_seasonal_suggestion_items_sold_last_season_base", "sold_last_season_base IS NULL OR sold_last_season_base >= 0");
+
+                            t.HasCheckConstraint("ck_inventory_seasonal_suggestion_items_suggested_target_base", "suggested_target_base IS NULL OR suggested_target_base >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("AgriSage.Domain.Features.Inventory.Entities.SeasonalSuggestionRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<int>("CandidateCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("candidate_count");
+
+                    b.Property<string>("Candidates")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("candidates");
+
+                    b.Property<DateOnly>("ComparedFrom")
+                        .HasColumnType("date")
+                        .HasColumnName("compared_from");
+
+                    b.Property<DateOnly>("ComparedTo")
+                        .HasColumnType("date")
+                        .HasColumnName("compared_to");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CropSeasonId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("crop_season_id");
+
+                    b.Property<string>("CropType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("crop_type");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("DeletedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<DateOnly>("EndsOn")
+                        .HasColumnType("date")
+                        .HasColumnName("ends_on");
+
+                    b.Property<int>("PrepareDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("prepare_days");
+
+                    b.Property<string>("Region")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("region");
+
+                    b.Property<string>("ScheduleKey")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("schedule_key");
+
+                    b.Property<Guid?>("SeasonalRuleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("seasonal_rule_id");
+
+                    b.Property<DateOnly>("StartsOn")
+                        .HasColumnType("date")
+                        .HasColumnName("starts_on");
+
+                    b.Property<Guid>("StoreId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("store_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_inventory_seasonal_suggestion_runs");
+
+                    b.HasIndex("CropSeasonId")
+                        .HasDatabaseName("ix_inventory_seasonal_suggestion_runs_crop_season_id");
+
+                    b.HasIndex("SeasonalRuleId")
+                        .HasDatabaseName("ix_inventory_seasonal_suggestion_runs_seasonal_rule_id");
+
+                    b.HasIndex("StoreId", "ScheduleKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_inventory_seasonal_suggestion_runs_store_id_schedule_key")
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.HasIndex("StoreId", "StartsOn")
+                        .HasDatabaseName("ix_inventory_seasonal_suggestion_runs_store_id_starts_on");
+
+                    b.ToTable("inventory_seasonal_suggestion_runs", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_inventory_seasonal_suggestion_runs_candidate_count", "candidate_count >= 0");
+
+                            t.HasCheckConstraint("ck_inventory_seasonal_suggestion_runs_compared_dates", "compared_to >= compared_from");
+
+                            t.HasCheckConstraint("ck_inventory_seasonal_suggestion_runs_dates", "ends_on >= starts_on");
+
+                            t.HasCheckConstraint("ck_inventory_seasonal_suggestion_runs_prepare_days", "prepare_days BETWEEN 0 AND 90");
+                        });
+                });
+
             modelBuilder.Entity("AgriSage.Domain.Features.Inventory.Entities.StockMovement", b =>
                 {
                     b.Property<Guid>("Id")
@@ -11982,6 +12206,63 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_inventory_seasonal_rule_items_store_product_id");
                 });
 
+            modelBuilder.Entity("AgriSage.Domain.Features.Inventory.Entities.SeasonalSuggestionItem", b =>
+                {
+                    b.HasOne("AgriSage.Domain.Features.Identity.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("DeletedBy")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_inventory_seasonal_suggestion_items_deleted_by");
+
+                    b.HasOne("AgriSage.Domain.Features.Products.Entities.Product", null)
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_inventory_seasonal_suggestion_items_product_id");
+
+                    b.HasOne("AgriSage.Domain.Features.Inventory.Entities.SeasonalSuggestionRun", null)
+                        .WithMany("Items")
+                        .HasForeignKey("RunId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_inventory_seasonal_suggestion_items_run_id");
+
+                    b.HasOne("AgriSage.Domain.Features.Products.Entities.StoreProduct", null)
+                        .WithMany()
+                        .HasForeignKey("StoreProductId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_inventory_seasonal_suggestion_items_store_product_id");
+                });
+
+            modelBuilder.Entity("AgriSage.Domain.Features.Inventory.Entities.SeasonalSuggestionRun", b =>
+                {
+                    b.HasOne("AgriSage.Domain.Features.Debt.Entities.CropSeason", null)
+                        .WithMany()
+                        .HasForeignKey("CropSeasonId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_inventory_seasonal_suggestion_runs_crop_season_id");
+
+                    b.HasOne("AgriSage.Domain.Features.Identity.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("DeletedBy")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_inventory_seasonal_suggestion_runs_deleted_by");
+
+                    b.HasOne("AgriSage.Domain.Features.Inventory.Entities.SeasonalRule", null)
+                        .WithMany()
+                        .HasForeignKey("SeasonalRuleId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_inventory_seasonal_suggestion_runs_seasonal_rule_id");
+
+                    b.HasOne("AgriSage.Domain.Features.Stores.Entities.Store", null)
+                        .WithMany()
+                        .HasForeignKey("StoreId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_inventory_seasonal_suggestion_runs_store_id");
+                });
+
             modelBuilder.Entity("AgriSage.Domain.Features.Inventory.Entities.StockMovement", b =>
                 {
                     b.HasOne("AgriSage.Domain.Features.Identity.Entities.User", null)
@@ -13049,6 +13330,11 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                 });
 
             modelBuilder.Entity("AgriSage.Domain.Features.Inventory.Entities.SeasonalRule", b =>
+                {
+                    b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("AgriSage.Domain.Features.Inventory.Entities.SeasonalSuggestionRun", b =>
                 {
                     b.Navigation("Items");
                 });

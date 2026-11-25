@@ -51,6 +51,9 @@ public static class PermissionEndpointMap
         ["SeasonalRules.Create"] = "SEASONAL_RULES.MANAGE",
         ["SeasonalRules.Update"] = "SEASONAL_RULES.MANAGE",
         ["SeasonalRules.Deactivate"] = "SEASONAL_RULES.MANAGE",
+        // F4.7 seasonal product suggestions reuse the seasonal-rule permissions.
+        ["SeasonalSuggestions.List"] = "SEASONAL_RULES.READ",
+        ["SeasonalSuggestions.Get"] = "SEASONAL_RULES.READ",
         ["InventoryPlanningReports.Velocity"] = "REPORTS.READ",
         ["InventoryPlanningReports.ExpiryRisk"] = "REPORTS.READ",
         ["InventoryPlanningReports.Export"] = "REPORTS.READ",

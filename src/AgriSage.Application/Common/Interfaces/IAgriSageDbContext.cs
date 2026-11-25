@@ -92,6 +92,8 @@ public interface IAgriSageDbContext
 
     DbSet<SeasonalRule> SeasonalRules { get; }
     DbSet<SeasonalRuleItem> SeasonalRuleItems { get; }
+    DbSet<SeasonalSuggestionRun> SeasonalSuggestionRuns { get; }
+    DbSet<SeasonalSuggestionItem> SeasonalSuggestionItems { get; }
 
     DbSet<InventoryLotBalance> InventoryLotBalances { get; }
 

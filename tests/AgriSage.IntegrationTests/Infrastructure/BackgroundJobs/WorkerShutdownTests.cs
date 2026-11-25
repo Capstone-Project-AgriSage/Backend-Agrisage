@@ -68,7 +68,7 @@ public class WorkerShutdownTests
         var jobs = Options.Create(new BackgroundJobOptions
         {
             Enabled = true, ExpireLots = true, DebtReminders = false, InventoryAlerts = false,
-            ReconcilePayments = false, ExpireAuthentication = false, DebtSms = false
+            ReconcilePayments = false, ExpireAuthentication = false, DebtSms = false, SeasonalSuggestions = false
         });
         return kind == "operations"
             ? new OperationsWorker(scopes, jobs, TimeProvider.System, new TestLogger<OperationsWorker>(logs))

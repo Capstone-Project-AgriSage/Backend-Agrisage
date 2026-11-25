@@ -96,6 +96,11 @@ public static class DependencyInjection
         services.AddScoped<InventoryPlanningData>();
         services.AddScoped<IReplenishmentService, ReplenishmentService>();
         services.AddScoped<ISeasonalRuleService, SeasonalRuleService>();
+        // F4.7 seasonal product suggestions (data only; prepared by the reminder).
+        services.AddScoped<SeasonalSuggestionCandidates>();
+        services.AddScoped<SeasonalSuggestionGenerator>();
+        services.AddScoped<ISeasonalSuggestionService, SeasonalSuggestionService>();
+        services.AddScoped<SeasonalSuggestionReminder>();
         services.AddScoped<IInventoryPlanningReportService, InventoryPlanningReportService>();
         services.AddScoped<StockAdjustmentPosting>();
         services.AddScoped<IStockAdjustmentService, StockAdjustmentService>();

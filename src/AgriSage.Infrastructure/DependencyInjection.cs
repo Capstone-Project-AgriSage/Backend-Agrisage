@@ -184,6 +184,12 @@ public static class DependencyInjection
         services.AddScoped<IProviderConnectionTester, AnthropicConnectionTester>();
         services.AddScoped<IProviderConnectionTester>(provider => provider.GetRequiredService<GeminiConnectionTester>());
         services.AddScoped<IAiProviderConnectionTester, AiProviderConnectionTester>();
+
+        // F4.7 seasonal product suggestions: the reminder marks come from SeasonalSuggestions
+        // (FLOW_4 "Seasonal product suggestions").
+        services.AddOptions<AgriSage.Application.Features.Inventory.SeasonalSuggestionOptions>()
+            .Bind(configuration.GetSection(AgriSage.Application.Features.Inventory.SeasonalSuggestionOptions.SectionName))
+            .ValidateDataAnnotations().ValidateOnStart();
         services.AddScoped<IAiDiagnosisClient, RoutingDiagnosisClient>();
 
         return services;
