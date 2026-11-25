@@ -18,8 +18,18 @@ namespace AgriSage.Infrastructure.Messaging;
 public sealed class AuthMessageSender(HttpClient http, IOptions<MessageDeliveryOptions> options,
     SmsDailyBudget? budget = null, IDateTimeProvider? clock = null, ILogger<AuthMessageSender>? logger = null,
     SimulatedSmsOutbox? outbox = null)
-    : IAuthMessageSender
+    : IAuthMessageSender, ISmsTextSender
 {
+    bool ISmsTextSender.IsConfigured => SmsConfigured(options.Value);
+
+    async Task ISmsTextSender.SendAsync(string destination, string text, string purpose, CancellationToken token)
+    {
+        if (!SmsConfigured(options.Value)) throw new MessageDeliveryUnavailableException();
+        try { await SendSmsAsync(options.Value, destination, text, purpose, "", token); }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException or FormatException)
+        { throw new MessageDeliveryUnavailableException(); }
+    }
     public bool IsConfigured(AuthDeliveryChannel channel)
     {
         var o = options.Value;
@@ -47,7 +57,7 @@ public sealed class AuthMessageSender(HttpClient http, IOptions<MessageDeliveryO
             }
             else
             {
-                await SendSmsAsync(o, message, cancellationToken);
+                await SendSmsAsync(o, message.Destination, SmsText(message), message.Purpose.ToString(), message.Token, cancellationToken);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
@@ -55,21 +65,21 @@ public sealed class AuthMessageSender(HttpClient http, IOptions<MessageDeliveryO
         { throw new MessageDeliveryUnavailableException(); }
     }
 
-    private async Task SendSmsAsync(MessageDeliveryOptions o, AuthMessage message, CancellationToken cancellationToken)
+    private async Task SendSmsAsync(MessageDeliveryOptions o, string destination, string text, string purpose, string code,
+        CancellationToken cancellationToken)
     {
         if (o.UsesSimulatedSms)
         {
             // Nothing leaves the machine and nothing is charged, so neither cost guard applies: the message goes to the
             // in-memory outbox (and the log) that a development-only page shows.
-            var text = SmsText(message);
-            outbox?.Add(new SimulatedSmsMessage(clock?.UtcNow ?? TimeProvider.System.GetUtcNow(), message.Destination,
-                message.Purpose.ToString(), message.Token, text));
-            logger?.LogWarning("SIMULATED SMS to {Destination} (not sent): {Text}", message.Destination, text);
+            outbox?.Add(new SimulatedSmsMessage(clock?.UtcNow ?? TimeProvider.System.GetUtcNow(), destination,
+                purpose, code, text));
+            logger?.LogWarning("SIMULATED SMS to {Destination} (not sent): {Text}", destination, text);
             return;
         }
 
         // Stored numbers are already 0xxxxxxxxx; normalising again keeps the allow-list and +84 conversion exact.
-        var local = ContactNormalizer.TryNormalizePhone(message.Destination, out var normalized) ? normalized : null;
+        var local = ContactNormalizer.TryNormalizePhone(destination, out var normalized) ? normalized : null;
         if (o.SmsAllowedRecipients.Length > 0 && (local is null || !IsAllowed(o.SmsAllowedRecipients, local)))
         {
             logger?.LogWarning("SMS was not sent: the recipient is not in MessageDelivery:SmsAllowedRecipients.");
@@ -89,14 +99,14 @@ public sealed class AuthMessageSender(HttpClient http, IOptions<MessageDeliveryO
             request.Headers.Authorization = new("Basic", credentials);
             request.Content = JsonContent.Create(new
             {
-                textMessage = new { text = SmsText(message) },
+                textMessage = new { text },
                 phoneNumbers = new[] { "+84" + local![1..] },
             });
         }
         else
         {
             request.Headers.Authorization = new("Bearer", o.SmsApiKey);
-            request.Content = JsonContent.Create(new { to = message.Destination, message = SmsText(message) });
+            request.Content = JsonContent.Create(new { to = destination, message = text });
         }
         using var response = await http.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode) throw new MessageDeliveryUnavailableException();

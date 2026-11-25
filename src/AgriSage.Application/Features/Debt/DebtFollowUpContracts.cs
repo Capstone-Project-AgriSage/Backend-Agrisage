@@ -51,6 +51,7 @@ public sealed record DebtFollowUpDashboard(int WindowDays, int OverdueCustomerCo
 
 public interface IDebtFollowUpService
 {
+    Task<DebtFollowUpResponse> SendSmsAsync(Guid farmerProfileId, CancellationToken token);
     Task<DebtFollowUpResponse> RecordAsync(Guid farmerProfileId, DebtFollowUpRequest request, CancellationToken token);
 
     Task<PagedResult<DebtFollowUpResponse>> ListAsync(Guid farmerProfileId, DebtFollowUpListRequest request, CancellationToken token);
