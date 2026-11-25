@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using AgriSage.Application.Common.Exceptions;
+using AgriSage.Application.Common.Interfaces;
 using AgriSage.Application.Features.Auth.Interfaces;
 using AgriSage.Domain.Features.Identity.Enums;
 using AgriSage.Infrastructure.Authentication;
@@ -48,6 +49,22 @@ public sealed class SecretTokenAndMessageTests
         Assert.Contains(message.Token, body.GetProperty("message").GetString());
         handler.Status = HttpStatusCode.BadGateway;
         await Assert.ThrowsAsync<MessageDeliveryUnavailableException>(() => sender.SendAsync(message, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task Business_sms_uses_the_existing_gateway_and_reports_delivery_failure()
+    {
+        var handler = new CapturingHandler(); using var http = new HttpClient(handler);
+        var sms = (ISmsTextSender)new AuthMessageSender(http, Options.Create(new MessageDeliveryOptions
+        { SmsGatewayUrl = "https://example.test/sms", SmsApiKey = "test-only-key" }));
+        await sms.SendAsync("0901234567", "AgriSage: Ban con no 100,000 VND.", "DebtReminder", TestContext.Current.CancellationToken);
+        var body = JsonSerializer.Deserialize<JsonElement>(handler.Body!);
+        Assert.Equal("0901234567", body.GetProperty("to").GetString());
+        Assert.Equal("AgriSage: Ban con no 100,000 VND.", body.GetProperty("message").GetString());
+        Assert.Equal("Bearer test-only-key", handler.Authorization);
+        handler.Status = HttpStatusCode.BadGateway;
+        await Assert.ThrowsAsync<MessageDeliveryUnavailableException>(() =>
+            sms.SendAsync("0901234567", "AgriSage: Ban con no 100,000 VND.", "DebtReminder", TestContext.Current.CancellationToken));
     }
     private sealed class CapturingHandler : HttpMessageHandler
     {

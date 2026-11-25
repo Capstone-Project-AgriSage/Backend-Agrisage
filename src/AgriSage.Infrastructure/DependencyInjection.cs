@@ -59,7 +59,9 @@ public static class DependencyInjection
             services.AddSingleton<SimulatedSmsOutbox>();
             services.AddSingleton<ISimulatedSmsOutbox>(provider => provider.GetRequiredService<SimulatedSmsOutbox>());
         }
-        services.AddHttpClient<IAuthMessageSender, AuthMessageSender>(client => client.Timeout = TimeSpan.FromSeconds(30));
+        services.AddHttpClient<AuthMessageSender>(client => client.Timeout = TimeSpan.FromSeconds(30));
+        services.AddTransient<IAuthMessageSender>(provider => provider.GetRequiredService<AuthMessageSender>());
+        services.AddTransient<ISmsTextSender>(provider => provider.GetRequiredService<AuthMessageSender>());
         services.AddOptions<BackgroundJobOptions>().Bind(configuration.GetSection("BackgroundJobs"))
             .ValidateDataAnnotations().ValidateOnStart();
         services.AddOptions<DatabaseOptions>().Bind(configuration.GetSection(DatabaseOptions.SectionName));

@@ -276,6 +276,7 @@ public static class PermissionEndpointMap
         ["Debt.Rollover"] = "DEBT.ROLLOVER",
         ["Debt.FollowUps"] = "DEBT.READ",
         ["Debt.RecordFollowUp"] = "DEBT.FOLLOW_UP",
+        ["Debt.SendDebtSms"] = "DEBT.FOLLOW_UP",
         ["Debt.Dashboard"] = "DEBT.READ_DASHBOARD",
         ["MeDebt.Account"] = "MY_DEBT.READ",
         ["MeDebt.Entries"] = "MY_DEBT.READ",

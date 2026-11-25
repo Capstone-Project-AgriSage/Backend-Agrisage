@@ -21,6 +21,19 @@ public sealed class SimulatedSmsTests
     private static readonly DateTimeOffset Noon = new(2026, 10, 14, 5, 0, 0, TimeSpan.Zero);
 
     [Fact]
+    public async Task A_business_sms_uses_the_same_simulated_transport_without_an_otp()
+    {
+        var (sender, handler, outbox) = Build(new MessageDeliveryOptions { SmsProvider = "Simulated" });
+        var sms = (ISmsTextSender)sender;
+        await sms.SendAsync("0901234567", "AgriSage: Ban con no 100,000 VND.", "DebtReminder", Token);
+        var sent = Assert.Single(outbox.Recent());
+        Assert.Equal("DebtReminder", sent.Purpose);
+        Assert.Equal("", sent.Code);
+        Assert.Contains("100,000 VND", sent.Text);
+        Assert.Equal(0, handler.Calls);
+    }
+
+    [Fact]
     public async Task A_simulated_sms_makes_no_http_call_and_lands_in_the_outbox_with_its_code()
     {
         var (sender, handler, outbox) = Build(new MessageDeliveryOptions { SmsProvider = "Simulated" });
