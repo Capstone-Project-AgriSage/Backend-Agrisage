@@ -1,12 +1,10 @@
 using System.Net;
 using System.Net.Http.Json;
 using AgriSage.Application.Common;
-using AgriSage.Application.Common.Interfaces;
 using AgriSage.Application.Features.Debt;
 using AgriSage.Domain.Features.Identity.Enums;
 using AgriSage.IntegrationTests.Infrastructure.Debt;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using static AgriSage.IntegrationTests.Api.EndToEndHost;
 
 namespace AgriSage.IntegrationTests.Api;
@@ -16,52 +14,6 @@ namespace AgriSage.IntegrationTests.Api;
 // debt list never carries the store's notes.
 public sealed class DebtFollowUpHttpTests(StaffHttpTests.StaffApiFactory factory) : IClassFixture<StaffHttpTests.StaffApiFactory>
 {
-    private sealed class CapturingSms : ISmsTextSender
-    {
-        public bool IsConfigured => true;
-        public List<(string Phone, string Text)> Messages { get; } = [];
-        public Task SendAsync(string destination, string text, string purpose, CancellationToken token)
-        {
-            Assert.Equal("DebtReminder", purpose);
-            Messages.Add((destination, text));
-            return Task.CompletedTask;
-        }
-    }
-
-    [CreditDbFact]
-    public async Task Staff_sends_debt_sms_only_for_an_owing_customer_and_it_is_recorded()
-    {
-        var token = TestContext.Current.CancellationToken;
-        await using var e = await CreditTestDatabase.StartAsync(token);
-        var sms = new CapturingSms();
-        await using var host = Start(factory, e, services =>
-        {
-            services.RemoveAll<ISmsTextSender>();
-            services.AddSingleton<ISmsTextSender>(sms);
-        });
-        await host.GrantDefaultsAsync(RoleCode.Farmer, "FARMER", token);
-        var staffId = await host.AddMemberAsync(RoleCode.SalesStaff, "SALES_STAFF", "Sale Staff", token);
-        using var staff = await host.ClientAsync(staffId, "SALES_STAFF", token);
-        using var farmer = await host.ClientAsync(e.FarmerUserId, "FARMER", token);
-        var route = $"/api/customers/{e.FarmerId}/debt/send-sms";
-
-        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await staff.PostAsync(route, null, token)).StatusCode);
-        Assert.Empty(sms.Messages);
-        using (var scope = e.Scope())
-            await scope.ServiceProvider.GetRequiredService<IDebtService>().ManualAsync(e.FarmerId,
-                new(2_000_000, BusinessCalendar.Today(DateTimeOffset.UtcNow).AddDays(10), "Nợ cũ"), token);
-
-        Assert.Equal(HttpStatusCode.Forbidden, (await farmer.PostAsync(route, null, token)).StatusCode);
-        var created = await OkAsync(await staff.PostAsync(route, null, token), token);
-        Assert.Equal("MESSAGE", created.GetProperty("channel").GetString());
-        Assert.Equal("OTHER", created.GetProperty("outcome").GetString());
-        var sent = Assert.Single(sms.Messages);
-        Assert.Equal("0912345678", sent.Phone);
-        Assert.Contains("2,000,000 VND", sent.Text);
-        var history = await OkAsync(await staff.GetAsync($"/api/customers/{e.FarmerId}/debt/follow-ups", token), token);
-        Assert.Single(history.GetProperty("items").EnumerateArray());
-    }
-
     [CreditDbFact]
     public async Task Owner_and_sale_staff_log_reminders_others_cannot_and_the_Farmer_never_sees_them()
     {

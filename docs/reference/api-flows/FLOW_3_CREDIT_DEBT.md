@@ -624,6 +624,15 @@ LimitSuggestionsResponse {
 
 ## 8h. F3.18 — Debt reminders at fixed milestones (new, 2026-11-03)
 
+**Automatic SMS extension (2026-11-25).** Each newly generated Farmer reminder at N1, N2, N3, N4 or N5 also
+queues one SMS for the customer's stored valid phone number. The existing
+in-app notification remains. A durable `debt_sms_outbox` row uses the same milestone deduplication key; the
+background `DebtSms` worker sends through the gateway used for password recovery, observes its recipient allow-list
+and daily budget, and retries failures with backoff. A paid or disputed debt group is cancelled before dispatch,
+and the amount is refreshed for partial payments. Staff summaries are in-app only. No old notification is backfilled
+into SMS when this feature is enabled. Queued messages wait while the gateway is unconfigured. The follow-up log
+in §8j remains manual and separate from these automatic reminders.
+
 No new route. The background job `DebtReminders` (same `BackgroundJobs:DebtReminders` switch) no longer reminds every day
 for every entry due within `DebtReminderDays`; that option is removed. It sends the milestones of the store debt policy
 (D10, CS-09), per customer and group:
@@ -723,15 +732,6 @@ explicit `dueDate` with a season is kept and recorded as `MANUAL`. Without a sea
 ---
 
 ## 8j. F3.23 — Debt follow-ups: reminders made outside the system (new, 2026-11-25)
-
-**Additional action — staff-triggered debt SMS.** `POST /api/customers/{farmerProfileId}/debt/send-sms`
-requires the same `DEBT.FOLLOW_UP` permission as recording a follow-up. The server reads the active store's debt
-account and the customer's stored phone number, refuses zero balance or an invalid/missing phone, and sends a fixed
-balance reminder through the same configured SMS gateway and cost guards as password recovery. The recipient and
-message are server-owned; the request has no body. After the gateway accepts the message, the system records a
-`MESSAGE` / `OTHER` follow-up and returns its `DebtFollowUpResponse`. Gateway failure returns 503 and records no
-follow-up. `MessageDelivery:SmsProvider=Simulated` shows the text in the development SMS outbox without sending it.
-The normal `POST /follow-ups` route below remains a log of contact made outside the system and never sends SMS.
 
 Team task 3: "after a debt is overdue the store reminds the customer itself and logs it; the system only logs". The owner or
 Sale staff record each manual reminder of a customer: a call, a visit, the customer at the counter, a message. Each record

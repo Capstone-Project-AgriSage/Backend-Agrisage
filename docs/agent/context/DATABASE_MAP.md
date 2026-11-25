@@ -110,6 +110,10 @@ Use it to locate the correct domain, then open the exact authoritative table sec
 - `debt_follow_ups` — one row per manual reminder of a customer made outside the system (channel, outcome, optional promise to
   pay, balance and overdue amount at contact). Append-only; it changes nothing else.
 
+### Added after the baseline (automatic debt SMS, 2026-11-25)
+- `debt_sms_outbox` — one durable delivery row per Farmer debt reminder milestone, with phone and text snapshot,
+  retry schedule and sent timestamp. Separate from the manual follow-up log.
+
 ## Global DB Conventions
 
 ```text

@@ -18,6 +18,7 @@ public sealed class BackgroundJobOptions
     [Range(1, 1000)] public int DebtSummaryBatch { get; init; } = 30;
     public bool ExpireLots { get; init; } = true;
     public bool DebtReminders { get; init; } = true;
+    public bool DebtSms { get; init; } = true;
     public bool InventoryAlerts { get; init; } = true;
     public bool ReconcilePayments { get; init; } = true;
     public bool ExpireAuthentication { get; init; } = true;

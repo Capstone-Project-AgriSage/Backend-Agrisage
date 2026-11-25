@@ -206,6 +206,7 @@ public interface IAgriSageDbContext
     DbSet<Notification> Notifications { get; }
 
     DbSet<NotificationOutbox> NotificationOutbox { get; }
+    DbSet<DebtSmsOutbox> DebtSmsOutbox { get; }
 
     DbSet<AuditLog> AuditLogs { get; }
 

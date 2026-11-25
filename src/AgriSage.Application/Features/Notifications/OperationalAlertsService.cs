@@ -8,6 +8,7 @@ using AgriSage.Domain.Features.Debt.Entities;
 using AgriSage.Domain.Features.Debt.Enums;
 using AgriSage.Domain.Features.Identity.Enums;
 using AgriSage.Domain.Features.Inventory.Enums;
+using AgriSage.Domain.Features.Notifications.Entities;
 using AgriSage.Domain.Features.Products.Enums;
 using Microsoft.EntityFrameworkCore;
 
@@ -39,10 +40,12 @@ public sealed class OperationalAlertsService(IAgriSageDbContext context, Notific
             .Where(s => today < s.PaymentDueDate.AddDays(offsets.N2)).ToDictionary(s => s.Id);
 
         var accounts = from a in context.DebtAccounts.AsNoTracking()
-                       where a.StoreId == store && context.DebtEntries.Any(e => e.DebtAccountId == a.Id && e.OutstandingAmount > 0
+                       where a.StoreId == store && a.FarmerProfile.User.Status == UserStatus.Active
+                           && a.FarmerProfile.User.Role.IsActive && a.FarmerProfile.User.Role.DeletedAt == null
+                           && context.DebtEntries.Any(e => e.DebtAccountId == a.Id && e.OutstandingAmount > 0
                            && e.Status != DebtEntryStatus.Disputed && e.Status != DebtEntryStatus.Paid && e.Status != DebtEntryStatus.Cancelled)
                        orderby a.Id
-                       select new { a.Id, a.FarmerProfileId, a.FarmerProfile.UserId };
+                       select new { a.Id, a.FarmerProfileId, a.FarmerProfile.UserId, a.FarmerProfile.User.PhoneNumber };
         for (var page = 0; ; page++)
         {
             var rows = await accounts.Skip(page * batchSize).Take(batchSize).ToListAsync(token);
@@ -81,6 +84,7 @@ public sealed class OperationalAlertsService(IAgriSageDbContext context, Notific
                     await writer.AddAsync([row.UserId], "DEBT_DUE_SOON", $"Vụ {season.Name} bắt đầu thu hoạch",
                         $"Bạn có {Money(group.Sum(e => e.OutstandingAmount))} nợ của vụ {season.Name}, hạn trả {season.PaymentDueDate:dd/MM/yyyy}.",
                         key, "DEBT_ACCOUNT", row.Id, token);
+                    QueueSms(row.Id, row.PhoneNumber, key, group.Sum(e => e.OutstandingAmount), season.PaymentDueDate, "N1", season.Id);
                 }
 
                 foreach (var group in own.GroupBy(e => e.DueDate))
@@ -101,6 +105,7 @@ public sealed class OperationalAlertsService(IAgriSageDbContext context, Notific
                     };
                     await writer.AddAsync([row.UserId], due < today ? "DEBT_OVERDUE" : "DEBT_DUE_SOON", title,
                         $"{message} Vui lòng xem chi tiết công nợ.", key, "DEBT_ACCOUNT", row.Id, token);
+                    QueueSms(row.Id, row.PhoneNumber, key, group.Sum(e => e.OutstandingAmount), due, milestone, null);
                 }
             }
 
@@ -184,6 +189,13 @@ public sealed class OperationalAlertsService(IAgriSageDbContext context, Notific
     }
 
     private static string Money(decimal amount) => amount.ToString("N0", Vietnamese) + " đ";
+
+    private void QueueSms(Guid accountId, string? phone, string key, decimal amount, DateOnly due, string milestone, Guid? seasonId)
+    {
+        if (!ContactNormalizer.TryNormalizePhone(phone, out var normalized)) return;
+        context.DebtSmsOutbox.Add(new DebtSmsOutbox(accountId, key, normalized!, DebtSmsMessage.Create(milestone, amount, due),
+            milestone, due, seasonId, clock.UtcNow));
+    }
 
     public async Task InventoryAlertsAsync(int batchSize, int withinDays, CancellationToken token)
     {

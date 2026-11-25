@@ -7746,6 +7746,107 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AgriSage.Domain.Features.Notifications.Entities.DebtSmsOutbox", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("attempts");
+
+                    b.Property<DateTimeOffset>("AvailableAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("available_at");
+
+                    b.Property<DateTimeOffset?>("CancelledAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("cancelled_at");
+
+                    b.Property<Guid?>("CollectionCropSeasonId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("collection_crop_season_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("DebtAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("debt_account_id");
+
+                    b.Property<string>("DeduplicationKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("deduplication_key");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("DeletedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<DateOnly>("DueDate")
+                        .HasColumnType("date")
+                        .HasColumnName("due_date");
+
+                    b.Property<string>("LastErrorCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("last_error_code");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("message");
+
+                    b.Property<string>("Milestone")
+                        .IsRequired()
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)")
+                        .HasColumnName("milestone");
+
+                    b.Property<string>("PhoneNumber")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("phone_number");
+
+                    b.Property<DateTimeOffset?>("SentAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sent_at");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_debt_sms_outbox");
+
+                    b.HasIndex("AvailableAt")
+                        .HasDatabaseName("ix_debt_sms_outbox_available_at")
+                        .HasFilter("sent_at IS NULL AND cancelled_at IS NULL AND deleted_at IS NULL");
+
+                    b.HasIndex("DebtAccountId")
+                        .HasDatabaseName("ix_debt_sms_outbox_debt_account_id");
+
+                    b.HasIndex("DeduplicationKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_debt_sms_outbox_deduplication_key");
+
+                    b.ToTable("debt_sms_outbox", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_debt_sms_outbox_attempts", "attempts >= 0");
+                        });
+                });
+
             modelBuilder.Entity("AgriSage.Domain.Features.Notifications.Entities.Notification", b =>
                 {
                     b.Property<Guid>("Id")
@@ -12072,6 +12173,22 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_sales_invoices_store_id");
+                });
+
+            modelBuilder.Entity("AgriSage.Domain.Features.Notifications.Entities.DebtSmsOutbox", b =>
+                {
+                    b.HasOne("AgriSage.Domain.Features.Debt.Entities.DebtAccount", null)
+                        .WithMany()
+                        .HasForeignKey("DebtAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_debt_sms_outbox_debt_account_id");
+
+                    b.HasOne("AgriSage.Domain.Features.Identity.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("DeletedBy")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_debt_sms_outbox_deleted_by");
                 });
 
             modelBuilder.Entity("AgriSage.Domain.Features.Notifications.Entities.Notification", b =>
