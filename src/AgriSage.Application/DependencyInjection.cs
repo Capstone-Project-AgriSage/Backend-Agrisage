@@ -62,6 +62,8 @@ public static class DependencyInjection
         services.AddScoped<ICustomerCreditService, CustomerCreditService>();
         services.AddScoped<ICreditEligibilityService, CreditEligibilityService>();
         services.AddScoped<IDebtService, DebtService>();
+        services.AddScoped<DebtFollowUpQueries>();
+        services.AddScoped<IDebtFollowUpService, DebtFollowUpService>();
         services.AddScoped<ICropSeasonService, CropSeasonService>();
         services.AddScoped<IDebtPolicyService, DebtPolicyService>();
         services.AddScoped<IDebtReminderStartService, DebtReminderStartService>();

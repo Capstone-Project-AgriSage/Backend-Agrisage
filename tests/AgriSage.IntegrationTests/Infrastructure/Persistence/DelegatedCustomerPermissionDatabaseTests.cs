@@ -48,7 +48,8 @@ public sealed class DelegatedCustomerPermissionDatabaseTests
         public CustomerGroupService Groups => new(db, clock, new NpgsqlErrorClassifier(), Locks,
             new CustomerGroupDefaultSwitcher(db), Writes, Audit);
         public CustomerCreditService Credit => new(db, Locks, new NpgsqlErrorClassifier(), Writes, Audit, clock);
-        public DebtService Debt => new(db, Locks, clock, session.CurrentUser, Writes, Audit, new OrderQueries(db), Payments);
+        public DebtService Debt => new(db, Locks, clock, session.CurrentUser, Writes, Audit, new OrderQueries(db), Payments,
+            new DebtFollowUpQueries(db));
         public BankDebtPaymentService Bank => new(db, Locks, Writes, clock,
             new PaymentAllocator(clock, new CreditReservationAdjuster(db, Locks, clock), new DebtRepaymentPosting(db, Locks, clock)), Payments, Audit);
 

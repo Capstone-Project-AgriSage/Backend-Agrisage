@@ -9,8 +9,18 @@ namespace AgriSage.Api.Features.Debt;
 
 [ApiController]
 [Authorize(Roles = ApiRoles.Operate)]
-public sealed class DebtController(IDebtService service, IDebtRolloverService rollovers) : ControllerBase
+public sealed class DebtController(IDebtService service, IDebtRolloverService rollovers, IDebtFollowUpService followUps) : ControllerBase
 {
+    // F3.23: reminders made outside the system, logged afterwards (owner and Sale staff; never the Farmer).
+    [HttpGet("api/customers/{farmerProfileId:guid}/debt/follow-ups")]
+    public Task<PagedResult<DebtFollowUpResponse>> FollowUps(Guid farmerProfileId, [FromQuery] DebtFollowUpListRequest request,
+        CancellationToken token) => followUps.ListAsync(farmerProfileId, request, token);
+    [HttpPost("api/customers/{farmerProfileId:guid}/debt/follow-ups")]
+    public async Task<IActionResult> RecordFollowUp(Guid farmerProfileId, DebtFollowUpRequest request, CancellationToken token)
+    {
+        var response = await followUps.RecordAsync(farmerProfileId, request, token);
+        return StatusCode(StatusCodes.Status201Created, response);
+    }
     [HttpGet("api/debt-entries")]
     public Task<PagedResult<DebtEntryListItem>> Entries([FromQuery] DebtEntryListRequest request, CancellationToken token) => service.EntriesAsync(request, token);
     [HttpGet("api/debt-entries/{id:guid}")]

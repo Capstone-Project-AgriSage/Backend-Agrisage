@@ -40,6 +40,12 @@ public sealed class DebtAccount : SoftDeletableEntity, IHasConcurrencyVersion
 
     public void ChangeStatus(DebtAccountStatus status) => Status = status;
 
+    // F3.23: a reminder made outside the system, logged with the balance at this moment. It changes nothing on the account.
+    public DebtFollowUp RecordFollowUp(DebtFollowUpChannel channel, DebtFollowUpOutcome outcome, string? note,
+        DateTimeOffset contactedAt, DateOnly? promisedDate, decimal? promisedAmount, decimal overdueAmount, Guid createdBy,
+        DateTimeOffset now) =>
+        new(Id, channel, outcome, note, contactedAt, promisedDate, promisedAmount, CurrentBalance, overdueAmount, createdBy, now);
+
     // Successful credit fulfillment: Debt Entry for the unpaid amount + CREDIT_SALE transaction.
     public DebtPosting CreateCreditSaleEntry(
         string entryNumber,

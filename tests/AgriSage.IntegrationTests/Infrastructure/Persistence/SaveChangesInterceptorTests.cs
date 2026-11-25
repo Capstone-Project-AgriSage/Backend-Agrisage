@@ -267,7 +267,7 @@ public class SaveChangesInterceptorTests
             .Where(type => type.IsAssignableTo(typeof(SoftDeletableEntity)))
             .ToList();
 
-        Assert.Equal(79, softDeletableTypes.Count); // + crop_seasons, store_debt_policies (F3.9), ai_provider_settings (AI 2.2)
+        Assert.Equal(80, softDeletableTypes.Count); // + crop_seasons, store_debt_policies (F3.9), ai_provider_settings (AI 2.2), debt_follow_ups (F3.23)
         var softDeleted = new List<Type>();
         var rejected = new List<Type>();
 
@@ -296,6 +296,7 @@ public class SaveChangesInterceptorTests
         Assert.Contains(typeof(Brand), softDeleted);
         Assert.Contains(typeof(DebtAccount), rejected);
         Assert.Contains(typeof(AgriSage.Domain.Features.Debt.Entities.CropSeason), rejected); // closed, never deleted
+        Assert.Contains(typeof(AgriSage.Domain.Features.Debt.Entities.DebtFollowUp), rejected); // append-only log (F3.23)
         Assert.All(
             softDeletableTypes.Where(type => type.IsAssignableTo(typeof(SoftDeletableChildEntity))),
             childType => Assert.Contains(childType, rejected));

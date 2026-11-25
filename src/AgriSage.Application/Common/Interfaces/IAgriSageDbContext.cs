@@ -148,6 +148,8 @@ public interface IAgriSageDbContext
 
     DbSet<DebtEntryAction> DebtEntryActions { get; }
 
+    DbSet<DebtFollowUp> DebtFollowUps { get; }
+
     DbSet<DebtTransaction> DebtTransactions { get; }
 
     DbSet<CropSeason> CropSeasons { get; }

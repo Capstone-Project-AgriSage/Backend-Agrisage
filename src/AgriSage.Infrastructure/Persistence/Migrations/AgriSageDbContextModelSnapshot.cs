@@ -1592,6 +1592,98 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AgriSage.Domain.Features.Debt.Entities.DebtFollowUp", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("channel");
+
+                    b.Property<DateTimeOffset>("ContactedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("contacted_at");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid>("DebtAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("debt_account_id");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("DeletedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("note");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("outcome");
+
+                    b.Property<decimal>("OutstandingAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("outstanding_amount");
+
+                    b.Property<decimal>("OverdueAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("overdue_amount");
+
+                    b.Property<decimal?>("PromisedAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("promised_amount");
+
+                    b.Property<DateOnly?>("PromisedDate")
+                        .HasColumnType("date")
+                        .HasColumnName("promised_date");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_debt_follow_ups");
+
+                    b.HasIndex("DebtAccountId", "ContactedAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_debt_follow_ups_debt_account_id_contacted_at");
+
+                    b.ToTable("debt_follow_ups", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_debt_follow_ups_amounts", "outstanding_amount > 0 AND overdue_amount >= 0 AND overdue_amount <= outstanding_amount");
+
+                            t.HasCheckConstraint("ck_debt_follow_ups_channel", "channel IN ('PHONE_CALL', 'VISIT', 'AT_STORE', 'MESSAGE', 'OTHER')");
+
+                            t.HasCheckConstraint("ck_debt_follow_ups_outcome", "outcome IN ('PROMISED', 'ASKED_MORE_TIME', 'NO_ANSWER', 'REFUSED', 'OTHER')");
+
+                            t.HasCheckConstraint("ck_debt_follow_ups_promise", "(outcome = 'PROMISED' AND promised_date IS NOT NULL) OR (outcome <> 'PROMISED' AND promised_date IS NULL AND promised_amount IS NULL)");
+
+                            t.HasCheckConstraint("ck_debt_follow_ups_promised_amount", "promised_amount IS NULL OR promised_amount > 0");
+                        });
+                });
+
             modelBuilder.Entity("AgriSage.Domain.Features.Debt.Entities.DebtTransaction", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4308,6 +4400,15 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                             IsDelegable = true,
                             Module = "DEBT",
                             Name = "Gia hạn nợ"
+                        },
+                        new
+                        {
+                            Id = new Guid("407a9c04-b966-47e1-b306-8e4b06fd0843"),
+                            Code = "DEBT.FOLLOW_UP",
+                            IsActive = true,
+                            IsDelegable = true,
+                            Module = "DEBT",
+                            Name = "Ghi nhận nhắc nợ"
                         },
                         new
                         {
@@ -10303,6 +10404,29 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         .HasForeignKey("OldCropSeasonId")
                         .OnDelete(DeleteBehavior.NoAction)
                         .HasConstraintName("fk_debt_entry_actions_old_crop_season_id");
+                });
+
+            modelBuilder.Entity("AgriSage.Domain.Features.Debt.Entities.DebtFollowUp", b =>
+                {
+                    b.HasOne("AgriSage.Domain.Features.Identity.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_debt_follow_ups_created_by");
+
+                    b.HasOne("AgriSage.Domain.Features.Debt.Entities.DebtAccount", null)
+                        .WithMany()
+                        .HasForeignKey("DebtAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_debt_follow_ups_debt_account_id");
+
+                    b.HasOne("AgriSage.Domain.Features.Identity.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("DeletedBy")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_debt_follow_ups_deleted_by");
                 });
 
             modelBuilder.Entity("AgriSage.Domain.Features.Debt.Entities.DebtTransaction", b =>
