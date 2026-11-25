@@ -28,13 +28,13 @@ public class PersistenceModelTests
         "credit_tiers", "farmer_credit_profiles", "credit_limit_histories", "credit_reservations",
         "debt_accounts", "debt_entries", "debt_entry_actions", "debt_transactions",
         "crop_seasons", "store_debt_policies", "debt_follow_ups",
-        "sales_returns", "sales_return_items", "refunds",
+        "sales_returns", "sales_return_items", "refunds", "sales_exchanges", "exchange_items",
         "diseases", "disease_treatments", "ai_models", "ai_policy_configs", "diagnosis_cases",
         "diagnosis_images", "ai_inferences", "agent_reviews", "recommendation_items", "ai_provider_settings",
         "articles", "contact_requests", "notifications", "audit_logs",
         "auth_sessions", "refresh_tokens", "auth_challenges", "notification_outbox",
         "permissions", "role_permissions", "store_member_permissions", "realtime_outbox",
-        "disease_products", "advisory_sessions", "advisory_session_items"
+        "disease_products", "advisory_sessions", "advisory_session_items", "sales_invoices", "invoice_emails"
     ];
 
     private static readonly (IModel DesignModel, IModel RuntimeModel) Models = BuildModels();
@@ -58,11 +58,11 @@ public class PersistenceModelTests
         Table(table).GetCheckConstraints().Single(check => check.Name == $"ck_{table}_{name}");
 
     [Fact]
-    public void Model_maps_exactly_the_84_documented_tables()
+    public void Model_maps_exactly_the_88_documented_tables()
     {
         var tables = Model.GetEntityTypes().Select(entityType => entityType.GetTableName()).ToList();
 
-        Assert.Equal(84, DocumentedTables.Length);
+        Assert.Equal(88, DocumentedTables.Length);
         Assert.Equal(DocumentedTables.Order(), tables.Order());
         Assert.DoesNotContain(Model.GetEntityTypes(), entityType => entityType.IsOwned());
     }
@@ -89,7 +89,7 @@ public class PersistenceModelTests
             .Where(entityType => entityType.FindProperty(nameof(SoftDeletableEntity.DeletedAt)) is null)
             .Select(entityType => entityType.GetTableName());
 
-        Assert.Equal(new[] { "audit_logs", "permissions", "role_permissions", "store_member_permissions" }, withoutSoftDelete.Order());
+        Assert.Equal(new[] { "audit_logs", "invoice_emails", "permissions", "role_permissions", "sales_invoices", "store_member_permissions" }, withoutSoftDelete.Order());
         Assert.Null(Table("audit_logs").FindProperty(nameof(AuditableEntity.CreatedAt)));
     }
 
@@ -264,7 +264,7 @@ public class PersistenceModelTests
             "status IN ('PENDING_CONFIRMATION', 'CONFIRMED', 'PREPARING', 'READY_FOR_FULFILLMENT', "
             + "'PARTIALLY_FULFILLED', 'COMPLETED', 'CANCELLED', 'PARTIALLY_CANCELLED')",
             Check("orders", "status").Sql);
-        Assert.Equal("payment_method IN ('CASH', 'PAYOS', 'BANK_TRANSFER')", Check("payments", "payment_method").Sql);
+        Assert.Equal("payment_method IN ('CASH', 'PAYOS', 'BANK_TRANSFER', 'EXCHANGE_CREDIT')", Check("payments", "payment_method").Sql);
         Assert.Equal("confirmation_source IN ('STAFF', 'PAYOS_WEBHOOK')", Check("payments", "confirmation_source").Sql);
     }
 
@@ -364,7 +364,7 @@ public class PersistenceModelTests
     [Fact]
     public void Enum_database_values_use_documented_upper_snake_case()
     {
-        Assert.Equal(["CASH", "PAYOS", "BANK_TRANSFER"], EnumDbValue.AllValues(typeof(PaymentMethod)));
+        Assert.Equal(["CASH", "PAYOS", "BANK_TRANSFER", "EXCHANGE_CREDIT"], EnumDbValue.AllValues(typeof(PaymentMethod)));
         Assert.Equal(["STAFF", "PAYOS_WEBHOOK"], EnumDbValue.AllValues(typeof(PaymentConfirmationSource)));
     }
 }

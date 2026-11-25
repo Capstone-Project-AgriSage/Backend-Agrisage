@@ -29,17 +29,24 @@ public sealed class SalesReturnService(IAgriSageDbContext context, IRowLockServi
         await using var transaction = await context.BeginTransactionAsync(token);
         await locks.LockOrderAsync(request.OrderId, token);
         var order = await queries.OrderAsync(request.OrderId, storeId, farmerId, false, token);
-        var salesReturn = new SalesReturn(order,
-            await DocumentNumbers.NextAsync(context.SalesReturns.IgnoreQueryFilters().AsNoTracking().Where(r => r.StoreId == storeId)
-                .Select(r => r.ReturnNumber), DocumentNumbers.SalesReturn, BusinessCalendar.Today(clock.UtcNow), token),
-            actor, clock.UtcNow, Texts.Clean(request.ReasonSummary), Texts.Clean(request.Note));
-        await AddLinesAsync(salesReturn, order, request.Items, token);
+        var salesReturn = await CreateCoreAsync(order, request, actor, token);
         context.SalesReturns.Add(salesReturn);
         audit.Record("RETURN_REQUESTED", "SALES_RETURN", salesReturn.Id, storeId);
         await context.SaveChangesAsync(token);
         var response = await queries.GetAsync(salesReturn.Id, farmerId, token);
         await transaction.CommitAsync(token);
         return response;
+    }
+
+    internal async Task<SalesReturn> CreateCoreAsync(Order order, CreateReturnRequest request, Guid actor, CancellationToken token)
+    {
+        var storeId = order.StoreId;
+        var salesReturn = new SalesReturn(order,
+            await DocumentNumbers.NextAsync(context.SalesReturns.IgnoreQueryFilters().AsNoTracking().Where(r => r.StoreId == storeId)
+                .Select(r => r.ReturnNumber), DocumentNumbers.SalesReturn, BusinessCalendar.Today(clock.UtcNow), token),
+            actor, clock.UtcNow, Texts.Clean(request.ReasonSummary), Texts.Clean(request.Note));
+        await AddLinesAsync(salesReturn, order, request.Items, token);
+        return salesReturn;
     }
 
     public Task<SalesReturnResponse> AddItemAsync(Guid id, ReturnItemRequest request, CancellationToken token) =>
@@ -92,54 +99,55 @@ public sealed class SalesReturnService(IAgriSageDbContext context, IRowLockServi
         }, token);
 
     public Task<SalesReturnResponse> CompleteInspectionAsync(Guid id, CancellationToken token) =>
-        MutateAsync(id, null, true, async (r, order, actor) =>
+        MutateAsync(id, null, true, (r, order, actor) => CompleteInspectionCoreAsync(r, order, actor, token), token);
+
+    internal async Task CompleteInspectionCoreAsync(SalesReturn r, Order order, Guid actor, CancellationToken token)
+    {
+        if (r.Status != SalesReturnStatus.Received)
+            throw new BusinessRuleException("Only a RECEIVED return can complete inspection.");
+        var items = r.Items.Where(i => !i.IsDeleted).OrderBy(i => i.Id).ToList();
+        var uninspected = items.Where(i => !i.IsInspected).ToDictionary(i => i.Id.ToString(), _ => new[] { "Inspect this return line first." });
+        if (uninspected.Count > 0) throw new BusinessRuleException("Every return line must be inspected.", uninspected);
+        var restock = items.Where(i => i.InventoryDisposition == InventoryDisposition.Restock).ToList();
+        if (restock.Any(i => i.OriginalCogsUnitCost is null)) throw new BusinessRuleException("The original cost is required to restock returned goods.");
+        if (r.FarmerProfileId is { } farmer) await locks.LockFarmerProfileAsync(farmer, token);
+        var lotIds = restock.Select(i => i.InventoryLotId).Distinct().ToArray();
+        await locks.LockLotBalancesAsync(lotIds, token);
+        var lots = await context.InventoryLots.Include(l => l.Balance).Where(l => lotIds.Contains(l.Id) && l.StoreProduct.StoreId == r.StoreId)
+            .ToDictionaryAsync(l => l.Id, token);
+        if (lots.Count != lotIds.Length) throw new BusinessRuleException("An original lot is no longer available for restocking.");
+        StockMovement? movement = null;
+        if (restock.Count > 0)
         {
-            if (r.Status != SalesReturnStatus.Received)
-                throw new BusinessRuleException("Only a RECEIVED return can complete inspection.");
-            var items = r.Items.Where(i => !i.IsDeleted).OrderBy(i => i.Id).ToList();
-            var uninspected = items.Where(i => !i.IsInspected).ToDictionary(i => i.Id.ToString(), _ => new[] { "Inspect this return line first." });
-            if (uninspected.Count > 0) throw new BusinessRuleException("Every return line must be inspected.", uninspected);
-            var restock = items.Where(i => i.InventoryDisposition == InventoryDisposition.Restock).ToList();
-            if (restock.Any(i => i.OriginalCogsUnitCost is null)) throw new BusinessRuleException("The original cost is required to restock returned goods.");
-            if (r.FarmerProfileId is { } farmer) await locks.LockFarmerProfileAsync(farmer, token);
-            var lotIds = restock.Select(i => i.InventoryLotId).Distinct().ToArray();
-            await locks.LockLotBalancesAsync(lotIds, token);
-            var lots = await context.InventoryLots.Include(l => l.Balance).Where(l => lotIds.Contains(l.Id) && l.StoreProduct.StoreId == r.StoreId)
-                .ToDictionaryAsync(l => l.Id, token);
-            if (lots.Count != lotIds.Length) throw new BusinessRuleException("An original lot is no longer available for restocking.");
-            StockMovement? movement = null;
-            if (restock.Count > 0)
-            {
-                movement = new StockMovement(r.StoreId,
-                    await DocumentNumbers.NextMovementNumberAsync(context, r.StoreId, BusinessCalendar.Today(clock.UtcNow), token),
-                    StockMovementType.ReturnIn, clock.UtcNow, actor, orderId: r.OrderId, salesReturnId: r.Id,
-                    reasonCode: "SALES_RETURN", reason: r.ReasonSummary);
-                foreach (var item in restock.OrderBy(i => i.InventoryLotId).ThenBy(i => i.Id))
-                    movement.AddItem(item.InventoryLotId, lots[item.InventoryLotId].ReceiveStock(item.ReturnedBaseQuantity, item.OriginalCogsUnitCost!.Value));
-                movement.Post(actor, clock.UtcNow);
-                context.StockMovements.Add(movement);
-            }
-            var originalSources = await sources.LoadAsync(order, token, r.Id);
-            decimal debt = 0;
-            var links = new List<(Guid ItemId, Guid TransactionId)>();
-            foreach (var item in items)
-            {
-                var source = originalSources.SingleOrDefault(s => Matches(s, item.OrderItemId, item.DeliveryItemLotAllocationId, item.OriginalStockMovementItemId));
-                var before = context.DebtTransactions.Local.Select(t => t.Id).ToHashSet();
-                var applied = await debtPosting.ApplyReturnAsync(r.OrderId, r.Id, item.ReturnValue, actor, source?.MovementId, token);
-                if (applied < 0 || applied > item.ReturnValue) throw new BusinessRuleException("The debt posting returned an invalid adjustment amount.");
-                debt += applied;
-                var added = context.DebtTransactions.Local.FirstOrDefault(t => !before.Contains(t.Id) && t.SalesReturnId == r.Id);
-                if (applied > 0 && added is not null) links.Add((item.Id, added.Id));
-            }
-            r.CompleteInspection(actor, clock.UtcNow, debt);
-            if (movement is not null)
-                foreach (var item in restock) r.LinkReturnStockMovement(item.Id, movement.Id);
-            foreach (var link in links) r.LinkDebtAdjustmentTransaction(link.ItemId, link.TransactionId);
-            r.FinishInspectionResolution(clock.UtcNow);
-            audit.Record("RETURN_INSPECTION_COMPLETED", "SALES_RETURN", r.Id, r.StoreId,
-                newValues: new { r.TotalReturnAmount, r.TotalDebtAdjustment, r.TotalRefundAmount, returnStockMovementId = movement?.Id });
-        }, token);
+            movement = new StockMovement(r.StoreId,
+                await DocumentNumbers.NextMovementNumberAsync(context, r.StoreId, BusinessCalendar.Today(clock.UtcNow), token),
+                StockMovementType.ReturnIn, clock.UtcNow, actor, orderId: r.OrderId, salesReturnId: r.Id,
+                reasonCode: "SALES_RETURN", reason: r.ReasonSummary);
+            foreach (var item in restock.OrderBy(i => i.InventoryLotId).ThenBy(i => i.Id))
+                movement.AddItem(item.InventoryLotId, lots[item.InventoryLotId].ReceiveStock(item.ReturnedBaseQuantity, item.OriginalCogsUnitCost!.Value));
+            movement.Post(actor, clock.UtcNow);
+            context.StockMovements.Add(movement);
+        }
+        var originalSources = await sources.LoadAsync(order, token, r.Id);
+        // DebtReturnPosting is idempotent per return, so post the total once (also for multi-line exchanges).
+        var sourceIds = items.Select(item => originalSources.SingleOrDefault(s => Matches(s, item.OrderItemId,
+            item.DeliveryItemLotAllocationId, item.OriginalStockMovementItemId))?.MovementId).Distinct().ToList();
+        var before = context.DebtTransactions.Local.Select(t => t.Id).ToHashSet();
+        var debt = await debtPosting.ApplyReturnAsync(r.OrderId, r.Id, r.TotalReturnAmount, actor,
+            sourceIds.Count == 1 ? sourceIds[0] : null, token);
+        if (debt < 0 || debt > r.TotalReturnAmount) throw new BusinessRuleException("The debt posting returned an invalid adjustment amount.");
+        var added = context.DebtTransactions.Local.FirstOrDefault(t => !before.Contains(t.Id) && t.SalesReturnId == r.Id);
+        var links = debt > 0 && added is not null
+            ? items.Select(item => (ItemId: item.Id, TransactionId: added.Id)).ToList()
+            : new List<(Guid ItemId, Guid TransactionId)>();
+        r.CompleteInspection(actor, clock.UtcNow, debt);
+        if (movement is not null)
+            foreach (var item in restock) r.LinkReturnStockMovement(item.Id, movement.Id);
+        foreach (var link in links) r.LinkDebtAdjustmentTransaction(link.ItemId, link.TransactionId);
+        r.FinishInspectionResolution(clock.UtcNow);
+        audit.Record("RETURN_INSPECTION_COMPLETED", "SALES_RETURN", r.Id, r.StoreId,
+            newValues: new { r.TotalReturnAmount, r.TotalDebtAdjustment, r.TotalRefundAmount, returnStockMovementId = movement?.Id });
+    }
 
     private async Task AddLinesAsync(SalesReturn r, Order order, IReadOnlyList<ReturnItemRequest> requests, CancellationToken token)
     {
@@ -191,6 +199,8 @@ public sealed class SalesReturnService(IAgriSageDbContext context, IRowLockServi
         var r = await context.SalesReturns.Include(r => r.Items).Include(r => r.Refunds)
             .SingleOrDefaultAsync(r => r.Id == id && r.StoreId == storeId && (farmerId == null || r.FarmerProfileId == farmerId), token)
             ?? throw new NotFoundException("Sales return", id);
+        if (await context.SalesExchanges.AnyAsync(e => e.SalesReturnId == id, token))
+            throw new BusinessRuleException("Use the exchange workflow for this return.");
         var order = await queries.OrderAsync(orderId, storeId, farmerId, false, token);
         await change(r, order, actor);
         await context.SaveChangesAsync(token);

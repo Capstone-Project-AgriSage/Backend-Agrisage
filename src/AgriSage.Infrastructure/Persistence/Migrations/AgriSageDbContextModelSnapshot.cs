@@ -3444,6 +3444,216 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AgriSage.Domain.Features.Exchanges.Entities.ExchangeItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<long>("BaseQuantity")
+                        .HasColumnType("bigint")
+                        .HasColumnName("base_quantity");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("DeletedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<Guid>("ExchangeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("exchange_id");
+
+                    b.Property<decimal>("LineTotal")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("line_total");
+
+                    b.Property<string>("PackagingName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("packaging_name");
+
+                    b.Property<string>("ProductName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("product_name");
+
+                    b.Property<Guid>("ProductPackagingId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_packaging_id");
+
+                    b.Property<long>("Quantity")
+                        .HasColumnType("bigint")
+                        .HasColumnName("quantity");
+
+                    b.Property<Guid>("StoreProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("store_product_id");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("unit_price");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_exchange_items");
+
+                    b.HasIndex("ProductPackagingId")
+                        .HasDatabaseName("ix_exchange_items_product_packaging_id");
+
+                    b.HasIndex("StoreProductId")
+                        .HasDatabaseName("ix_exchange_items_store_product_id");
+
+                    b.HasIndex("ExchangeId", "StoreProductId", "ProductPackagingId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_exchange_items_exchange_id_store_product_id_product_packagin");
+
+                    b.ToTable("exchange_items", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_exchange_items_amount", "unit_price >= 0 AND line_total = unit_price * quantity");
+
+                            t.HasCheckConstraint("ck_exchange_items_quantity", "quantity > 0 AND base_quantity > 0");
+                        });
+                });
+
+            modelBuilder.Entity("AgriSage.Domain.Features.Exchanges.Entities.SalesExchange", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("DeletedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<decimal?>("Difference")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("difference");
+
+                    b.Property<Guid?>("FarmerProfileId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farmer_profile_id");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("order_id");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("reason");
+
+                    b.Property<decimal>("ReplacementAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("replacement_amount");
+
+                    b.Property<Guid?>("ReplacementOrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("replacement_order_id");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("request_hash");
+
+                    b.Property<Guid>("RequestKey")
+                        .HasColumnType("uuid")
+                        .HasColumnName("request_key");
+
+                    b.Property<Guid>("RequestedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("requested_by");
+
+                    b.Property<Guid>("SalesReturnId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("sales_return_id");
+
+                    b.Property<string>("SettlementReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("settlement_reference");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("StoreId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("store_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_sales_exchanges");
+
+                    b.HasIndex("FarmerProfileId")
+                        .HasDatabaseName("ix_sales_exchanges_farmer_profile_id");
+
+                    b.HasIndex("OrderId")
+                        .HasDatabaseName("ix_sales_exchanges_order_id");
+
+                    b.HasIndex("ReplacementOrderId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_sales_exchanges_replacement_order_id");
+
+                    b.HasIndex("SalesReturnId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_sales_exchanges_sales_return_id");
+
+                    b.HasIndex("StoreId", "RequestedBy", "RequestKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_sales_exchanges_store_id_requested_by_request_key");
+
+                    b.HasIndex("StoreId", "Status", "CreatedAt")
+                        .HasDatabaseName("ix_sales_exchanges_store_id_status_created_at");
+
+                    b.ToTable("sales_exchanges", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_sales_exchanges_amount", "replacement_amount >= 0");
+
+                            t.HasCheckConstraint("ck_sales_exchanges_completion", "(status = 'COMPLETED' AND replacement_order_id IS NOT NULL AND completed_at IS NOT NULL AND settlement_reference IS NOT NULL AND difference IS NOT NULL) OR (status <> 'COMPLETED' AND replacement_order_id IS NULL AND completed_at IS NULL)");
+
+                            t.HasCheckConstraint("ck_sales_exchanges_order", "replacement_order_id IS NULL OR replacement_order_id <> order_id");
+
+                            t.HasCheckConstraint("ck_sales_exchanges_status", "status IN ('REQUESTED', 'APPROVED', 'RECEIVED', 'READY_TO_COMPLETE', 'COMPLETED', 'REJECTED', 'CANCELLED')");
+                        });
+                });
+
             modelBuilder.Entity("AgriSage.Domain.Features.GoodsReceipts.Entities.GoodsReceipt", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3897,6 +4107,141 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                     b.ToTable("permissions", (string)null);
 
                     b.HasData(
+                        new
+                        {
+                            Id = new Guid("5d3fab42-03d4-46f7-b72d-0db842d3aa64"),
+                            Code = "EXCHANGES.READ",
+                            IsActive = true,
+                            IsDelegable = true,
+                            Module = "EXCHANGES",
+                            Name = "Xem đổi hàng"
+                        },
+                        new
+                        {
+                            Id = new Guid("12fe7285-dc25-4cb8-9e23-22329f3f73b1"),
+                            Code = "EXCHANGES.CREATE",
+                            IsActive = true,
+                            IsDelegable = true,
+                            Module = "EXCHANGES",
+                            Name = "Tạo đổi hàng"
+                        },
+                        new
+                        {
+                            Id = new Guid("e723a6be-8da2-4dd9-ab0c-87bc5f33cfd0"),
+                            Code = "EXCHANGES.APPROVE",
+                            IsActive = true,
+                            IsDelegable = true,
+                            Module = "EXCHANGES",
+                            Name = "Duyệt đổi hàng"
+                        },
+                        new
+                        {
+                            Id = new Guid("06ca7d3d-3b93-4ba3-92ad-078082db8aa4"),
+                            Code = "EXCHANGES.REJECT",
+                            IsActive = true,
+                            IsDelegable = true,
+                            Module = "EXCHANGES",
+                            Name = "Từ chối đổi hàng"
+                        },
+                        new
+                        {
+                            Id = new Guid("b4752081-dbbd-4313-bf47-52935cb876d2"),
+                            Code = "EXCHANGES.CANCEL",
+                            IsActive = true,
+                            IsDelegable = true,
+                            Module = "EXCHANGES",
+                            Name = "Hủy đổi hàng"
+                        },
+                        new
+                        {
+                            Id = new Guid("cb6aed27-e9c8-4696-b6a6-4c0710d2bcd7"),
+                            Code = "EXCHANGES.RECEIVE",
+                            IsActive = true,
+                            IsDelegable = true,
+                            Module = "EXCHANGES",
+                            Name = "Thu hồi hàng đổi"
+                        },
+                        new
+                        {
+                            Id = new Guid("d07557fa-e892-41c4-8bb6-44f73bed34a5"),
+                            Code = "EXCHANGES.INSPECT",
+                            IsActive = true,
+                            IsDelegable = true,
+                            Module = "EXCHANGES",
+                            Name = "Kiểm tra hàng đổi"
+                        },
+                        new
+                        {
+                            Id = new Guid("66eae31e-c328-46c1-a7c8-9d0dd7bd287f"),
+                            Code = "EXCHANGES.COMPLETE_INSPECTION",
+                            IsActive = true,
+                            IsDelegable = true,
+                            Module = "EXCHANGES",
+                            Name = "Chốt kiểm tra đổi hàng"
+                        },
+                        new
+                        {
+                            Id = new Guid("266e6358-c9f3-4346-bbe4-44e8d2c27a6f"),
+                            Code = "EXCHANGES.COMPLETE",
+                            IsActive = true,
+                            IsDelegable = true,
+                            Module = "EXCHANGES",
+                            Name = "Quyết toán đổi hàng"
+                        },
+                        new
+                        {
+                            Id = new Guid("962b4361-3d3c-4afa-865a-700bebb731f7"),
+                            Code = "MY_EXCHANGES.READ",
+                            IsActive = true,
+                            IsDelegable = false,
+                            Module = "MY_EXCHANGES",
+                            Name = "Xem đổi hàng"
+                        },
+                        new
+                        {
+                            Id = new Guid("7e54b1e8-fd9b-491c-be4e-fb0e9f7c5120"),
+                            Code = "MY_EXCHANGES.CREATE",
+                            IsActive = true,
+                            IsDelegable = false,
+                            Module = "MY_EXCHANGES",
+                            Name = "Tạo đổi hàng"
+                        },
+                        new
+                        {
+                            Id = new Guid("17bd2b0f-1a21-4fe3-91df-a284b9312dd9"),
+                            Code = "MY_EXCHANGES.CANCEL",
+                            IsActive = true,
+                            IsDelegable = false,
+                            Module = "MY_EXCHANGES",
+                            Name = "Hủy đổi hàng"
+                        },
+                        new
+                        {
+                            Id = new Guid("4a7f7e2c-54f2-4b89-96b0-172311230001"),
+                            Code = "INVOICES.READ",
+                            IsActive = true,
+                            IsDelegable = true,
+                            Module = "INVOICES",
+                            Name = "Xem và tải hóa đơn"
+                        },
+                        new
+                        {
+                            Id = new Guid("4a7f7e2c-54f2-4b89-96b0-172311230002"),
+                            Code = "INVOICES.CREATE",
+                            IsActive = true,
+                            IsDelegable = true,
+                            Module = "INVOICES",
+                            Name = "Tạo hóa đơn từ đơn hàng"
+                        },
+                        new
+                        {
+                            Id = new Guid("4a7f7e2c-54f2-4b89-96b0-172311230003"),
+                            Code = "INVOICES.SEND_EMAIL",
+                            IsActive = true,
+                            IsDelegable = true,
+                            Module = "INVOICES",
+                            Name = "Gửi hóa đơn qua email"
+                        },
                         new
                         {
                             Id = new Guid("f9a22c22-7ddd-4b7d-a801-163a754d0001"),
@@ -7240,6 +7585,167 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AgriSage.Domain.Features.Invoices.Entities.InvoiceEmail", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Error")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("error");
+
+                    b.Property<Guid>("InvoiceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("invoice_id");
+
+                    b.Property<string>("Recipient")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("recipient");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("request_id");
+
+                    b.Property<DateTimeOffset?>("SentAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sent_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_invoice_emails");
+
+                    b.HasIndex("InvoiceId", "CreatedAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_invoice_emails_invoice_id_created_at");
+
+                    b.HasIndex("InvoiceId", "RequestId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_invoice_emails_invoice_id_request_id");
+
+                    b.ToTable("invoice_emails", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_invoice_emails_sent_at", "(status = 'SENT' AND sent_at IS NOT NULL) OR (status <> 'SENT' AND sent_at IS NULL)");
+
+                            t.HasCheckConstraint("ck_invoice_emails_status", "status IN ('SENDING','SENT','FAILED','UNKNOWN')");
+                        });
+                });
+
+            modelBuilder.Entity("AgriSage.Domain.Features.Invoices.Entities.SalesInvoice", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("CustomerEmail")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("customer_email");
+
+                    b.Property<string>("CustomerName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("customer_name");
+
+                    b.Property<string>("InvoiceNumber")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("invoice_number");
+
+                    b.Property<DateTimeOffset>("IssuedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("issued_at");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("order_id");
+
+                    b.Property<string>("OrderNumber")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("order_number");
+
+                    b.Property<byte[]>("PdfContent")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("pdf_content");
+
+                    b.Property<string>("SnapshotJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("snapshot_json");
+
+                    b.Property<Guid>("StoreId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("store_id");
+
+                    b.Property<decimal>("TotalAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("total_amount");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_sales_invoices");
+
+                    b.HasIndex("OrderId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_sales_invoices_order_id");
+
+                    b.HasIndex("StoreId", "InvoiceNumber")
+                        .IsUnique()
+                        .HasDatabaseName("ux_sales_invoices_store_id_invoice_number");
+
+                    b.HasIndex("StoreId", "IssuedAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_sales_invoices_store_id_issued_at");
+
+                    b.ToTable("sales_invoices", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_sales_invoices_pdf_content", "octet_length(pdf_content) > 0");
+
+                            t.HasCheckConstraint("ck_sales_invoices_snapshot_json", "jsonb_typeof(snapshot_json) = 'object'");
+
+                            t.HasCheckConstraint("ck_sales_invoices_total_amount", "total_amount >= 0");
+                        });
+                });
+
             modelBuilder.Entity("AgriSage.Domain.Features.Notifications.Entities.Notification", b =>
                 {
                     b.Property<Guid>("Id")
@@ -8181,7 +8687,7 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_payments_payment_context", "payment_context IN ('ORDER_PAYMENT', 'DEBT_REPAYMENT')");
 
-                            t.HasCheckConstraint("ck_payments_payment_method", "payment_method IN ('CASH', 'PAYOS', 'BANK_TRANSFER')");
+                            t.HasCheckConstraint("ck_payments_payment_method", "payment_method IN ('CASH', 'PAYOS', 'BANK_TRANSFER', 'EXCHANGE_CREDIT')");
 
                             t.HasCheckConstraint("ck_payments_status", "status IN ('PENDING', 'PAID', 'FAILED', 'CANCELLED', 'PARTIALLY_REFUNDED', 'REFUNDED')");
                         });
@@ -9271,7 +9777,7 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_refunds_order_payment", "order_id IS NULL OR original_payment_id IS NOT NULL");
 
-                            t.HasCheckConstraint("ck_refunds_refund_method", "refund_method IN ('CASH', 'BANK_TRANSFER', 'OTHER_EXTERNAL')");
+                            t.HasCheckConstraint("ck_refunds_refund_method", "refund_method IN ('CASH', 'BANK_TRANSFER', 'OTHER_EXTERNAL', 'EXCHANGE_CREDIT')");
 
                             t.HasCheckConstraint("ck_refunds_source", "num_nonnulls(sales_return_id, order_id) = 1");
 
@@ -10965,6 +11471,85 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                     b.Navigation("StoreProduct");
                 });
 
+            modelBuilder.Entity("AgriSage.Domain.Features.Exchanges.Entities.ExchangeItem", b =>
+                {
+                    b.HasOne("AgriSage.Domain.Features.Identity.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("DeletedBy")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_exchange_items_deleted_by");
+
+                    b.HasOne("AgriSage.Domain.Features.Exchanges.Entities.SalesExchange", null)
+                        .WithMany("Items")
+                        .HasForeignKey("ExchangeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_exchange_items_exchange_id");
+
+                    b.HasOne("AgriSage.Domain.Features.Products.Entities.ProductPackaging", null)
+                        .WithMany()
+                        .HasForeignKey("ProductPackagingId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_exchange_items_product_packaging_id");
+
+                    b.HasOne("AgriSage.Domain.Features.Products.Entities.StoreProduct", null)
+                        .WithMany()
+                        .HasForeignKey("StoreProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_exchange_items_store_product_id");
+                });
+
+            modelBuilder.Entity("AgriSage.Domain.Features.Exchanges.Entities.SalesExchange", b =>
+                {
+                    b.HasOne("AgriSage.Domain.Features.Identity.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("DeletedBy")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_sales_exchanges_deleted_by");
+
+                    b.HasOne("AgriSage.Domain.Features.Customers.Entities.FarmerProfile", null)
+                        .WithMany()
+                        .HasForeignKey("FarmerProfileId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_sales_exchanges_farmer_profile_id");
+
+                    b.HasOne("AgriSage.Domain.Features.Orders.Entities.Order", null)
+                        .WithMany()
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_sales_exchanges_order_id");
+
+                    b.HasOne("AgriSage.Domain.Features.Orders.Entities.Order", null)
+                        .WithMany()
+                        .HasForeignKey("ReplacementOrderId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_sales_exchanges_replacement_order_id");
+
+                    b.HasOne("AgriSage.Domain.Features.Identity.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("RequestedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_sales_exchanges_requested_by");
+
+                    b.HasOne("AgriSage.Domain.Features.Returns.Entities.SalesReturn", null)
+                        .WithMany()
+                        .HasForeignKey("SalesReturnId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_sales_exchanges_sales_return_id");
+
+                    b.HasOne("AgriSage.Domain.Features.Stores.Entities.Store", null)
+                        .WithMany()
+                        .HasForeignKey("StoreId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_sales_exchanges_store_id");
+                });
+
             modelBuilder.Entity("AgriSage.Domain.Features.GoodsReceipts.Entities.GoodsReceipt", b =>
                 {
                     b.HasOne("AgriSage.Domain.Features.Identity.Entities.User", null)
@@ -11446,6 +12031,47 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_stocktake_items_stocktake_id");
+                });
+
+            modelBuilder.Entity("AgriSage.Domain.Features.Invoices.Entities.InvoiceEmail", b =>
+                {
+                    b.HasOne("AgriSage.Domain.Features.Identity.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_invoice_emails_created_by");
+
+                    b.HasOne("AgriSage.Domain.Features.Invoices.Entities.SalesInvoice", null)
+                        .WithMany()
+                        .HasForeignKey("InvoiceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_invoice_emails_invoice_id");
+                });
+
+            modelBuilder.Entity("AgriSage.Domain.Features.Invoices.Entities.SalesInvoice", b =>
+                {
+                    b.HasOne("AgriSage.Domain.Features.Identity.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_sales_invoices_created_by");
+
+                    b.HasOne("AgriSage.Domain.Features.Orders.Entities.Order", null)
+                        .WithMany()
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_sales_invoices_order_id");
+
+                    b.HasOne("AgriSage.Domain.Features.Stores.Entities.Store", null)
+                        .WithMany()
+                        .HasForeignKey("StoreId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_sales_invoices_store_id");
                 });
 
             modelBuilder.Entity("AgriSage.Domain.Features.Notifications.Entities.Notification", b =>
@@ -12282,6 +12908,11 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                     b.Navigation("Recommendations");
 
                     b.Navigation("Reviews");
+                });
+
+            modelBuilder.Entity("AgriSage.Domain.Features.Exchanges.Entities.SalesExchange", b =>
+                {
+                    b.Navigation("Items");
                 });
 
             modelBuilder.Entity("AgriSage.Domain.Features.GoodsReceipts.Entities.GoodsReceipt", b =>

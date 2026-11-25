@@ -42,7 +42,9 @@ public class InitialCreateMigrationTests
                 "20261112151319_ContentContactPermissions",
                 "20261116161710_StocktakeItemSnapshotMovementCount",
                 "20261120145730_AiProviderSettings",
-                "20261124232200_DebtFollowUps"
+                "20261123071131_SalesInvoices",
+                "20261124232200_DebtFollowUps",
+                "20261125060116_SalesExchanges"
             ],
             context.Database.GetMigrations());
     }

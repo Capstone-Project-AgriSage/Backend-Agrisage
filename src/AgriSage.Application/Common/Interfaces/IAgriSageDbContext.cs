@@ -1,3 +1,4 @@
+using AgriSage.Domain.Features.Exchanges.Entities;
 using AgriSage.Domain.Features.Audit.Entities;
 using AgriSage.Domain.Features.Advisory.Entities;
 using AgriSage.Domain.Features.Content.Entities;
@@ -11,6 +12,7 @@ using AgriSage.Domain.Features.Identity.Entities;
 using AgriSage.Domain.Features.Inventory.Entities;
 using AgriSage.Domain.Features.Notifications.Entities;
 using AgriSage.Domain.Features.Orders.Entities;
+using AgriSage.Domain.Features.Invoices.Entities;
 using AgriSage.Domain.Features.Payments.Entities;
 using AgriSage.Domain.Features.Pricing.Entities;
 using AgriSage.Domain.Features.Products.Entities;
@@ -113,6 +115,8 @@ public interface IAgriSageDbContext
     DbSet<Order> Orders { get; }
 
     DbSet<OrderItem> OrderItems { get; }
+    DbSet<SalesInvoice> SalesInvoices { get; }
+    DbSet<InvoiceEmail> InvoiceEmails { get; }
 
     // Payments
     DbSet<Payment> Payments { get; }
@@ -162,6 +166,9 @@ public interface IAgriSageDbContext
     DbSet<SalesReturnItem> SalesReturnItems { get; }
 
     DbSet<Refund> Refunds { get; }
+
+    DbSet<SalesExchange> SalesExchanges { get; }
+    DbSet<ExchangeItem> ExchangeItems { get; }
 
     // Diagnosis
     DbSet<Disease> Diseases { get; }

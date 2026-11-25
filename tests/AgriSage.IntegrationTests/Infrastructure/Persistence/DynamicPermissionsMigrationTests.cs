@@ -21,7 +21,8 @@ public sealed class DynamicPermissionsMigrationTests
                 && !CropSeasonDebtPermissionsMigrationTests.NewCodes.Contains(p.Code)
                 && !ContentContactPermissionsMigrationTests.NewCodes.Contains(p.Code)
                 && !AiProviderSettingsMigrationTests.NewCodes.Contains(p.Code)
-                && !DebtFollowUpsMigrationTests.NewCodes.Contains(p.Code))
+                && !DebtFollowUpsMigrationTests.NewCodes.Contains(p.Code)
+                && p.Module != "INVOICES" && p.Module != "EXCHANGES" && p.Module != "MY_EXCHANGES")
             .ToList();
         var seed = Assert.Single(ops.OfType<InsertDataOperation>());
         Assert.Equal(shipped.Count, seed.Values.GetLength(0));

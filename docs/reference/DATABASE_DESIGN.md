@@ -17,6 +17,8 @@ notification deduplication. InitialCreate remains the historical 67-table baseli
 
 # 0. GLOBAL DATABASE CONVENTIONS
 
+User-requested sales invoice extension (2026-11-23): [invoice schema and contract](api-flows/INVOICES.md#schema-salesinvoices-migration). Adds immutable `sales_invoices` and `invoice_emails`; the historical baseline is unchanged.
+
 ## 0.1 Primary keys
 
 All main tables use:
@@ -7044,3 +7046,22 @@ Workers claim due rows with FOR UPDATE SKIP LOCKED, retry exponentially (cap 1 h
 with PostgreSQL fan-out NOTIFY. Every API instance LISTENs and sends SignalR invalidations to its own sockets.
 NOTIFY is a wake-up/fan-out hint, never the durable source of truth. Listener recovery and client reconnect trigger
 REST snapshot resynchronization. No automatic schema deployment or seeding; deploy the reviewed migration first.
+
+
+## Exchange extension (2026-11-25)
+
+Contract: api-flows/EXCHANGES.md. Two additive tables; no changes to original orders/invoices.
+- sales_exchanges: standard soft-delete/audit columns, store_id FK stores, order_id FK orders,
+  sales_return_id unique FK sales_returns, farmer_profile_id nullable FK farmer_profiles,
+  requested_by FK users, request_key uuid, request_hash varchar(64), reason varchar(1000),
+  status varchar(30), replacement_amount numeric(18,2), difference nullable numeric(18,2),
+  replacement_order_id nullable unique FK orders, settlement_reference varchar(200), completed_at nullable.
+  Unique (store_id, requested_by, request_key), index (store_id,status,created_at); completion CHECK ties
+  COMPLETED to settlement/reference/replacement order. Replacement order cannot be original order.
+- exchange_items: standard soft-delete/audit columns, exchange_id FK sales_exchanges,
+  store_product_id FK store_products, product_packaging_id FK product_packagings, quantity/base_quantity bigint >0,
+  product_name varchar(255), packaging_name varchar(100), unit_price/line_total numeric(18,2).
+  Unique(exchange_id,store_product_id,product_packaging_id); line_total = unit_price * quantity.
+All FKs Restrict. History uses existing audit_logs (entity_type EXCHANGE).
+PaymentMethod and RefundMethod add EXCHANGE_CREDIT, reserved for exchange settlement, excluded from cashflow.
+Quantity exclusion and return provenance reuse sales_returns/sales_return_items and original-order row locks.

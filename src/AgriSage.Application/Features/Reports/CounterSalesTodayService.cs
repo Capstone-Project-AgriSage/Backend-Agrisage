@@ -48,7 +48,7 @@ public sealed class CounterSalesTodayService(IAgriSageDbContext db, ReportScope 
 
         // Order receipts count once per payment; debt receipts count only allocations to counter orders.
         var orderReceipts = await payments.Where(p => p.PaymentContext == PaymentContext.OrderPayment
-                && p.ConfirmedAt >= start && p.ConfirmedAt < end && orders.Any(o => o.Id == p.OrderId))
+                && p.PaymentMethod != PaymentMethod.ExchangeCredit && p.ConfirmedAt >= start && p.ConfirmedAt < end && orders.Any(o => o.Id == p.OrderId))
             .SumAsync(p => (decimal?)p.Amount, token) ?? 0m;
         var debtReceipts = await debtAllocations.Where(a => a.ConfirmedAt >= start && a.ConfirmedAt < end
                 && orders.Any(o => o.Id == a.OrderId))

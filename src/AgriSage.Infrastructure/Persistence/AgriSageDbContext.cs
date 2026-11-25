@@ -1,3 +1,4 @@
+using AgriSage.Domain.Features.Exchanges.Entities;
 using AgriSage.Application.Common.Interfaces;
 using AgriSage.Domain.Features.Audit.Entities;
 using AgriSage.Domain.Features.Content.Entities;
@@ -12,6 +13,7 @@ using AgriSage.Domain.Features.Identity.Entities;
 using AgriSage.Domain.Features.Inventory.Entities;
 using AgriSage.Domain.Features.Notifications.Entities;
 using AgriSage.Domain.Features.Orders.Entities;
+using AgriSage.Domain.Features.Invoices.Entities;
 using AgriSage.Domain.Features.Payments.Entities;
 using AgriSage.Domain.Features.Pricing.Entities;
 using AgriSage.Domain.Features.Products.Entities;
@@ -116,6 +118,8 @@ public sealed class AgriSageDbContext : DbContext, IAgriSageDbContext
     public DbSet<Order> Orders => Set<Order>();
 
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
+    public DbSet<SalesInvoice> SalesInvoices => Set<SalesInvoice>();
+    public DbSet<InvoiceEmail> InvoiceEmails => Set<InvoiceEmail>();
 
     public DbSet<Payment> Payments => Set<Payment>();
 
@@ -160,6 +164,9 @@ public sealed class AgriSageDbContext : DbContext, IAgriSageDbContext
     public DbSet<SalesReturnItem> SalesReturnItems => Set<SalesReturnItem>();
 
     public DbSet<Refund> Refunds => Set<Refund>();
+
+    public DbSet<SalesExchange> SalesExchanges => Set<SalesExchange>();
+    public DbSet<ExchangeItem> ExchangeItems => Set<ExchangeItem>();
 
     public DbSet<Disease> Diseases => Set<Disease>();
 

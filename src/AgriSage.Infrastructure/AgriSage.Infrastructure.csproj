@@ -18,6 +18,7 @@
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
     <PackageReference Include="ClosedXML" />
+    <PackageReference Include="QuestPDF" />
     <PackageReference Include="payOS" />
     <PackageReference Include="Anthropic" />
     <PackageReference Include="StackExchange.Redis" />

@@ -40,7 +40,7 @@ public sealed class OperationalReportService(IAgriSageDbContext db, ReportScope 
         var store = await scope.GetStoreIdAsync(token);
         var (start, end) = Bounds(request);
         var by = By(request.GroupBy);
-        var data = await db.Payments.AsNoTracking().Where(p => p.StoreId == store && p.ConfirmedAt >= start && p.ConfirmedAt < end
+        var data = await db.Payments.AsNoTracking().Where(p => p.StoreId == store && p.PaymentMethod != PaymentMethod.ExchangeCredit && p.ConfirmedAt >= start && p.ConfirmedAt < end
                 && (p.Status == PaymentStatus.Paid || p.Status == PaymentStatus.PartiallyRefunded || p.Status == PaymentStatus.Refunded))
             .GroupBy(p => new { Day = by == "DAY" ? DateOnly.FromDateTime(p.ConfirmedAt!.Value.UtcDateTime.AddHours(7)) : DateOnly.MinValue,
                 Method = by == "METHOD" ? p.PaymentMethod : PaymentMethod.Cash,
@@ -57,7 +57,7 @@ public sealed class OperationalReportService(IAgriSageDbContext db, ReportScope 
                 "STAFF" => g.Staff?.ToString() ?? "SYSTEM", _ => g.Day.ToString("yyyy-MM-dd") };
             return new PaymentReportRow(key, by == "STAFF" && g.Staff is { } id ? names.GetValueOrDefault(id, key) : key, g.Count, g.Amount);
         }).OrderBy(r => r.Key, StringComparer.Ordinal).ToList();
-        var refunded = await db.Refunds.AsNoTracking().Where(r => r.StoreId == store && r.Status == RefundStatus.Completed
+        var refunded = await db.Refunds.AsNoTracking().Where(r => r.StoreId == store && r.RefundMethod != RefundMethod.ExchangeCredit && r.Status == RefundStatus.Completed
             && r.CompletedAt >= start && r.CompletedAt < end).SumAsync(r => r.Amount, token);
         var received = rows.Sum(r => r.ReceivedAmount);
         return new(request.FromDate!.Value, request.ToDate!.Value, by, rows, new(rows.Sum(r => r.PaymentCount), received,
@@ -111,7 +111,7 @@ public sealed class OperationalReportService(IAgriSageDbContext db, ReportScope 
         var store = await scope.GetStoreIdAsync(token);
         var (start, end) = Bounds(request);
         var by = By(request.GroupBy);
-        var data = await db.Refunds.AsNoTracking().Where(r => r.StoreId == store && r.Status == RefundStatus.Completed
+        var data = await db.Refunds.AsNoTracking().Where(r => r.StoreId == store && r.RefundMethod != RefundMethod.ExchangeCredit && r.Status == RefundStatus.Completed
                 && r.CompletedAt >= start && r.CompletedAt < end)
             .GroupBy(r => new { Day = by == "DAY" ? DateOnly.FromDateTime(r.CompletedAt!.Value.UtcDateTime.AddHours(7)) : DateOnly.MinValue,
                 Method = by == "METHOD" ? r.RefundMethod : RefundMethod.Cash,

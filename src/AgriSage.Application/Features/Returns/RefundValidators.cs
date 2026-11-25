@@ -8,7 +8,7 @@ public sealed class RefundRequestValidator : AbstractValidator<RefundRequest>
 {
     public RefundRequestValidator()
     {
-        RuleFor(r => r.RefundMethod).Must(v => EnumText.TryParse<RefundMethod>(v, out _)).WithMessage("Refund method must be CASH, BANK_TRANSFER or OTHER_EXTERNAL.");
+        RuleFor(r => r.RefundMethod).Must(v => EnumText.TryParse<RefundMethod>(v, out var method) && method != RefundMethod.ExchangeCredit).WithMessage("Refund method must be CASH, BANK_TRANSFER or OTHER_EXTERNAL.");
         RuleFor(r => r.Amount).GreaterThan(0).PrecisionScale(18, 2, true);
         RuleFor(r => r.OriginalPaymentId).NotEqual(Guid.Empty);
         RuleFor(r => r.ExternalReference).MaximumLength(200);
@@ -20,7 +20,7 @@ public sealed class OrderRefundRequestValidator : AbstractValidator<OrderRefundR
     public OrderRefundRequestValidator()
     {
         RuleFor(r => r.OriginalPaymentId).NotEmpty();
-        RuleFor(r => r.RefundMethod).Must(v => EnumText.TryParse<RefundMethod>(v, out _)).WithMessage("Refund method must be CASH, BANK_TRANSFER or OTHER_EXTERNAL.");
+        RuleFor(r => r.RefundMethod).Must(v => EnumText.TryParse<RefundMethod>(v, out var method) && method != RefundMethod.ExchangeCredit).WithMessage("Refund method must be CASH, BANK_TRANSFER or OTHER_EXTERNAL.");
         RuleFor(r => r.Amount).GreaterThan(0).PrecisionScale(18, 2, true);
         RuleFor(r => r.Note).MaximumLength(1000);
     }

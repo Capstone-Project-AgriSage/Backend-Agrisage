@@ -4,5 +4,6 @@ public enum RefundMethod
 {
     Cash,
     BankTransfer,
-    OtherExternal
+    OtherExternal,
+    ExchangeCredit
 }

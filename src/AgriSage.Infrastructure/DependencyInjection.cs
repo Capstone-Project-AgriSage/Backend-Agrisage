@@ -36,6 +36,8 @@ public static class DependencyInjection
             .ValidateOnStart();
 
         services.AddSingleton<IDateTimeProvider, DateTimeProvider>();
+        services.AddSingleton<AgriSage.Application.Features.Invoices.IInvoicePdfRenderer, AgriSage.Infrastructure.Invoices.InvoicePdfRenderer>();
+        services.AddScoped<AgriSage.Application.Features.Invoices.IInvoiceEmailSender, AgriSage.Infrastructure.Invoices.SmtpInvoiceEmailSender>();
 
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUserService, CurrentUserService>();

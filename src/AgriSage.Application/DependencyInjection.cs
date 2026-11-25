@@ -105,6 +105,7 @@ public static class DependencyInjection
         services.AddScoped<IPriceListService, PriceListService>();
 
         services.AddScoped<OrderBuilder>();
+        services.AddScoped<AgriSage.Application.Features.Invoices.IInvoiceService, AgriSage.Application.Features.Invoices.InvoiceService>();
         services.AddScoped<OrderQueries>();
         services.AddScoped<IOrderService, OrderService>();
         services.AddScoped<OrderConfirmer>();
@@ -152,6 +153,7 @@ public static class DependencyInjection
         services.AddScoped<IOrderPrepaymentLedger, OrderPrepaymentLedger>();                      // F1.3 (real)
         services.AddScoped<IOrderPaymentCancellation, OrderPaymentCancellation>();                // F1.6 (real)
 
+        services.AddScoped<AgriSage.Application.Features.Exchanges.ExchangeService>();
         services.AddScoped<ReturnSources>();
         services.AddScoped<SalesReturnQueries>();
         services.AddScoped<SalesReturnService>();

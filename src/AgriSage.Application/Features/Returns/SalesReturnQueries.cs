@@ -40,7 +40,7 @@ public sealed class SalesReturnQueries(IAgriSageDbContext context, ReturnSources
         var storeId = await ActiveStore.GetIdAsync(context, token);
         var query = from r in context.SalesReturns.AsNoTracking()
                     join o in context.Orders.IgnoreQueryFilters().AsNoTracking() on r.OrderId equals o.Id
-                    where r.DeletedAt == null && r.StoreId == storeId
+                    where r.DeletedAt == null && r.StoreId == storeId && !context.SalesExchanges.Any(e => e.SalesReturnId == r.Id)
                     select new { Return = r, o.OrderNumber, o.CustomerNameSnapshot };
         if (farmerId is { } own) query = query.Where(x => x.Return.FarmerProfileId == own);
         if (request.FarmerProfileId is { } farmer) query = query.Where(x => x.Return.FarmerProfileId == farmer);

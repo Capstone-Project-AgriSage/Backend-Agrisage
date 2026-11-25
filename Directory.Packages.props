@@ -17,6 +17,7 @@
   </ItemGroup>
 
   <ItemGroup Label="Infrastructure">
+    <PackageVersion Include="QuestPDF" Version="2026.9.2" />
     <PackageVersion Include="StackExchange.Redis" Version="3.4.5" />
     <!-- Goods receipt Excel import/template (F4.3, decision F-D7, MIT). Used only in Infrastructure/Spreadsheets. -->
     <PackageVersion Include="ClosedXML" Version="0.105.1" />

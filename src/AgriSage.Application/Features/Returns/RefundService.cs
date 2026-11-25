@@ -91,6 +91,8 @@ public sealed class RefundService(IAgriSageDbContext context, IRowLockService lo
         await locks.LockOrderAsync(orderId, token); await locks.LockSalesReturnAsync(id, token);
         var r = await context.SalesReturns.Include(r => r.Items).Include(r => r.Refunds)
             .SingleOrDefaultAsync(r => r.Id == id && r.StoreId == storeId, token) ?? throw new NotFoundException("Sales return", id);
+        if (await context.SalesExchanges.AnyAsync(e => e.SalesReturnId == id, token))
+            throw new BusinessRuleException("Use the exchange workflow to settle this return.");
         var existing = refundId is { } rid ? r.Refunds.SingleOrDefault(f => !f.IsDeleted && f.Id == rid)
             ?? throw new NotFoundException("Refund", rid) : null;
         var paymentId = existing?.OriginalPaymentId ?? requestedPaymentId;

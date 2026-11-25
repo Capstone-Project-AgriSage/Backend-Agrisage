@@ -882,3 +882,9 @@ export interface PriceListItem {
 
 export interface ProblemDetails { title: string; status: number; detail?: string; traceId?: string; errors?: Record<string, string[]> }
 ```
+
+## Hóa đơn bán hàng đã lưu (2026-11-23)
+
+Bộ lọc lịch sử hóa đơn: `fromDate`/`toDate` (ngày lập theo giờ Việt Nam, gồm cả hai đầu), `minAmount`/`maxAmount` (tổng tiền gồm hai đầu), `hasCustomerEmail` (true/false) và `emailStatus` (NOT_SENT/SENDING/SENT/FAILED/UNKNOWN). Tất cả kết hợp với `search`/`orderId` ở API trước phân trang; thay đổi bộ lọc đưa về trang 1. `InvoiceListItem.emailStatus` là trạng thái lần gửi gần nhất, NOT_SENT khi chưa từng gửi; không suy ra từ email khách hàng hoặc lịch sử gửi cũ. Giá trị/khoảng không hợp lệ trả 400. Các trường đều tùy chọn; không có thay đổi schema.
+
+Xem [INVOICES.md](INVOICES.md) cho hợp đồng API và migration. Hóa đơn có mã INV riêng, snapshot và PDF được lưu vào database. Bán nhanh tự tạo hóa đơn sau khi bán thành công dù chọn không in; lỗi tạo hóa đơn không được hiểu là lỗi bán hàng và không được gọi lại API bán hàng. Từ chi tiết đơn hoàn thành có thể tạo/mở hóa đơn. Mục Hóa đơn bán hàng hỗ trợ tìm kiếm, phân trang, in, tải lại PDF và gửi email kèm lịch sử. Dùng quyền INVOICES.READ, INVOICES.CREATE, INVOICES.SEND_EMAIL. Khi gửi email, giữ nguyên requestId để thử lại sau lỗi mạng; chỉ tạo requestId mới khi người dùng chủ động gửi lại.

@@ -9,6 +9,21 @@ public static class PermissionCatalog
     }
     public static IReadOnlyList<Definition> Entries { get; } = Array.AsReadOnly<Definition>(
     [
+        new(new Guid("5d3fab42-03d4-46f7-b72d-0db842d3aa64"), "EXCHANGES.READ", "EXCHANGES", "Xem đổi hàng", true, ["ADMIN", "STORE_OWNER", "SALES_STAFF"]),
+        new(new Guid("12fe7285-dc25-4cb8-9e23-22329f3f73b1"), "EXCHANGES.CREATE", "EXCHANGES", "Tạo đổi hàng", true, ["ADMIN", "STORE_OWNER", "SALES_STAFF"]),
+        new(new Guid("e723a6be-8da2-4dd9-ab0c-87bc5f33cfd0"), "EXCHANGES.APPROVE", "EXCHANGES", "Duyệt đổi hàng", true, ["ADMIN", "STORE_OWNER"]),
+        new(new Guid("06ca7d3d-3b93-4ba3-92ad-078082db8aa4"), "EXCHANGES.REJECT", "EXCHANGES", "Từ chối đổi hàng", true, ["ADMIN", "STORE_OWNER"]),
+        new(new Guid("b4752081-dbbd-4313-bf47-52935cb876d2"), "EXCHANGES.CANCEL", "EXCHANGES", "Hủy đổi hàng", true, ["ADMIN", "STORE_OWNER", "SALES_STAFF"]),
+        new(new Guid("cb6aed27-e9c8-4696-b6a6-4c0710d2bcd7"), "EXCHANGES.RECEIVE", "EXCHANGES", "Thu hồi hàng đổi", true, ["ADMIN", "STORE_OWNER", "SALES_STAFF"]),
+        new(new Guid("d07557fa-e892-41c4-8bb6-44f73bed34a5"), "EXCHANGES.INSPECT", "EXCHANGES", "Kiểm tra hàng đổi", true, ["ADMIN", "STORE_OWNER", "SALES_STAFF"]),
+        new(new Guid("66eae31e-c328-46c1-a7c8-9d0dd7bd287f"), "EXCHANGES.COMPLETE_INSPECTION", "EXCHANGES", "Chốt kiểm tra đổi hàng", true, ["ADMIN", "STORE_OWNER"]),
+        new(new Guid("266e6358-c9f3-4346-bbe4-44e8d2c27a6f"), "EXCHANGES.COMPLETE", "EXCHANGES", "Quyết toán đổi hàng", true, ["ADMIN", "STORE_OWNER"]),
+        new(new Guid("962b4361-3d3c-4afa-865a-700bebb731f7"), "MY_EXCHANGES.READ", "MY_EXCHANGES", "Xem đổi hàng", false, ["FARMER"]),
+        new(new Guid("7e54b1e8-fd9b-491c-be4e-fb0e9f7c5120"), "MY_EXCHANGES.CREATE", "MY_EXCHANGES", "Tạo đổi hàng", false, ["FARMER"]),
+        new(new Guid("17bd2b0f-1a21-4fe3-91df-a284b9312dd9"), "MY_EXCHANGES.CANCEL", "MY_EXCHANGES", "Hủy đổi hàng", false, ["FARMER"]),
+        new(new Guid("4a7f7e2c-54f2-4b89-96b0-172311230001"), "INVOICES.READ", "INVOICES", "Xem và tải hóa đơn", true, ["ADMIN", "STORE_OWNER", "SALES_STAFF"]),
+        new(new Guid("4a7f7e2c-54f2-4b89-96b0-172311230002"), "INVOICES.CREATE", "INVOICES", "Tạo hóa đơn từ đơn hàng", true, ["ADMIN", "STORE_OWNER", "SALES_STAFF"]),
+        new(new Guid("4a7f7e2c-54f2-4b89-96b0-172311230003"), "INVOICES.SEND_EMAIL", "INVOICES", "Gửi hóa đơn qua email", true, ["ADMIN", "STORE_OWNER", "SALES_STAFF"]),
         new(new Guid("f9a22c22-7ddd-4b7d-a801-163a754d0001"), "ARTICLES.READ", "ARTICLES", "Xem bài viết", false, ["ADMIN", "STORE_OWNER"]),
         new(new Guid("f9a22c22-7ddd-4b7d-a801-163a754d0002"), "ARTICLES.MANAGE", "ARTICLES", "Quản lý bài viết", false, ["ADMIN", "STORE_OWNER"]),
         new(new Guid("f9a22c22-7ddd-4b7d-a801-163a754d0003"), "CONTACT_REQUESTS.READ", "CONTACT_REQUESTS", "Xem liên hệ", true, ["ADMIN", "STORE_OWNER", "SALES_STAFF"]),
