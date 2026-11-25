@@ -88,26 +88,30 @@ public class DebtFollowUpTests
     }
 
     [Theory]
-    // promisedDate offset, promisedAmount, paid since contact, current balance -> status
-    [InlineData(3, null, 0, 3_000_000, DebtPromiseStatus.Waiting)]
-    [InlineData(0, null, 0, 3_000_000, DebtPromiseStatus.Waiting)]           // the promised day itself is not yet late
-    [InlineData(-1, null, 0, 3_000_000, DebtPromiseStatus.Broken)]
-    [InlineData(-1, null, 1_999_999, 1_000_001, DebtPromiseStatus.Broken)]  // short of the overdue amount (target 2 000 000)
-    [InlineData(-1, null, 2_000_000, 1_000_000, DebtPromiseStatus.Kept)]     // the overdue amount at the time was paid
-    [InlineData(-1, 500_000, 500_000, 2_500_000, DebtPromiseStatus.Kept)]    // the promised amount was paid
-    [InlineData(5, 500_000, 600_000, 2_400_000, DebtPromiseStatus.Kept)]     // kept before the date
-    [InlineData(-10, 2_000_000, 100_000, 0, DebtPromiseStatus.Kept)]         // owes nothing any more (e.g. a return)
-    public void The_promise_label_follows_the_payments_since_the_contact(int dateOffset, int? amount, int paid, int balance,
-        DebtPromiseStatus expected)
+    // promised date offset, promised amount, paid by the end of the promised day, paid since the contact, balance -> label.
+    // Without an amount the target is the overdue amount when recorded (2 000 000).
+    [InlineData(3, null, 0, 0, 3_000_000, DebtPromiseStatus.Waiting)]
+    [InlineData(0, null, 0, 0, 3_000_000, DebtPromiseStatus.Waiting)]                    // the promised day itself is not late yet
+    [InlineData(-1, null, 0, 0, 3_000_000, DebtPromiseStatus.Broken)]
+    [InlineData(-1, null, 1_999_999, 1_999_999, 1_000_001, DebtPromiseStatus.Broken)]    // just short of the target
+    [InlineData(-1, null, 2_000_000, 2_000_000, 1_000_000, DebtPromiseStatus.Kept)]      // paid in time
+    [InlineData(5, 500_000, 600_000, 600_000, 2_400_000, DebtPromiseStatus.Kept)]        // paid before the date
+    [InlineData(-3, 500_000, 100_000, 500_000, 2_500_000, DebtPromiseStatus.Late)]       // the rest came after the date
+    [InlineData(-10, 2_000_000, 100_000, 100_000, 0, DebtPromiseStatus.Cleared)]         // nothing owed, but not by paying
+    [InlineData(4, 2_000_000, 0, 0, 0, DebtPromiseStatus.Cleared)]                       // written off before the date
+    [InlineData(-10, 2_000_000, 0, 2_000_000, 0, DebtPromiseStatus.Late)]                // paid in full, late: LATE wins over CLEARED
+    public void The_promise_label_follows_the_payments_by_and_after_the_promised_day(int dateOffset, int? amount, int paidByDate,
+        int paidSince, int balance, DebtPromiseStatus expected)
     {
-        var status = DebtFollowUpPolicy.PromiseStatus(Today.AddDays(dateOffset), amount, 3_000_000m, 2_000_000m, paid, balance, Today);
+        var status = DebtFollowUpPolicy.PromiseStatus(Today.AddDays(dateOffset), amount, 3_000_000m, 2_000_000m, paidByDate, paidSince,
+            balance, Today);
         Assert.Equal(expected, status);
     }
 
     [Fact]
     public void Without_a_promise_there_is_no_label_and_without_overdue_the_whole_balance_is_the_target()
     {
-        Assert.Null(DebtFollowUpPolicy.PromiseStatus(null, null, 3_000_000m, 0m, 0m, 3_000_000m, Today));
+        Assert.Null(DebtFollowUpPolicy.PromiseStatus(null, null, 3_000_000m, 0m, 0m, 0m, 3_000_000m, Today));
         Assert.Equal(3_000_000m, DebtFollowUpPolicy.PromiseTarget(null, 3_000_000m, 0m));
         Assert.Equal(2_000_000m, DebtFollowUpPolicy.PromiseTarget(null, 3_000_000m, 2_000_000m));
         Assert.Equal(700_000m, DebtFollowUpPolicy.PromiseTarget(700_000m, 3_000_000m, 2_000_000m));

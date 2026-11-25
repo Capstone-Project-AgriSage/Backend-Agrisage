@@ -33,6 +33,8 @@ public sealed class DebtFollowUpQueries(IAgriSageDbContext db)
         public string? ByName { get; init; }
         public RoleCode? ByRole { get; init; }
         public decimal PaidSince { get; init; }
+        public decimal PaidByPromise { get; init; }
+        public bool HasLaterContact { get; init; }
         public decimal Balance { get; init; }
     }
 
@@ -51,18 +53,26 @@ public sealed class DebtFollowUpQueries(IAgriSageDbContext db)
                     && t.TransactionType == DebtTransactionType.Payment && t.Status == DebtTransactionStatus.Posted
                     && t.OccurredAt >= f.ContactedAt)
                 .Sum(t => (decimal?)-t.AmountDelta) ?? 0m,
+            // The same lines up to the end of the promised day (Vietnam date of the payment).
+            PaidByPromise = f.PromisedDate == null ? 0m : db.DebtTransactions.Where(t => t.DebtAccountId == f.DebtAccountId
+                    && t.TransactionType == DebtTransactionType.Payment && t.Status == DebtTransactionStatus.Posted
+                    && t.OccurredAt >= f.ContactedAt && DateOnly.FromDateTime(t.OccurredAt.UtcDateTime.AddHours(7)) <= f.PromisedDate.Value)
+                .Sum(t => (decimal?)-t.AmountDelta) ?? 0m,
+            HasLaterContact = db.DebtFollowUps.Any(o => o.DebtAccountId == f.DebtAccountId
+                && (o.ContactedAt > f.ContactedAt || (o.ContactedAt == f.ContactedAt && o.CreatedAt > f.CreatedAt))),
             Balance = db.DebtAccounts.Where(a => a.Id == f.DebtAccountId).Select(a => a.CurrentBalance).FirstOrDefault()
         };
 
     private static DebtPromiseStatus? Status(Row row, DateOnly today) => DebtFollowUpPolicy.PromiseStatus(row.PromisedDate,
-        row.PromisedAmount, row.OutstandingAmount, row.OverdueAmount, row.PaidSince, row.Balance, today);
+        row.PromisedAmount, row.OutstandingAmount, row.OverdueAmount, row.PaidByPromise, row.PaidSince, row.Balance, today);
 
     private static string? Format(DebtPromiseStatus? status) => status is { } value ? EnumText.Format(value) : null;
 
     private static DebtFollowUpResponse Map(Row row, DateOnly today) => new(row.Id, row.ContactedAt, EnumText.Format(row.Channel),
         EnumText.Format(row.Outcome), row.Note, row.PromisedDate, row.PromisedAmount, Format(Status(row, today)), row.PaidSince,
         row.OutstandingAmount, row.OverdueAmount,
-        new DebtFollowUpActor(row.CreatedBy, row.ByName, row.ByRole is { } role ? EnumText.Format(role) : null), row.CreatedAt);
+        new DebtFollowUpActor(row.CreatedBy, row.ByName, row.ByRole is { } role ? EnumText.Format(role) : null), row.CreatedAt,
+        row.HasLaterContact);
 
     // Latest contact first; a record of the same moment by creation order.
     private static IOrderedQueryable<DebtFollowUp> Newest(IQueryable<DebtFollowUp> source) =>
@@ -102,20 +112,23 @@ public sealed class DebtFollowUpQueries(IAgriSageDbContext db)
     {
         var since = now.AddDays(-WindowDays);
         var accounts = db.DebtAccounts.AsNoTracking().Where(a => a.StoreId == store);
-        var overdue = accounts.Where(a => db.DebtEntries.Any(e => e.DebtAccountId == a.Id && e.OutstandingAmount > 0 && e.DueDate < today));
+        // Disputed entries are left out, as on "Cần quyết định": nobody is reminded of an amount under dispute.
+        var overdue = accounts.Where(a => db.DebtEntries.Any(e => e.DebtAccountId == a.Id && e.OutstandingAmount > 0 && e.DueDate < today
+            && e.Status != DebtEntryStatus.Disputed));
         var overdueCount = await overdue.CountAsync(token);
         var notContacted = await overdue.CountAsync(a => !db.DebtFollowUps.Any(f => f.DebtAccountId == a.Id && f.ContactedAt >= since), token);
 
-        // The latest promise of each customer who still owes; whether it is broken needs the payments since it.
+        // A broken promise counts while it is the customer's latest reminder: a later contact (or a record correcting a wrong
+        // one) means somebody followed it up. Customers who still owe; the label needs the payments since the contact.
         var owing = accounts.Where(a => a.CurrentBalance > 0).Select(a => a.Id);
-        var latestPromises = await db.DebtFollowUps.AsNoTracking()
-            .Where(f => f.Outcome == DebtFollowUpOutcome.Promised && owing.Contains(f.DebtAccountId))
+        var latest = await db.DebtFollowUps.AsNoTracking().Where(f => owing.Contains(f.DebtAccountId))
             .GroupBy(f => f.DebtAccountId)
             .Select(g => g.OrderByDescending(f => f.ContactedAt).ThenByDescending(f => f.CreatedAt).ThenByDescending(f => f.Id)
                 .Select(f => f.Id).First())
             .ToListAsync(token);
-        var promises = await Rows(db.DebtFollowUps.AsNoTracking().Where(f => latestPromises.Contains(f.Id))).ToListAsync(token);
-        var broken = promises.Count(r => Status(r, today) == DebtPromiseStatus.Broken);
+        var latestPromises = await Rows(db.DebtFollowUps.AsNoTracking()
+            .Where(f => latest.Contains(f.Id) && f.Outcome == DebtFollowUpOutcome.Promised)).ToListAsync(token);
+        var broken = latestPromises.Count(r => Status(r, today) == DebtPromiseStatus.Broken);
 
         return new(WindowDays, overdueCount, notContacted, broken);
     }

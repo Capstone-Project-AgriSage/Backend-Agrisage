@@ -32,7 +32,9 @@ public sealed record DebtFollowUpResponse(
     decimal OutstandingAmount,
     decimal OverdueAmount,
     DebtFollowUpActor CreatedBy,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    // A later reminder of the same customer exists: this record (and its promise) is no longer the latest word.
+    bool HasLaterContact);
 
 // The customer's latest record, on the staff debt entry lists ("Cần quyết định").
 public sealed record DebtFollowUpSummary(
@@ -43,7 +45,8 @@ public sealed record DebtFollowUpSummary(
     string? PromiseStatus,
     string? ByName);
 
-// Owner dashboard: overdue customers, those not reminded within WindowDays, and broken promises.
+// Owner dashboard: customers with undisputed overdue debt, those of them not reminded within WindowDays, and customers whose
+// latest reminder is a promise that has passed unpaid (nobody has followed it up since).
 public sealed record DebtFollowUpDashboard(int WindowDays, int OverdueCustomerCount, int NotContactedCount, int BrokenPromiseCount);
 
 public interface IDebtFollowUpService

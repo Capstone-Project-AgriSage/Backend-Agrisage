@@ -64,13 +64,15 @@ public sealed class DebtFollowUpDatabaseTests
         var list = await ListAsync(e);
         Assert.Equal(new[] { visit.Id, call.Id }, list.Select(f => f.Id));
 
-        // Part paid: still waiting. The date passes: "Quá hẹn". The rest of the promised amount arrives: kept.
+        Assert.Equal((false, true), (list[0].HasLaterContact, list[1].HasLaterContact)); // the call came before the visit
+
+        // Part paid: still waiting. The date passes: "Quá hẹn". The rest arrives after the date: "Trả trễ hẹn", not kept.
         await PayAsync(e, 600_000);
         Assert.Equal(("WAITING", 600_000m), ((await ListAsync(e))[0].PromiseStatus, (await ListAsync(e))[0].PaidSinceContact));
         e.Clock.UtcNow = e.Clock.UtcNow.AddDays(4);
         Assert.Equal("BROKEN", (await ListAsync(e))[0].PromiseStatus);
         await PayAsync(e, 400_000);
-        Assert.Equal(("KEPT", 1_000_000m), ((await ListAsync(e))[0].PromiseStatus, (await ListAsync(e))[0].PaidSinceContact));
+        Assert.Equal(("LATE", 1_000_000m), ((await ListAsync(e))[0].PromiseStatus, (await ListAsync(e))[0].PaidSinceContact));
 
         // Logging changed nothing on the debt: only the two payments did.
         using (var s = e.Scope())
@@ -79,6 +81,24 @@ public sealed class DebtFollowUpDatabaseTests
             Assert.Equal(2_000_000m, await db.DebtAccounts.Where(a => a.Id == e.AccountId).Select(a => a.CurrentBalance).SingleAsync(Token));
             Assert.Equal(2, await db.DebtFollowUps.CountAsync(Token));
         }
+
+        // A promise paid on its day is kept, and the older promise now has a later contact.
+        var onTime = await RecordAsync(e, new("AT_STORE", "PROMISED", PromisedDate: Today(e), PromisedAmount: 500_000));
+        await PayAsync(e, 500_000);
+        Assert.Equal("KEPT", (await ListAsync(e)).Single(f => f.Id == onTime.Id).PromiseStatus);
+        Assert.True((await ListAsync(e)).Single(f => f.Id == visit.Id).HasLaterContact);
+
+        // The owner writes off the rest: the open promise is "Hết nợ", not "Đã trả theo hẹn"; the late one stays late.
+        var forgiven = await RecordAsync(e, new("PHONE_CALL", "PROMISED", PromisedDate: Today(e).AddDays(5), PromisedAmount: 1_000_000));
+        using (var s = e.Scope())
+        {
+            var entryId = await s.ServiceProvider.GetRequiredService<AgriSageDbContext>().DebtEntries.Select(x => x.Id).SingleAsync(Token);
+            await s.ServiceProvider.GetRequiredService<IDebtService>().ActionAsync(entryId, "CANCEL", "Khách khó khăn, xóa phần còn lại", null, null, "KHO_KHAN", Token);
+        }
+        var final = await ListAsync(e);
+        Assert.Equal("CLEARED", final.Single(f => f.Id == forgiven.Id).PromiseStatus);
+        Assert.Equal("LATE", final.Single(f => f.Id == visit.Id).PromiseStatus);
+        Assert.Equal("KEPT", final.Single(f => f.Id == onTime.Id).PromiseStatus);
     }
 
     [CreditDbFact]
@@ -150,12 +170,28 @@ public sealed class DebtFollowUpDatabaseTests
             Assert.Null(Assert.Single((await s.ServiceProvider.GetRequiredService<IDebtService>().OwnEntriesAsync(new(), Token)).Items).LastFollowUp);
         (e.User.UserId, e.User.Role) = owner;
 
-        // Two days on, the promise is broken; eight days on, nobody has reminded the customer within the week.
+        // Two days on, the promise is broken and nobody has followed it up: it counts.
         e.Clock.UtcNow = e.Clock.UtcNow.AddDays(2);
         var broken = await DashboardAsync();
         Assert.Equal(new DebtFollowUpDashboard(7, 1, 0, 1), broken.FollowUp);
         Assert.Equal("BROKEN", Assert.Single(broken.NeedsDecision).LastFollowUp!.PromiseStatus);
-        e.Clock.UtcNow = e.Clock.UtcNow.AddDays(6);
-        Assert.Equal(new DebtFollowUpDashboard(7, 1, 1, 1), (await DashboardAsync()).FollowUp);
+
+        // A later record takes over (here one correcting a wrong promise): the broken promise no longer counts.
+        await RecordAsync(e, new("OTHER", "OTHER", "Lần trước ghi nhầm, khách chưa hứa ngày nào"));
+        var corrected = await DashboardAsync();
+        Assert.Equal(new DebtFollowUpDashboard(7, 1, 0, 0), corrected.FollowUp);
+        Assert.Equal("OTHER", Assert.Single(corrected.NeedsDecision).LastFollowUp!.Outcome);
+
+        // Eight days on, nobody has reminded the customer within the week.
+        e.Clock.UtcNow = e.Clock.UtcNow.AddDays(8);
+        Assert.Equal(new DebtFollowUpDashboard(7, 1, 1, 0), (await DashboardAsync()).FollowUp);
+
+        // A disputed debt is not one to remind of, as on "Cần quyết định".
+        using (var s = e.Scope())
+        {
+            var entryId = await s.ServiceProvider.GetRequiredService<AgriSageDbContext>().DebtEntries.Select(x => x.Id).SingleAsync(Token);
+            await s.ServiceProvider.GetRequiredService<IDebtService>().ActionAsync(entryId, "DISPUTE", "Khách nói đã trả tiền mặt", null, null, null, Token);
+        }
+        Assert.Equal(new DebtFollowUpDashboard(7, 0, 0, 0), (await DashboardAsync()).FollowUp);
     }
 }
