@@ -66,6 +66,8 @@ public static class PermissionCatalog
         new(new Guid("c77147d9-b74d-612f-1cf1-527c23673ddd"), "DEBT.MANUAL", "DEBT", "Manual", false, ["ADMIN", "STORE_OWNER"]),
         // Crop-season debt (F3.10, F3.7 §4.6). Rollover from the second time is owner-only in the service (CS-08).
         new(new Guid("5c2f2e3b-4b85-4ee0-b855-0aad4290088f"), "DEBT.ROLLOVER", "DEBT", "Gia hạn nợ", true, ["ADMIN", "SALES_STAFF", "STORE_OWNER"]),
+        // F3.23: log a reminder made outside the system (team task 3, 2026-11-25).
+        new(new Guid("407a9c04-b966-47e1-b306-8e4b06fd0843"), "DEBT.FOLLOW_UP", "DEBT", "Ghi nhận nhắc nợ", true, ["ADMIN", "SALES_STAFF", "STORE_OWNER"]),
         new(new Guid("7ceb1441-6396-4245-8ab8-020712168942"), "CROP_SEASONS.READ", "CROP_SEASONS", "Xem", true, ["ADMIN", "SALES_STAFF", "STORE_OWNER"]),
         new(new Guid("5a85c6fb-065e-4d96-8e65-11d7ed536e66"), "CROP_SEASONS.MANAGE", "CROP_SEASONS", "Quản lý vụ mùa", false, ["ADMIN", "STORE_OWNER"]),
         new(new Guid("2ad0e01f-1a01-41ad-9fa3-3269d15755da"), "DEBT_POLICY.READ", "DEBT_POLICY", "Xem", true, ["ADMIN", "SALES_STAFF", "STORE_OWNER"]),

@@ -147,6 +147,8 @@ public sealed class AgriSageDbContext : DbContext, IAgriSageDbContext
 
     public DbSet<DebtEntryAction> DebtEntryActions => Set<DebtEntryAction>();
 
+    public DbSet<DebtFollowUp> DebtFollowUps => Set<DebtFollowUp>();
+
     public DbSet<DebtTransaction> DebtTransactions => Set<DebtTransaction>();
 
     public DbSet<CropSeason> CropSeasons => Set<CropSeason>();

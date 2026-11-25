@@ -20,7 +20,8 @@ public sealed class DynamicPermissionsMigrationTests
                 && !InventoryReplenishmentMigrationTests.NewCodes.Contains(p.Code)
                 && !CropSeasonDebtPermissionsMigrationTests.NewCodes.Contains(p.Code)
                 && !ContentContactPermissionsMigrationTests.NewCodes.Contains(p.Code)
-                && !AiProviderSettingsMigrationTests.NewCodes.Contains(p.Code))
+                && !AiProviderSettingsMigrationTests.NewCodes.Contains(p.Code)
+                && !DebtFollowUpsMigrationTests.NewCodes.Contains(p.Code))
             .ToList();
         var seed = Assert.Single(ops.OfType<InsertDataOperation>());
         Assert.Equal(shipped.Count, seed.Values.GetLength(0));

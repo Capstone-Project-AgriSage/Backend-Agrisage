@@ -17,7 +17,7 @@ namespace AgriSage.Application.Features.Debt;
 
 public sealed class DebtService(IAgriSageDbContext db, IRowLockService locks, IDateTimeProvider clock,
     ICurrentUserService currentUser, CustomerWrites access, AuditTrail audit,
-    OrderQueries orders, PaymentQueries payments) : IDebtService
+    OrderQueries orders, PaymentQueries payments, DebtFollowUpQueries followUps) : IDebtService
 {
     private DateOnly Today => BusinessCalendar.Today(clock.UtcNow);
 
@@ -72,7 +72,15 @@ public sealed class DebtService(IAgriSageDbContext db, IRowLockService locks, ID
             && e.Status != DebtEntryStatus.Cancelled && (e.Due <= cutoff || e.Rollovers >= review));
     }
 
-    public async Task<PagedResult<DebtEntryListItem>> EntriesAsync(DebtEntryListRequest request, CancellationToken token)
+    // Staff lists carry the customer's latest reminder (F3.23); the Farmer's own list never does (internal notes).
+    public Task<PagedResult<DebtEntryListItem>> EntriesAsync(DebtEntryListRequest request, CancellationToken token) =>
+        EntriesCoreAsync(request, includeFollowUps: true, token);
+
+    public async Task<PagedResult<DebtEntryListItem>> OwnEntriesAsync(DebtEntryListRequest request, CancellationToken token) =>
+        await EntriesCoreAsync(request with { FarmerProfileId = await OwnCustomerAsync(token) }, includeFollowUps: false, token);
+
+    private async Task<PagedResult<DebtEntryListItem>> EntriesCoreAsync(DebtEntryListRequest request, bool includeFollowUps,
+        CancellationToken token)
     {
         var store = await ActiveStore.GetIdAsync(db, token);
         var q = Rows(store);
@@ -115,7 +123,8 @@ public sealed class DebtService(IAgriSageDbContext db, IRowLockService locks, ID
             _ => request.Descending ? q.OrderByDescending(e => e.CreatedAt) : q.OrderBy(e => e.CreatedAt)
         };
         var rows = await sorted.ThenBy(e => e.Id).Skip(request.Skip).Take(request.PageSize).ToListAsync(token);
-        return new(rows.Select(e => Map(e, today, rule)).ToList(), request.Page, request.PageSize, count);
+        var last = includeFollowUps ? await followUps.LatestAsync(rows.Select(e => e.AccountId).Distinct().ToList(), today, token) : null;
+        return new(rows.Select(e => Map(e, today, rule, last?.GetValueOrDefault(e.AccountId))).ToList(), request.Page, request.PageSize, count);
     }
 
     public async Task<DebtEntryResponse> EntryAsync(Guid id, CancellationToken token)
@@ -134,7 +143,7 @@ public sealed class DebtService(IAgriSageDbContext db, IRowLockService locks, ID
         var paymentIds = await db.PaymentAllocations.AsNoTracking().Where(a => a.DebtEntryId == id).Select(a => a.PaymentId).Distinct().ToListAsync(token);
         var history = new List<PaymentResponse>();
         foreach (var paymentId in paymentIds) history.Add(await payments.GetAsync(paymentId, row.FarmerId, token));
-        var summary = Map(row, Today, await DecisionRuleAsync(store, token));
+        var summary = Map(row, Today, await DecisionRuleAsync(store, token), null);
         // CS-13: who did each action (name and role), in one query.
         var actorIds = entry.Actions.Select(a => a.CreatedBy).Distinct().ToList();
         var actors = await db.Users.AsNoTracking().Where(u => actorIds.Contains(u.Id))
@@ -369,6 +378,7 @@ public sealed class DebtService(IAgriSageDbContext db, IRowLockService locks, ID
         var rule = await DecisionRuleAsync(store, token);
         var deciding = NeedingDecision(q, rule);
         var decisions = await deciding.OrderBy(e => e.Due).ThenBy(e => e.Id).Take(DashboardListSize).ToListAsync(token);
+        var lastFollowUps = await followUps.LatestAsync(decisions.Select(e => e.AccountId).Distinct().ToList(), today, token);
         var alerts = CreditLimitAlerts(store);
         var alertRows = await alerts.OrderByDescending(a => a.Used / a.CreditLimit).ThenBy(a => a.FarmerProfileId)
             .Take(DashboardListSize).ToListAsync(token);
@@ -380,10 +390,11 @@ public sealed class DebtService(IAgriSageDbContext db, IRowLockService locks, ID
             await overdue.Select(e => e.FarmerId).Distinct().CountAsync(token), top.Items, recent.Items, late.Items,
             current, currentOutstanding,
             await q.Where(e => e.Outstanding > 0 && e.Due >= today && e.Due <= soon).SumAsync(e => (decimal?)e.Outstanding, token) ?? 0,
-            await deciding.CountAsync(token), decisions.Select(e => Map(e, today, rule)).ToList(),
+            await deciding.CountAsync(token), decisions.Select(e => Map(e, today, rule, lastFollowUps.GetValueOrDefault(e.AccountId))).ToList(),
             await alerts.CountAsync(token),
             alertRows.Select(a => new CreditLimitAlert(a.FarmerProfileId, a.FullName, a.PhoneNumber, a.CreditLimit, a.Used,
-                Math.Max(0, a.CreditLimit - a.Used), a.Used >= a.CreditLimit ? "AT_LIMIT" : "NEAR_LIMIT")).ToList());
+                Math.Max(0, a.CreditLimit - a.Used), a.Used >= a.CreditLimit ? "AT_LIMIT" : "NEAR_LIMIT")).ToList(),
+            await followUps.DashboardAsync(store, today, clock.UtcNow, token));
     }
 
     private const int DashboardListSize = 20;
@@ -430,11 +441,12 @@ public sealed class DebtService(IAgriSageDbContext db, IRowLockService locks, ID
         return await ActionCoreAsync(id, "DISPUTE", reason, null, null, currentUser.UserId!.Value, token);
     }
 
-    private static DebtEntryListItem Map(EntryRow e, DateOnly today, DecisionRule rule) => new(e.Id, e.Number, e.FarmerId, e.FullName, e.Phone,
+    private static DebtEntryListItem Map(EntryRow e, DateOnly today, DecisionRule rule, DebtFollowUpSummary? lastFollowUp) =>
+        new(e.Id, e.Number, e.FarmerId, e.FullName, e.Phone,
         EnumText.Format(e.Source), e.OrderNumber, e.Original, e.Paid, e.Outstanding, e.Due, e.Outstanding > 0 && e.Due < today,
         e.Outstanding > 0 ? Math.Max(0, today.DayNumber - e.Due.DayNumber) : 0, EnumText.Format(e.Status), e.CreatedAt,
         e.OriginSeason, e.CollectionSeason, e.OriginalDue, e.Rollovers, e.Rollovers > 0, DueState(e.Outstanding, e.Due, today),
-        rule.Applies(e));
+        rule.Applies(e), lastFollowUp);
     private static DebtTransactionResponse MapTransaction(DebtTransaction t) => new(t.Id, t.DebtEntryId, EnumText.Format(t.TransactionType),
         t.AmountDelta, t.BalanceAfter - t.AmountDelta, t.BalanceAfter, t.OccurredAt, EnumText.Format(t.Status), t.PaymentAllocationId,
         t.SalesReturnId, t.DebtEntryActionId, t.Note, t.CreatedBy);

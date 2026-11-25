@@ -14,7 +14,7 @@ public sealed class MeDebtController(IDebtService service) : ControllerBase
     public async Task<DebtAccountResponse> Account(CancellationToken token) => await service.AccountAsync(await service.OwnCustomerAsync(token), token);
     [HttpGet("api/me/debt-entries")]
     public async Task<PagedResult<DebtEntryListItem>> Entries([FromQuery] DebtEntryListRequest request, CancellationToken token) =>
-        await service.EntriesAsync(request with { FarmerProfileId = await service.OwnCustomerAsync(token) }, token);
+        await service.OwnEntriesAsync(request, token);
     [HttpGet("api/me/debt-entries/{id:guid}")]
     public async Task<DebtEntryResponse> Entry(Guid id, CancellationToken token)
     {

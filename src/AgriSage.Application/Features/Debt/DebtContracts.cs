@@ -61,11 +61,13 @@ public sealed record CreditLimitAlert(Guid FarmerProfileId, string FullName, str
     decimal UsedCredit, decimal AvailableCredit, string State);
 public sealed record DebtAccountListItem(Guid Id, Guid FarmerProfileId, string FullName, string? PhoneNumber,
     CustomerReference? CustomerGroup, decimal CurrentBalance, decimal OverdueAmount, DateOnly? OldestDueDate);
+// F3.23: LastFollowUp is the customer's latest reminder, on staff lists only (never on /api/me).
 public sealed record DebtEntryListItem(Guid Id, string EntryNumber, Guid FarmerProfileId, string FullName,
     string? PhoneNumber, string SourceType, string? OrderNumber, decimal OriginalAmount, decimal TotalPaid,
     decimal OutstandingAmount, DateOnly DueDate, bool IsOverdue, int OverdueDays, string Status, DateTimeOffset CreatedAt,
     DebtSeasonReference? OriginSeason, DebtSeasonReference? CollectionSeason, DateOnly OriginalDueDate, int RolloverCount,
-    bool IsRolledOver, string? DueState, bool NeedsDecision);
+    bool IsRolledOver, string? DueState, bool NeedsDecision,
+    DebtFollowUpSummary? LastFollowUp = null);
 public sealed record DebtTransactionResponse(Guid Id, Guid? DebtEntryId, string TransactionType, decimal AmountDelta,
     decimal BalanceBefore, decimal BalanceAfter, DateTimeOffset OccurredAt, string Status, Guid? PaymentAllocationId,
     Guid? SalesReturnId, Guid? DebtEntryActionId, string? Note, Guid? CreatedBy);
@@ -92,11 +94,14 @@ public sealed record DebtDashboardResponse(decimal TotalOutstandingDebt, decimal
     IReadOnlyList<DebtAccountListItem> TopDebtors, IReadOnlyList<PaymentListItem> RecentDebtPayments,
     IReadOnlyList<DebtEntryListItem> OverdueDebts, DebtSeasonReference? CurrentSeason, decimal CurrentSeasonOutstanding,
     decimal DueSoonAmount, int NeedsDecisionCount, IReadOnlyList<DebtEntryListItem> NeedsDecision, int CreditLimitAlertCount,
-    IReadOnlyList<CreditLimitAlert> CreditLimitAlerts);
+    IReadOnlyList<CreditLimitAlert> CreditLimitAlerts,
+    DebtFollowUpDashboard? FollowUp = null);
 
 public interface IDebtService
 {
     Task<PagedResult<DebtEntryListItem>> EntriesAsync(DebtEntryListRequest request, CancellationToken token);
+    // The signed-in Farmer's own entries, without the store's internal reminder log (F3.23).
+    Task<PagedResult<DebtEntryListItem>> OwnEntriesAsync(DebtEntryListRequest request, CancellationToken token);
     Task<DebtEntryResponse> EntryAsync(Guid id, CancellationToken token);
     Task<PagedResult<DebtAccountListItem>> AccountsAsync(DebtAccountListRequest request, CancellationToken token);
     Task<DebtAccountResponse> AccountAsync(Guid farmerId, CancellationToken token);
