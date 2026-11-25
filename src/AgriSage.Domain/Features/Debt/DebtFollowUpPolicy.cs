@@ -10,14 +10,18 @@ public static class DebtFollowUpPolicy
     public static decimal PromiseTarget(decimal? promisedAmount, decimal outstandingAmount, decimal overdueAmount) =>
         promisedAmount ?? (overdueAmount > 0 ? overdueAmount : outstandingAmount);
 
-    // null without a promise. KEPT when the posted payments since the contact reach the target or nothing is owed any more;
-    // BROKEN once the promised date (Vietnam day) has passed without that; WAITING until then.
+    // null without a promise. Payments are the posted PAYMENT ledger lines since the contact: those up to the end of the
+    // promised day (Vietnam) decide KEPT; the later ones only make it LATE. A debt that ends without that much being paid
+    // (a return, a reduction, a write-off) is CLEARED, not kept. Otherwise BROKEN once the promised day has passed, else
+    // WAITING.
     public static DebtPromiseStatus? PromiseStatus(DateOnly? promisedDate, decimal? promisedAmount, decimal outstandingAmount,
-        decimal overdueAmount, decimal paidSinceContact, decimal currentBalance, DateOnly today)
+        decimal overdueAmount, decimal paidByPromisedDate, decimal paidSinceContact, decimal currentBalance, DateOnly today)
     {
         if (promisedDate is not { } date) return null;
-        if (currentBalance <= 0 || paidSinceContact >= PromiseTarget(promisedAmount, outstandingAmount, overdueAmount))
-            return DebtPromiseStatus.Kept;
+        var target = PromiseTarget(promisedAmount, outstandingAmount, overdueAmount);
+        if (paidByPromisedDate >= target) return DebtPromiseStatus.Kept;
+        if (paidSinceContact >= target) return DebtPromiseStatus.Late;
+        if (currentBalance <= 0) return DebtPromiseStatus.Cleared;
         return date < today ? DebtPromiseStatus.Broken : DebtPromiseStatus.Waiting;
     }
 }
