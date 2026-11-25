@@ -740,9 +740,9 @@ DebtFollowUpRequest { "channel": "PHONE_CALL", "outcome": "PROMISED", "note": "�
                       "promisedDate": "2026-11-30|null", "promisedAmount": 1500000 }
 DebtFollowUpResponse {
   "id": "uuid", "contactedAt": "…", "channel": "PHONE_CALL", "outcome": "PROMISED", "note": "…|null",
-  "promisedDate": "2026-11-30|null", "promisedAmount": 1500000, "promiseStatus": "WAITING|KEPT|BROKEN|null", "paidSinceContact": 0,
+  "promisedDate": "2026-11-30|null", "promisedAmount": 1500000, "promiseStatus": "WAITING|KEPT|LATE|CLEARED|BROKEN|null", "paidSinceContact": 0,
   "outstandingAmount": 4000000, "overdueAmount": 2500000,
-  "createdBy": { "id": "uuid", "name": "…", "role": "SALES_STAFF" }, "createdAt": "…" }
+  "createdBy": { "id": "uuid", "name": "…", "role": "SALES_STAFF" }, "createdAt": "…", "hasLaterContact": false }
 ```
 
 - **Per customer.** A record belongs to the customer's debt account, not to an entry: one call reminds every open entry.
@@ -756,18 +756,20 @@ DebtFollowUpResponse {
   and can be at most 30 days back (a visit logged on a later day).
 - `promisedDate`: required with `PROMISED` and only with it. It cannot be before the Vietnam day of `contactedAt`, and is at
   most 365 days after it. `promisedAmount`: optional, only with `PROMISED`, > 0 and not above the balance.
-- **Append-only.** There is no edit or delete route; a wrong record is corrected by a new one. No `audit_logs` row: the
-  record itself carries its author and time, and audit rows are for money-changing actions.
+- **Append-only.** There is no edit or delete route, and the Domain refuses to delete a record. A wrong record is corrected
+  by a new one (for example `OTHER` with the note "ghi nhầm lần trước"): the latest record is what counts as the customer's
+  current state, and `hasLaterContact` marks the older ones. No `audit_logs` row: the record itself carries its author and
+  time, and audit rows are for money-changing actions.
 - **`promiseStatus`**: derived when read, never stored, using Vietnam dates.
   - `null` without a promise.
-  - `KEPT` when either of these holds:
-    - the customer's posted `PAYMENT` debt transactions since `contactedAt` (`paidSinceContact`) reach the target;
-    - the account owes nothing.
-
-    The target is `promisedAmount`. When that is empty, it is `overdueAmount`, or `outstandingAmount` when nothing was
-    overdue. Returns and adjustments are not payments.
-  - `BROKEN` ("Quá hẹn") when `promisedDate` is before today and the promise is not `KEPT`.
-  - `WAITING` otherwise.
+  - The target is `promisedAmount`. When that is empty, it is `overdueAmount`, or `outstandingAmount` when nothing was
+    overdue. Payments are the customer's posted `PAYMENT` debt transactions since `contactedAt` (`paidSinceContact`);
+    returns, reductions and write-offs are not payments. The rules apply in this order:
+    1. `KEPT` ("Đã trả theo hẹn"): the payments up to the end of the promised day (Vietnam date) reach the target.
+    2. `LATE` ("Trả trễ hẹn"): all payments since the contact reach the target, but not by the promised day.
+    3. `CLEARED` ("Hết nợ"): the account owes nothing, without that much being paid (a return, a reduction, a write-off).
+    4. `BROKEN` ("Quá hẹn"): `promisedDate` is before today.
+    5. `WAITING` ("Chờ đến hẹn") otherwise.
 
   The status is only shown. It triggers nothing.
 
@@ -777,9 +779,11 @@ Added fields (existing ones unchanged):
   (`/api/debt-entries`, `/api/customers/{id}/debt/entries`) and on the dashboard's `needsDecision[]` ("Cần quyết định").
   The Farmer's `/api/me/debt-entries` always returns `null`.
 - `DebtDashboardResponse.followUp`: `{ windowDays: 7, overdueCustomerCount, notContactedCount, brokenPromiseCount }`.
-  - `overdueCustomerCount`: customers with overdue debt.
+  - `overdueCustomerCount`: customers with overdue debt that is not disputed (as "Cần quyết định", nobody is reminded of
+    an amount under dispute).
   - `notContactedCount`: those of them with no record contacted in the last 7 days.
-  - `brokenPromiseCount`: customers who still owe and whose latest record with a promise is `BROKEN`.
+  - `brokenPromiseCount`: customers who still owe and whose **latest** record is a `BROKEN` promise: the promise passed
+    unpaid and nobody has followed it up since. A later record of any outcome takes over.
 
 ## 9. Tests — must prove
 

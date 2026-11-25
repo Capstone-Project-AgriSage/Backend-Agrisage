@@ -6664,7 +6664,8 @@ debt_follow_ups (new; append-only through the API; soft delete columns by conven
   CHECK promised_amount IS NULL OR promised_amount > 0
   CHECK outstanding_amount > 0 AND overdue_amount >= 0 AND overdue_amount <= outstanding_amount
   Index (debt_account_id, contacted_at DESC).
-  Whether a promise was kept is derived on read from PAYMENT debt transactions (table 51) since contacted_at; never stored.
+  Whether a promise was kept (KEPT, LATE, CLEARED, BROKEN, WAITING) is derived on read from PAYMENT debt transactions
+  (table 51) since contacted_at and the account balance; never stored.
 
 Permissions (permissions, role_permissions): new code DEBT.FOLLOW_UP (module DEBT, "Ghi nhận nhắc nợ", is_delegable = true),
 default for ADMIN, STORE_OWNER and SALES_STAFF. Reading uses DEBT.READ.
