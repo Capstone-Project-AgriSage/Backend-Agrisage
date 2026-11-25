@@ -722,6 +722,65 @@ explicit `dueDate` with a season is kept and recorded as `MANUAL`. Without a sea
 
 ---
 
+## 8j. F3.23 — Debt follow-ups: reminders made outside the system (new, 2026-11-25)
+
+Team task 3: "after a debt is overdue the store reminds the customer itself and logs it; the system only logs". The owner or
+Sale staff record each manual reminder of a customer: a call, a visit, the customer at the counter, a message. Each record
+has its outcome and, optionally, a promise to pay. **Nothing else happens**: no notification, no SMS, no change to the debt,
+the credit limit or the credit status, no lock (debt policy above: overdue only drives reminders and the owner's follow-up).
+The log is internal: the Farmer never sees it (no `/api/me` route).
+
+| Method | Route | Role / permission | Body / query | Response |
+|---|---|---|---|---|
+| POST | `/api/customers/{farmerProfileId}/debt/follow-ups` | Operate / `DEBT.FOLLOW_UP` (new, delegable; default ADMIN, STORE_OWNER, SALES_STAFF) | `DebtFollowUpRequest` | `201 DebtFollowUpResponse`; `400` invalid; `404` customer or debt account not found; `422` the customer owes nothing |
+| GET | `/api/customers/{farmerProfileId}/debt/follow-ups` | Operate / `DEBT.READ` | `page`, `pageSize` | `200 PagedResult<DebtFollowUpResponse>`, latest contact first; `404` |
+
+```json
+DebtFollowUpRequest { "channel": "PHONE_CALL", "outcome": "PROMISED", "note": "…|null", "contactedAt": "2026-11-24T02:00:00Z|null",
+                      "promisedDate": "2026-11-30|null", "promisedAmount": 1500000 }
+DebtFollowUpResponse {
+  "id": "uuid", "contactedAt": "…", "channel": "PHONE_CALL", "outcome": "PROMISED", "note": "…|null",
+  "promisedDate": "2026-11-30|null", "promisedAmount": 1500000, "promiseStatus": "WAITING|KEPT|BROKEN|null", "paidSinceContact": 0,
+  "outstandingAmount": 4000000, "overdueAmount": 2500000,
+  "createdBy": { "id": "uuid", "name": "…", "role": "SALES_STAFF" }, "createdAt": "…" }
+```
+
+- **Per customer.** A record belongs to the customer's debt account, not to an entry: one call reminds every open entry.
+  It is allowed while the customer owes something (balance > 0), overdue or not yet due; otherwise `422`
+  ("the customer owes nothing"). The customer's balance and overdue amount when it is recorded are kept
+  (`outstandingAmount`, `overdueAmount`).
+- `channel`: `PHONE_CALL`, `VISIT` (home or field), `AT_STORE`, `MESSAGE` (SMS or Zalo sent by hand), `OTHER`.
+  `outcome`: `PROMISED`, `ASKED_MORE_TIME`, `NO_ANSWER`, `REFUSED` (will not pay or disputes the amount), `OTHER`.
+- `note`: at most 1000 characters, required when `channel` or `outcome` is `OTHER`.
+- `contactedAt`: when the contact happened. It defaults to now, cannot be in the future (5 minutes of clock tolerance),
+  and can be at most 30 days back (a visit logged on a later day).
+- `promisedDate`: required with `PROMISED` and only with it. It cannot be before the Vietnam day of `contactedAt`, and is at
+  most 365 days after it. `promisedAmount`: optional, only with `PROMISED`, > 0 and not above the balance.
+- **Append-only.** There is no edit or delete route; a wrong record is corrected by a new one. No `audit_logs` row: the
+  record itself carries its author and time, and audit rows are for money-changing actions.
+- **`promiseStatus`**: derived when read, never stored, using Vietnam dates.
+  - `null` without a promise.
+  - `KEPT` when either of these holds:
+    - the customer's posted `PAYMENT` debt transactions since `contactedAt` (`paidSinceContact`) reach the target;
+    - the account owes nothing.
+
+    The target is `promisedAmount`. When that is empty, it is `overdueAmount`, or `outstandingAmount` when nothing was
+    overdue. Returns and adjustments are not payments.
+  - `BROKEN` ("Quá hẹn") when `promisedDate` is before today and the promise is not `KEPT`.
+  - `WAITING` otherwise.
+
+  The status is only shown. It triggers nothing.
+
+Added fields (existing ones unchanged):
+- `DebtEntryListItem.lastFollowUp`: the customer's latest record by `contactedAt`, or `null`. Shape:
+  `{ contactedAt, channel, outcome, promisedDate, promiseStatus, byName }`. It appears on the staff entry lists
+  (`/api/debt-entries`, `/api/customers/{id}/debt/entries`) and on the dashboard's `needsDecision[]` ("Cần quyết định").
+  The Farmer's `/api/me/debt-entries` always returns `null`.
+- `DebtDashboardResponse.followUp`: `{ windowDays: 7, overdueCustomerCount, notContactedCount, brokenPromiseCount }`.
+  - `overdueCustomerCount`: customers with overdue debt.
+  - `notContactedCount`: those of them with no record contacted in the last 7 days.
+  - `brokenPromiseCount`: customers who still owe and whose latest record with a promise is `BROKEN`.
+
 ## 9. Tests — must prove
 
 | Task | Must prove |

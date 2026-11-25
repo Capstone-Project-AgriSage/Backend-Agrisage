@@ -518,3 +518,4 @@ All on the branch `feature/f3-21-debt-permission-lock`, not merged to `main`; th
 | F3.20 | Complete test and review | tests and reviews done; waits for the reviews above |
 | F3.21 | Owner-only permissions | done |
 | F3.22 | Check real use and clients | waiting for the team (question C) |
+| F3.23 | Debt follow-ups: log of reminders made outside the system (team task 3, 2026-11-25) | contract in FLOW_3 §8j, table in DATABASE_DESIGN §35.24 |

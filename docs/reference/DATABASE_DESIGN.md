@@ -6644,6 +6644,34 @@ result of the old rule, so a stocktake being counted during the migration neithe
 loses a stale line; refreshed lines then follow the exact rule. Down drops the column.
 ```
 
+## 35.24 Debt follow-ups: manual reminders after overdue (table 48; new table debt_follow_ups) — migration DebtFollowUps
+
+```text
+Team task 3 (2026-11-25, choices by the user): the store reminds an overdue customer outside the system and logs it; the
+system only logs (FLOW_3 §8j, F3.23). One more table; no existing column changes.
+
+debt_follow_ups (new; append-only through the API; soft delete columns by convention)
+  id uuid PK, debt_account_id uuid NOT NULL FK debt_accounts (RESTRICT)
+  channel varchar(20) NOT NULL   CHECK IN ('PHONE_CALL','VISIT','AT_STORE','MESSAGE','OTHER')
+  outcome varchar(30) NOT NULL   CHECK IN ('PROMISED','ASKED_MORE_TIME','NO_ANSWER','REFUSED','OTHER')
+  note varchar(1000) NULL        (required by the Application when channel or outcome is OTHER)
+  contacted_at timestamptz NOT NULL     when the contact happened (not in the future, at most 30 days back)
+  promised_date date NULL, promised_amount numeric(18,2) NULL
+  outstanding_amount numeric(18,2) NOT NULL, overdue_amount numeric(18,2) NOT NULL   the balance and overdue amount when recorded
+  created_by uuid NOT NULL FK users (RESTRICT), created_at, updated_at, deleted_at, deleted_by
+  CHECK (outcome = 'PROMISED' AND promised_date IS NOT NULL)
+        OR (outcome <> 'PROMISED' AND promised_date IS NULL AND promised_amount IS NULL)
+  CHECK promised_amount IS NULL OR promised_amount > 0
+  CHECK outstanding_amount > 0 AND overdue_amount >= 0 AND overdue_amount <= outstanding_amount
+  Index (debt_account_id, contacted_at DESC).
+  Whether a promise was kept is derived on read from PAYMENT debt transactions (table 51) since contacted_at; never stored.
+
+Permissions (permissions, role_permissions): new code DEBT.FOLLOW_UP (module DEBT, "Ghi nhận nhắc nợ", is_delegable = true),
+default for ADMIN, STORE_OWNER and SALES_STAFF. Reading uses DEBT.READ.
+
+Never automatic: a record sends nothing and changes no debt, limit or credit status.
+```
+
 ## 35.23 Debt by crop season, store debt policy and the start of reminders (tables 34, 49, 50; new tables crop_seasons, store_debt_policies) — migrations CropSeasonsAndDebtPolicy, CropSeasonDebtPermissions, LockDebtPermissionDelegation, DebtReminderStartDate
 
 ```text

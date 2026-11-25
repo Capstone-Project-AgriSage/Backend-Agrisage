@@ -106,6 +106,10 @@ Use it to locate the correct domain, then open the exact authoritative table sec
 - New columns: `debt_entries` (`origin_crop_season_id`, `collection_crop_season_id`, `original_due_date`, `rollover_count`, `due_basis`), `debt_entry_actions` (`old_crop_season_id`, `new_crop_season_id`, `reason_code`, action `ROLLOVER`), `orders` (`crop_season_id`, credit orders only).
 - The model has more tables than the baseline (82 in total at this date, from several flows); this file lists the 67 baseline tables plus the section above.
 
+### Added after the baseline (debt follow-ups, 2026-11-25) — see `DATABASE_DESIGN.md` §35.24
+- `debt_follow_ups` — one row per manual reminder of a customer made outside the system (channel, outcome, optional promise to
+  pay, balance and overdue amount at contact). Append-only; it changes nothing else.
+
 ## Global DB Conventions
 
 ```text
