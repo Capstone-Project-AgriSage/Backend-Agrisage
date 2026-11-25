@@ -21,9 +21,6 @@ public sealed class DebtController(IDebtService service, IDebtRolloverService ro
         var response = await followUps.RecordAsync(farmerProfileId, request, token);
         return StatusCode(StatusCodes.Status201Created, response);
     }
-    [HttpPost("api/customers/{farmerProfileId:guid}/debt/send-sms")]
-    public Task<DebtFollowUpResponse> SendDebtSms(Guid farmerProfileId, CancellationToken token) =>
-        followUps.SendSmsAsync(farmerProfileId, token);
     [HttpGet("api/debt-entries")]
     public Task<PagedResult<DebtEntryListItem>> Entries([FromQuery] DebtEntryListRequest request, CancellationToken token) => service.EntriesAsync(request, token);
     [HttpGet("api/debt-entries/{id:guid}")]

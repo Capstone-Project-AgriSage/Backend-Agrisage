@@ -1,5 +1,6 @@
 using AgriSage.Application.Common;
 using AgriSage.Application.Common.Exceptions;
+using AgriSage.Application.Common.Interfaces;
 using AgriSage.Application.Features.Audit;
 using AgriSage.Application.Features.Auth.Services;
 using AgriSage.Application.Features.Inventory;
@@ -25,6 +26,50 @@ namespace AgriSage.IntegrationTests.Infrastructure.Notifications;
 public sealed class NotificationsOperationsDatabaseTests
 {
     private static CancellationToken Token => TestContext.Current.CancellationToken;
+    [RealDbFact]
+    public async Task Debt_sms_is_queued_once_retried_and_sent_after_gateway_recovers()
+    {
+        await using var e = await OperationsTestEnvironment.CreateAsync();
+        e.User.UpdateContact(e.User.Email, "0912345678");
+        var account = new DebtAccount(e.Store.Id, e.Farmer.Id);
+        var due = BusinessCalendar.Today(e.Time.UtcNow);
+        var posting = account.CreateManualAdjustmentEntry($"DE-{Guid.NewGuid():N}", 100_000m, due, e.User.Id, e.Time.UtcNow);
+        e.Context.DebtAccounts.Add(account);
+        e.Context.DebtEntries.Add(posting.Entry);
+        e.Context.DebtTransactions.Add(posting.Transaction);
+        await e.Context.SaveChangesAsync(Token);
+        await AgriSage.IntegrationTests.Infrastructure.Debt.ReminderStartHelper.EnsureAsync(e.Context, e.Store.Id, Token);
+        var sender = new DebtSmsSender { Fail = true };
+        var reminders = new OperationalAlertsService(e.Context, new NotificationWriter(e.Context),
+            new InventoryService(e.Context, e.Time, new RowLockService(e.Context)), e.Time);
+        await reminders.DebtRemindersAsync(10, Token);
+        await reminders.DebtRemindersAsync(10, Token);
+        var queued = Assert.Single(await e.Context.DebtSmsOutbox.ToListAsync(Token));
+        Assert.Equal("N3", queued.Milestone);
+        var delivery = new DebtSmsDeliveryService(e.Context, sender, e.Time);
+        await delivery.DeliverAsync(10, Token);
+        Assert.Equal(1, queued.Attempts);
+        Assert.Null(queued.SentAt);
+        sender.Fail = false;
+        e.Time.UtcNow = e.Time.UtcNow.AddSeconds(61);
+        await delivery.DeliverAsync(10, Token);
+        await delivery.DeliverAsync(10, Token);
+        Assert.Single(sender.Messages);
+        Assert.NotNull(queued.SentAt);
+    }
+
+    private sealed class DebtSmsSender : ISmsTextSender
+    {
+        public bool IsConfigured => true;
+        public bool Fail { get; set; }
+        public List<string> Messages { get; } = [];
+        public Task SendAsync(string destination, string text, string purpose, CancellationToken token)
+        {
+            if (Fail) throw new MessageDeliveryUnavailableException();
+            Messages.Add(text);
+            return Task.CompletedTask;
+        }
+    }
     [RealDbFact]
     public async Task Notifications_are_owned_paginated_and_archived_without_physical_deletion()
     {

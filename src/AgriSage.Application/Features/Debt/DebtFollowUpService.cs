@@ -7,32 +7,13 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AgriSage.Application.Features.Debt;
 
-// F3.23: staff can log an outside contact, or explicitly send an SMS through the shared gateway and then log it.
-// Neither action changes the debt, limit or credit status. Follow-ups are append-only.
+// F3.23: staff log a contact made outside the system. Automatic SMS uses a separate outbox and does not change
+// this append-only manual follow-up history or the debt, limit or credit status.
 public sealed class DebtFollowUpService(IAgriSageDbContext db, ICurrentUserService currentUser, IDateTimeProvider clock,
-    DebtFollowUpQueries queries, ISmsTextSender sms) : IDebtFollowUpService
+    DebtFollowUpQueries queries) : IDebtFollowUpService
 {
     // A promise to pay is for a date within a year of the contact.
     public const int MaxPromiseDays = 365;
-
-    public async Task<DebtFollowUpResponse> SendSmsAsync(Guid farmerProfileId, CancellationToken token)
-    {
-        var store = await ActiveStore.GetIdAsync(db, token);
-        var customer = await db.DebtAccounts.AsNoTracking()
-            .Where(a => a.StoreId == store && a.FarmerProfileId == farmerProfileId)
-            .Select(a => new { a.CurrentBalance, a.FarmerProfile.User.PhoneNumber })
-            .SingleOrDefaultAsync(token) ?? throw new NotFoundException("Customer debt account", farmerProfileId);
-        if (customer.CurrentBalance <= 0) throw new BusinessRuleException("The customer owes nothing, so there is no debt to remind.");
-        if (!ContactNormalizer.TryNormalizePhone(customer.PhoneNumber, out var phone))
-            throw new BusinessRuleException("The customer has no valid phone number for SMS.");
-        if (!sms.IsConfigured) throw new MessageDeliveryUnavailableException();
-
-        var amount = customer.CurrentBalance.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
-        var text = $"AgriSage: Ban con no {amount} VND. Vui long xem cong no va thanh toan, hoac lien he cua hang.";
-        await sms.SendAsync(phone!, text, "DebtReminder", token);
-        return await RecordAsync(farmerProfileId,
-            new DebtFollowUpRequest("MESSAGE", "OTHER", "Đã gửi SMS nhắc nợ qua hệ thống."), token);
-    }
 
     public async Task<DebtFollowUpResponse> RecordAsync(Guid farmerProfileId, DebtFollowUpRequest request, CancellationToken token)
     {

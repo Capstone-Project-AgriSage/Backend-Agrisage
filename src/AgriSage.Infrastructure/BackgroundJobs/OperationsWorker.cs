@@ -55,6 +55,8 @@ public sealed class OperationsWorker(IServiceScopeFactory scopes, IOptions<Backg
                 await services.GetRequiredService<IInventoryService>().ExpireDueLotsAsync(token); break;
             case BackgroundTask.DebtReminders:
                 await services.GetRequiredService<OperationalAlertsService>().DebtRemindersAsync(o.BatchSize, token, o.DebtSummaryBatch); break;
+            case BackgroundTask.DebtSms:
+                await services.GetRequiredService<DebtSmsDeliveryService>().DeliverAsync(o.BatchSize, token); break;
             case BackgroundTask.InventoryAlerts:
                 await services.GetRequiredService<OperationalAlertsService>().InventoryAlertsAsync(o.BatchSize, o.ExpiryWarningDays, token); break;
             case BackgroundTask.ExpireAuthentication:
@@ -80,11 +82,11 @@ public sealed class OperationsWorker(IServiceScopeFactory scopes, IOptions<Backg
     {
         BackgroundTask.ExpireLots => o.ExpireLots, BackgroundTask.DebtReminders => o.DebtReminders,
         BackgroundTask.InventoryAlerts => o.InventoryAlerts, BackgroundTask.ReconcilePayments => o.ReconcilePayments,
-        BackgroundTask.ExpireAuthentication => o.ExpireAuthentication, _ => true
+        BackgroundTask.ExpireAuthentication => o.ExpireAuthentication, BackgroundTask.DebtSms => o.DebtSms, _ => true
     };
     private static int Interval(BackgroundTask task, BackgroundJobOptions o) => task switch
     {
-        BackgroundTask.Notifications => o.NotificationSeconds, BackgroundTask.ExpireLots => o.ExpireLotsSeconds,
+        BackgroundTask.Notifications or BackgroundTask.DebtSms => o.NotificationSeconds, BackgroundTask.ExpireLots => o.ExpireLotsSeconds,
         BackgroundTask.ReconcilePayments => o.PaymentSeconds, BackgroundTask.ExpireAuthentication => o.AuthenticationSeconds,
         _ => o.AlertSeconds
     };

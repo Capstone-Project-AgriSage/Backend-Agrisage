@@ -7065,3 +7065,14 @@ Contract: api-flows/EXCHANGES.md. Two additive tables; no changes to original or
 All FKs Restrict. History uses existing audit_logs (entity_type EXCHANGE).
 PaymentMethod and RefundMethod add EXCHANGE_CREDIT, reserved for exchange settlement, excluded from cashflow.
 Quantity exclusion and return provenance reuse sales_returns/sales_return_items and original-order row locks.
+
+## Automatic debt SMS extension (2026-11-25)
+
+`debt_sms_outbox` is an additive durable delivery queue, separate from the in-app `notifications` table and the
+manual `debt_follow_ups` history. It has the standard id and audit/soft-delete columns, `debt_account_id` (Restrict FK),
+`deduplication_key` (varchar 200, unique; one row per Farmer and N1–N5 milestone), `phone_number` (varchar 20),
+`message` (varchar 500), milestone, due date, optional collection season, `available_at`, nullable `sent_at` and
+`cancelled_at`, nonnegative `attempts`, and nullable `last_error_code` (varchar 100). A partial index on
+`available_at` for pending, undeleted rows supports the worker. The worker cancels a reminder if its debt group is
+paid or disputed, refreshes the amount before dispatch, and retries gateway
+failures with bounded exponential delay. Migration `DebtSmsOutbox` adds only this table.
