@@ -40,6 +40,11 @@ public sealed class DebtFollowUpQueries(IAgriSageDbContext db)
 
     private IQueryable<Row> Rows(IQueryable<DebtFollowUp> source) =>
         from f in source
+        // Payments count from the contact. The web form keeps the contact time to the minute (seconds :00): a record saved
+        // within a minute after its contact time was logged as it happened, so its payments count from the moment it was
+        // saved, and a payment taken just before logging is not a payment made after the reminder. A contact logged later
+        // (a visit written down in the evening) still counts from the contact time.
+        let paidFrom = f.ContactedAt < f.CreatedAt && f.CreatedAt < f.ContactedAt.AddMinutes(1) ? f.CreatedAt : f.ContactedAt
         select new Row
         {
             Id = f.Id, AccountId = f.DebtAccountId, ContactedAt = f.ContactedAt, Channel = f.Channel, Outcome = f.Outcome,
@@ -51,12 +56,12 @@ public sealed class DebtFollowUpQueries(IAgriSageDbContext db)
             // Posted PAYMENT ledger lines of the account since the contact (amount_delta is negative for a payment).
             PaidSince = db.DebtTransactions.Where(t => t.DebtAccountId == f.DebtAccountId
                     && t.TransactionType == DebtTransactionType.Payment && t.Status == DebtTransactionStatus.Posted
-                    && t.OccurredAt >= f.ContactedAt)
+                    && t.OccurredAt >= paidFrom)
                 .Sum(t => (decimal?)-t.AmountDelta) ?? 0m,
             // The same lines up to the end of the promised day (Vietnam date of the payment).
             PaidByPromise = f.PromisedDate == null ? 0m : db.DebtTransactions.Where(t => t.DebtAccountId == f.DebtAccountId
                     && t.TransactionType == DebtTransactionType.Payment && t.Status == DebtTransactionStatus.Posted
-                    && t.OccurredAt >= f.ContactedAt && DateOnly.FromDateTime(t.OccurredAt.UtcDateTime.AddHours(7)) <= f.PromisedDate.Value)
+                    && t.OccurredAt >= paidFrom && DateOnly.FromDateTime(t.OccurredAt.UtcDateTime.AddHours(7)) <= f.PromisedDate.Value)
                 .Sum(t => (decimal?)-t.AmountDelta) ?? 0m,
             HasLaterContact = db.DebtFollowUps.Any(o => o.DebtAccountId == f.DebtAccountId
                 && (o.ContactedAt > f.ContactedAt || (o.ContactedAt == f.ContactedAt && o.CreatedAt > f.CreatedAt))),
