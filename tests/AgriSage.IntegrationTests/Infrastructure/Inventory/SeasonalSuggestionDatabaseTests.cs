@@ -37,7 +37,7 @@ public class SeasonalSuggestionDatabaseTests
         DateOnly EndsOn, StoreProduct Fertilizer, StoreProduct LinkedPesticide, StoreProduct UnlinkedPesticide,
         Product NotCarried, StoreProduct Tool, SeasonalRule LastYearRule);
 
-    private static SeasonalSuggestionService Service(World w) => new(w.Db);
+    private static SeasonalSuggestionService Service(World w) => new(w.Db, new InventoryPlanningData(w.Db, new Clock()));
 
     private static SeasonalSuggestionGenerator Generator(World w) =>
         new(new SeasonalSuggestionCandidates(w.Db, new InventoryPlanningData(w.Db, new Clock())),
@@ -237,6 +237,58 @@ public class SeasonalSuggestionDatabaseTests
         w.Db.Add(rule);
         await w.Db.SaveChangesAsync(Token);
         Assert.Empty(await reminder.UpcomingAsync(w.Store.Id, w.Today, 30, Token));
+    }
+
+    [RealDbFact]
+    public async Task A_rule_draft_fills_in_the_season_and_a_demand_factor_from_last_season()
+    {
+        await using var session = await RealDb.Session.StartAsync();
+        var w = await BuildAsync(session);
+        await using var _ = w.Db;
+        await Reminder(w, session).RemindAsync(Token);
+        var service = Service(w);
+        var id = Assert.Single((await service.ListAsync(new(), Token)).Items).Id;
+
+        // Last year's season only: the fertilizer has no off-season sales, so the factor is the default.
+        var draft = await service.RuleDraftAsync(id, Token);
+        Assert.Equal($"Vụ Lúa {SeasonalSuggestionRules.Day(w.StartsOn)} – {SeasonalSuggestionRules.Day(w.EndsOn)}", draft.Name);
+        Assert.Equal(("RICE", w.StartsOn, w.EndsOn, 14), (draft.CropType, draft.StartsOn, draft.EndsOn, draft.PrepareDays));
+        Assert.Equal((1.5m, "DEFAULT", 0), (draft.DemandFactor, draft.DemandFactorBasis, draft.DemandFactorProducts));
+        Assert.Equal(SeasonalSuggestionRules.BaselineWindow(draft.ComparedFrom), (draft.BaselineFrom, draft.BaselineTo));
+        Assert.Equal([(w.Fertilizer.Id, (long?)104), (w.LinkedPesticide.Id, null)],
+            draft.Items.Select(i => (i.StoreProductId, i.TargetStockLevelBase)));
+        var skipped = Assert.Single(draft.Skipped);
+        Assert.Equal((w.NotCarried.Id, "NOT_CARRIED"), (skipped.ProductId, skipped.Reason));
+        Assert.Null(draft.CoveringRule);
+
+        // Off-season sales: 60 bags in the 30 observed days before last year's season (2 a day), against 300 bags over
+        // its 61 days (about 4.92 a day): 2.5.
+        var lot = await w.Db.InventoryLots.Include(l => l.Balance).SingleAsync(l => l.StoreProductId == w.Fertilizer.Id, Token);
+        var number = 0;
+        foreach (var offset in new[] { -25, -15, -5 })
+        {
+            var at = BusinessCalendar.StartOfDay(draft.ComparedFrom.AddDays(offset)).AddHours(5);
+            var movement = new StockMovement(w.Store.Id, $"SB-{++number}", StockMovementType.Sale, at, w.Actor.Id);
+            movement.AddItem(lot.Id, lot.IssueUnreserved(20));
+            movement.Post(w.Actor.Id, at);
+            w.Db.Add(movement);
+        }
+        await w.Db.SaveChangesAsync(Token);
+        draft = await service.RuleDraftAsync(id, Token);
+        Assert.Equal((2.5m, "LAST_SEASON", 1), (draft.DemandFactor, draft.DemandFactorBasis, draft.DemandFactorProducts));
+
+        // The draft saved nothing. Once the owner saves a rule of the crop for these days, the season is covered.
+        Assert.Equal(1, await w.Db.SeasonalRules.CountAsync(Token)); // last year's only
+        var rule = new SeasonalRule(w.Store.Id, draft.Name, draft.CropType, draft.Region, draft.StartsOn, draft.EndsOn,
+            draft.PrepareDays, draft.DemandFactor);
+        rule.SetItems(draft.Items.Select(i => (i.StoreProductId, i.TargetStockLevelBase)).ToList(), w.Actor.Id, DateTimeOffset.UtcNow);
+        w.Db.Add(rule);
+        await w.Db.SaveChangesAsync(Token);
+        Assert.Equal(new SeasonalCoveringRule(rule.Id, draft.Name), (await service.RuleDraftAsync(id, Token)).CoveringRule);
+        Assert.Equal(rule.Id, Assert.Single((await service.ListAsync(new(), Token)).Items).CoveringRule?.Id);
+        Assert.Equal(rule.Id, (await service.GetAsync(id, Token)).CoveringRule?.Id);
+
+        await Assert.ThrowsAsync<NotFoundException>(() => service.RuleDraftAsync(Guid.NewGuid(), Token));
     }
 
     [RealDbFact]
