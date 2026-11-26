@@ -131,6 +131,49 @@ public class SeasonalSuggestionRulesTests
     }
 
     [Fact]
+    public void The_demand_factor_is_the_median_season_to_baseline_ratio_of_the_products_with_history()
+    {
+        // One product sold 2.4 times faster in the season: 2.4.
+        Assert.Equal(new SeasonalSuggestionRules.DemandFactorResult(2.4m, true, 1),
+            SeasonalSuggestionRules.DemandFactor([(4.8m, 2m)]));
+
+        // Odd count: the middle ratio (1.5, 2, 3 → 2). Units never mix: each product is a ratio of its own.
+        Assert.Equal(new SeasonalSuggestionRules.DemandFactorResult(2m, true, 3),
+            SeasonalSuggestionRules.DemandFactor([(300m, 100m), (3m, 2m), (10m, 5m)]));
+
+        // Even count: the mean of the two middle ratios (1.2, 1.6, 2.2, 4 → 1.9), rounded to one decimal.
+        Assert.Equal(new SeasonalSuggestionRules.DemandFactorResult(1.9m, true, 4),
+            SeasonalSuggestionRules.DemandFactor([(1.2m, 1m), (1.6m, 1m), (2.2m, 1m), (4m, 1m)]));
+        Assert.Equal(1.3m, SeasonalSuggestionRules.DemandFactor([(1.25m, 1m)]).Factor); // half away from zero
+
+        // A product without a daily demand in either window, or with no off-season sales, does not count.
+        var sparse = SeasonalSuggestionRules.DemandFactor([(null, 2m), (3m, null), (3m, 0m), (6m, 2m)]);
+        Assert.Equal(new SeasonalSuggestionRules.DemandFactorResult(3m, true, 1), sparse);
+
+        // Kept in the range a seasonal rule accepts.
+        Assert.Equal(5m, SeasonalSuggestionRules.DemandFactor([(40m, 1m)]).Factor);
+        Assert.Equal(0.1m, SeasonalSuggestionRules.DemandFactor([(0m, 3m)]).Factor);
+    }
+
+    [Fact]
+    public void Without_history_the_demand_factor_is_the_default()
+    {
+        Assert.Equal(new SeasonalSuggestionRules.DemandFactorResult(1.5m, false, 0), SeasonalSuggestionRules.DemandFactor([]));
+        Assert.Equal(new SeasonalSuggestionRules.DemandFactorResult(1.5m, false, 0),
+            SeasonalSuggestionRules.DemandFactor([(null, null), (2m, null)]));
+    }
+
+    [Fact]
+    public void The_baseline_is_the_90_days_before_last_years_season_and_the_rule_is_named_after_the_season()
+    {
+        Assert.Equal((new DateOnly(2025, 9, 11), new DateOnly(2025, 12, 9)),
+            SeasonalSuggestionRules.BaselineWindow(new DateOnly(2025, 12, 10)));
+        Assert.Equal("Vụ Lúa 15/12/2026 – 14/02/2027",
+            SeasonalSuggestionRules.RuleName("Lúa", new DateOnly(2026, 12, 15), new DateOnly(2027, 2, 14)));
+        Assert.True(SeasonalSuggestionRules.RuleName(new string('x', 200), new DateOnly(2026, 12, 15), new DateOnly(2027, 2, 14)).Length <= 150);
+    }
+
+    [Fact]
     public void The_list_request_is_validated()
     {
         var list = new SeasonalSuggestionListRequestValidator();

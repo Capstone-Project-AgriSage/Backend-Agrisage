@@ -54,6 +54,8 @@ public static class PermissionEndpointMap
         // F4.7 seasonal product suggestions reuse the seasonal-rule permissions.
         ["SeasonalSuggestions.List"] = "SEASONAL_RULES.READ",
         ["SeasonalSuggestions.Get"] = "SEASONAL_RULES.READ",
+        // The draft exists to be saved as a rule: the same permission as saving one.
+        ["SeasonalSuggestions.RuleDraft"] = "SEASONAL_RULES.MANAGE",
         ["InventoryPlanningReports.Velocity"] = "REPORTS.READ",
         ["InventoryPlanningReports.ExpiryRisk"] = "REPORTS.READ",
         ["InventoryPlanningReports.Export"] = "REPORTS.READ",

@@ -529,3 +529,4 @@ Exchange extension: [EXCHANGES.md](EXCHANGES.md) (2026-11-25).
 | Task | What | Status |
 |---|---|---|
 | F4.7 | Suggestions of products to stock before a crop season, prepared by the hourly reminder from data only (no AI) and shown as notifications on the dashboard and product management page (lead and L4 owner agreed; the user then dropped the AI and the manual screen) | contract in FLOW_4 "Seasonal product suggestions", tables in DATABASE_DESIGN §35.25, migration `SeasonalSuggestions`; branch `feature/f4-7-seasonal-suggestions` |
+| F4.7 step 2 | A seasonal rule filled in from a suggestion (rule draft, demand factor from last season, products not carried listed as skipped) that the owner edits and saves; seasons already covered by a rule are reported and hidden on the web | contract in FLOW_4 "Seasonal product suggestions" rules 6–7, no migration; branch `feature/f4-7-seasonal-rule-draft` |

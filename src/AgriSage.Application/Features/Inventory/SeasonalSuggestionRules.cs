@@ -151,6 +151,42 @@ public static class SeasonalSuggestionRules
     public static DateOnly OrderByDate(DateOnly startsOn, int prepareDays, int leadDays) =>
         startsOn.AddDays(-(prepareDays + Math.Max(0, leadDays)));
 
+    // Demand factor of a seasonal rule filled in from a suggestion, when no product has enough history.
+    public const decimal DefaultDemandFactor = 1.5m;
+
+    // The range a seasonal rule accepts (SeasonalRule, SeasonalRuleWriteRequestValidator).
+    public const decimal MinDemandFactor = 0.1m;
+    public const decimal MaxDemandFactor = 5m;
+
+    // Length of the off-season window compared with the season: the replenishment forecast reads the last 90 days by
+    // default, and a seasonal rule multiplies that usual demand, so the factor compares the season with the same span.
+    public const int BaselineDays = 90;
+
+    public sealed record DemandFactorResult(decimal Factor, bool FromHistory, int Products);
+
+    // The 90 days just before last year's season.
+    public static (DateOnly From, DateOnly To) BaselineWindow(DateOnly comparedFrom) =>
+        (comparedFrom.AddDays(-BaselineDays), comparedFrom.AddDays(-1));
+
+    // How much faster the products sold in last year's season than in the 90 days before it: the median of the
+    // per-product ratios (units differ between products, so quantities are never added up), over the products with a
+    // daily demand in both windows (ReplenishmentMath.DailyDemand: ≥ 14 observed days and ≥ 3 sale days) and some
+    // off-season sales. Rounded to one decimal and kept in the range of a rule. Without such a product: 1.5.
+    public static DemandFactorResult DemandFactor(IEnumerable<(decimal? Season, decimal? Baseline)> rates)
+    {
+        var ratios = rates.Where(r => r.Season is not null && r.Baseline is > 0)
+            .Select(r => r.Season!.Value / r.Baseline!.Value).Order().ToList();
+        if (ratios.Count == 0) return new(DefaultDemandFactor, false, 0);
+        var middle = ratios.Count / 2;
+        var median = ratios.Count % 2 == 1 ? ratios[middle] : (ratios[middle - 1] + ratios[middle]) / 2;
+        var factor = Math.Clamp(Math.Round(median, 1, MidpointRounding.AwayFromZero), MinDemandFactor, MaxDemandFactor);
+        return new(factor, true, ratios.Count);
+    }
+
+    // "Vụ Lúa 15/12/2026 – 14/02/2027", within the 150 characters of a rule name.
+    public static string RuleName(string cropName, DateOnly startsOn, DateOnly endsOn) =>
+        Clip(Squash($"Vụ {cropName} {Day(startsOn)} – {Day(endsOn)}"), 150);
+
     public static string Day(DateOnly day) => day.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture);
 
     private static string Number(long value) => value.ToString("N0", Vietnamese);

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using AgriSage.Application.Common;
 using AgriSage.Application.Features.Inventory;
 using AgriSage.Domain.Features.Identity.Enums;
@@ -59,6 +60,33 @@ public sealed class SeasonalSuggestionHttpTests(StaffHttpTests.StaffApiFactory f
         Assert.Equal("FERTILIZER", item.GetProperty("group").GetString());
         Assert.True(item.GetProperty("inStore").GetBoolean());
         Assert.Equal(HttpStatusCode.NotFound, (await owner.GetAsync($"{Route}/{Guid.NewGuid()}", token)).StatusCode);
+        Assert.Equal(JsonValueKind.Null, detail.GetProperty("coveringRule").ValueKind);
+
+        // The rule draft fills in the season and its products, with the default factor (no sales last year); saving
+        // it is the usual seasonal-rule create, after which the season shows as covered.
+        var draft = await OkAsync(await owner.GetAsync($"{Route}/{runId}/rule-draft", token), token);
+        Assert.Equal("RICE", draft.GetProperty("cropType").GetString());
+        Assert.StartsWith("Vụ Lúa ", draft.GetProperty("name").GetString());
+        Assert.Equal(14, draft.GetProperty("prepareDays").GetInt32());
+        Assert.Equal(1.5m, draft.GetProperty("demandFactor").GetDecimal());
+        Assert.Equal("DEFAULT", draft.GetProperty("demandFactorBasis").GetString());
+        var draftLine = Assert.Single(draft.GetProperty("items").EnumerateArray());
+        Assert.Equal(e.StoreProductId, draftLine.GetProperty("storeProductId").GetGuid());
+        Assert.Equal(104, draftLine.GetProperty("targetStockLevelBase").GetInt64());
+        Assert.Empty(draft.GetProperty("skipped").EnumerateArray());
+        Assert.Equal(HttpStatusCode.NotFound, (await owner.GetAsync($"{Route}/{Guid.NewGuid()}/rule-draft", token)).StatusCode);
+        var created = await owner.PostAsJsonAsync("/api/inventory/seasonal-rules", new
+        {
+            name = draft.GetProperty("name").GetString(), cropType = draft.GetProperty("cropType").GetString(),
+            region = draft.GetProperty("region").GetString(), startsOn = draft.GetProperty("startsOn").GetString(),
+            endsOn = draft.GetProperty("endsOn").GetString(), prepareDays = draft.GetProperty("prepareDays").GetInt32(),
+            demandFactor = draft.GetProperty("demandFactor").GetDecimal(), isActive = true,
+            items = new[] { new { storeProductId = e.StoreProductId, targetStockLevelBase = (long?)104 } },
+        }, token);
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var ruleId = (await created.Content.ReadFromJsonAsync<JsonElement>(token)).GetProperty("id").GetGuid();
+        var row = Assert.Single((await OkAsync(await owner.GetAsync(Route, token), token)).GetProperty("items").EnumerateArray());
+        Assert.Equal(ruleId, row.GetProperty("coveringRule").GetProperty("id").GetGuid());
 
         // Nothing creates or changes a run.
         Assert.Equal(HttpStatusCode.MethodNotAllowed, (await owner.PostAsJsonAsync(Route, new { cropType = "RICE" }, token)).StatusCode);
@@ -66,6 +94,8 @@ public sealed class SeasonalSuggestionHttpTests(StaffHttpTests.StaffApiFactory f
 
         Assert.Equal(HttpStatusCode.Forbidden, (await driver.GetAsync(Route, token)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await farmer.GetAsync(Route, token)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await driver.GetAsync($"{Route}/{runId}/rule-draft", token)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await farmer.GetAsync($"{Route}/{runId}/rule-draft", token)).StatusCode);
 
         // Sale staff have no seasonal-rule permission by default; the owner delegates the read.
         Assert.Equal(HttpStatusCode.Forbidden, (await staff.GetAsync(Route, token)).StatusCode);
@@ -77,5 +107,7 @@ public sealed class SeasonalSuggestionHttpTests(StaffHttpTests.StaffApiFactory f
             reason = "Nhân viên xem gợi ý nhập hàng (E2E)",
         }, token), token);
         Assert.Equal(1, (await OkAsync(await staff.GetAsync(Route, token), token)).GetProperty("totalCount").GetInt64());
+        // The read alone does not open the draft: it needs SEASONAL_RULES.MANAGE, like saving the rule.
+        Assert.Equal(HttpStatusCode.Forbidden, (await staff.GetAsync($"{Route}/{runId}/rule-draft", token)).StatusCode);
     }
 }
