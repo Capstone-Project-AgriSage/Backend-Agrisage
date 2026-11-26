@@ -773,7 +773,10 @@ DebtFollowUpResponse {
   - `null` without a promise.
   - The target is `promisedAmount`. When that is empty, it is `overdueAmount`, or `outstandingAmount` when nothing was
     overdue. Payments are the customer's posted `PAYMENT` debt transactions since `contactedAt` (`paidSinceContact`);
-    returns, reductions and write-offs are not payments. The rules apply in this order:
+    returns, reductions and write-offs are not payments. A record saved less than a minute after `contactedAt` was logged
+    as it happened (the web form keeps the time to the minute), so its payments count from the moment it was saved
+    (`createdAt`): a payment taken just before logging does not count toward the new promise. The rules apply in this
+    order:
     1. `KEPT` ("Đã trả theo hẹn"): the payments up to the end of the promised day (Vietnam date) reach the target.
     2. `LATE` ("Trả trễ hẹn"): all payments since the contact reach the target, but not by the promised day.
     3. `CLEARED` ("Hết nợ"): the account owes nothing, without that much being paid (a return, a reduction, a write-off).
