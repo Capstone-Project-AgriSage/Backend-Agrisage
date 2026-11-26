@@ -63,22 +63,33 @@ Decisions (lead and L4 owner with the user, 2026-11-25):
 - Every run and its items are saved, so the dashboard and the product management page can show them.
 - Only a background reminder prepares suggestions (one per upcoming season) and notifies; the store reads them on the
   dashboard and the product management page and from the notification.
+- 2026-11-26 (the lead's "step 2", with the user): from a suggestion the owner opens the seasonal-rule form filled in by
+  the server (`rule-draft`, rule 6) and saves it with the existing `POST /api/inventory/seasonal-rules`; the server never
+  saves a rule by itself. A season an active rule covers is reported as `coveringRule` and left off the web notices
+  (rule 7). No migration: the draft and its factor are computed when read.
 
 | Method | Route | Permission | Body / query | Response |
 |---|---|---|---|---|
 | GET | `/api/inventory/seasonal-suggestions` | SEASONAL_RULES.READ | `page, pageSize, cropType?, fromDate?, toDate?` (earliest season start first) | `200 SeasonalSuggestionPage` |
 | GET | `/api/inventory/seasonal-suggestions/{id}` | SEASONAL_RULES.READ | — | `200 SeasonalSuggestionResponse` |
+| GET | `/api/inventory/seasonal-suggestions/{id}/rule-draft` | SEASONAL_RULES.MANAGE | — | `200 SeasonalRuleDraftResponse` (nothing saved) |
 
 Roles: `Operate` (ADMIN, STORE_OWNER, SALES_STAFF) with the permission above; a Sale member has it only when the
-owner delegates it; no Farmer or Delivery access. No endpoint creates, changes or decides a run.
+owner delegates it; no Farmer or Delivery access. No endpoint creates, changes or decides a run. The rule draft needs
+SEASONAL_RULES.MANAGE, the permission that saves the rule.
 
 - `SeasonalSuggestionResponse`: `id, cropType, cropName, region, startsOn, endsOn, prepareDays, comparedFrom,
-  comparedTo, candidateCount, seasonalRuleId?, createdAt, items[]`. Item: `id, rank, productId, storeProductId?,
+  comparedTo, candidateCount, seasonalRuleId?, createdAt, items[], coveringRule? {id, name}`. Item: `id, rank, productId, storeProductId?,
   inStore, sku, productName, baseUnit, group (FERTILIZER|CROP_PROTECTION|SEED|OTHER), confidence (HIGH|MEDIUM|LOW),
   reason, evidence[] {kind, text}, soldLastSeasonBase?, sellableBase?, suggestedTargetBase?, orderByDate?`.
   Evidence kinds: SALES, LINK, DIAGNOSIS, ADVISORY, RULE, STOCK.
 - `SeasonalSuggestionPage`: the usual paged shape of list rows `id, cropType, cropName, startsOn, endsOn, itemCount,
-  createdAt`.
+  createdAt, coveringRule? {id, name}`.
+- `SeasonalRuleDraftResponse`: `suggestionId, name, cropType, cropName, region?, startsOn, endsOn, prepareDays,
+  demandFactor, demandFactorBasis (LAST_SEASON|DEFAULT), demandFactorProducts, comparedFrom, comparedTo, baselineFrom,
+  baselineTo, coveringRule? {id, name}, items[] {storeProductId, sku, productName, baseUnit, targetStockLevelBase?},
+  skipped[] {productId, sku, productName, reason (NOT_CARRIED)}`. The body of `POST /api/inventory/seasonal-rules` is
+  made from it as the owner edits it.
 
 Rules:
 1. History window: the same calendar days in the latest year whose window ended before today (29 Feb reads as
@@ -102,13 +113,27 @@ Rules:
    while still no rule covers it, it sends one more notice for the same run. Each notice is sent once; nothing else
    is created.
 5. Audit: `SEASONAL_SUGGESTION_CREATED`.
+6. Rule draft (`GET …/{id}/rule-draft`, nothing saved): name `Vụ {crop name} {startsOn} – {endsOn}` (dd/MM/yyyy), the
+   run's crop code, region, days and preparation days. Lines: the suggested products the Store carries now, in rank
+   order, target = `suggestedTargetBase` (null lets the forecast compute it); products not carried are listed in
+   `skipped` (NOT_CARRIED) and the store adds them first. `demandFactor`: for each line, the daily demand
+   (`ReplenishmentMath.DailyDemand`: ≥ 14 observed days and ≥ 3 sale days, sold as in rule 1) in the history window and
+   in the 90 days before it (`baselineFrom`–`baselineTo`, the span the forecast reads by default); the factor is the
+   median of season ÷ baseline over the products that have both and some off-season sales (units differ, so quantities
+   are never added up), rounded to one decimal and kept in 0.1–5 (`LAST_SEASON`, `demandFactorProducts` = how many).
+   Without such a product: 1.5 (`DEFAULT`). The forecast multiplies its usual demand by the rule's factor and takes the
+   line target as a floor (`ReplenishmentMath.Target`), so factor and target never multiply each other.
+7. Covered season: an active seasonal rule of the same crop whose days overlap the run's season (the reminder's test in
+   rule 4). List rows, the detail and the draft return it as `coveringRule`; the web shows only uncovered seasons and,
+   when the draft is already covered, says so instead of opening the form.
 
-Errors: `400` validation, `404` run not in this Store.
+Errors: `400` validation, `403` rule draft without SEASONAL_RULES.MANAGE, `404` run not in this Store.
 
 Must prove (F4.7): history-window dates (leap day), eligibility (crop protection without a link for the crop is never
 suggested; products not carried only through an approved link), null quantity on sparse history, reminders (upcoming
 detection, one scheduled run per season, each notice once, none when a rule exists), permission map and roles, no
-endpoint that creates or changes a run, migration review.
+endpoint that creates or changes a run, migration review; rule draft (carried lines and targets, skipped products,
+default and last-season factor, covering rule, MANAGE only, nothing saved).
 
 Version 2.0 — 2026-10-03. Conventions, shared shapes, interfaces and ownership rules: [README.md](README.md).
 Sources: `DATABASE_DESIGN.md` §21–29, §52–54, §7.1, §7.5, §VIII, §XXI–XXII, §35.8–35.11, §35.17–35.19, §35.24;
