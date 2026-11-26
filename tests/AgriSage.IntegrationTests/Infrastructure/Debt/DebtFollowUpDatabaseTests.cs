@@ -102,6 +102,34 @@ public sealed class DebtFollowUpDatabaseTests
     }
 
     [CreditDbFact]
+    public async Task A_payment_taken_just_before_logging_a_reminder_does_not_count_toward_its_promise()
+    {
+        await using var e = await CreditTestDatabase.StartAsync(Token);
+        await OweAsync(e, days: 11);
+        var minute = e.Clock.UtcNow; // the test clock starts on a whole minute
+        Assert.Equal(0, minute.Second);
+
+        // Seen live on 2026-11-26: cash at :42, then a reminder for "now" saved at :53. The form sends the contact time to the
+        // minute (:00), so the payment fell after the contact time although it came before the reminder.
+        e.Clock.UtcNow = minute.AddSeconds(42);
+        await PayAsync(e, 100_000);
+        e.Clock.UtcNow = minute.AddSeconds(53);
+        var now = await RecordAsync(e, new("AT_STORE", "PROMISED", PromisedDate: Today(e).AddDays(3), PromisedAmount: 100_000, ContactedAt: minute));
+        Assert.Equal(("WAITING", 0m), (now.PromiseStatus, now.PaidSinceContact));
+
+        // A visit written down later counts every payment since the visit, including one taken before it was written down.
+        var visit = await RecordAsync(e, new("VISIT", "PROMISED", PromisedDate: Today(e).AddDays(3), PromisedAmount: 100_000, ContactedAt: minute.AddHours(-2)));
+        Assert.Equal(("KEPT", 100_000m), (visit.PromiseStatus, visit.PaidSinceContact));
+
+        // The next payment, after the reminder was saved, keeps the "now" promise.
+        e.Clock.UtcNow = minute.AddSeconds(75);
+        await PayAsync(e, 100_000);
+        var list = await ListAsync(e);
+        Assert.Equal(("KEPT", 100_000m), (list.Single(f => f.Id == now.Id).PromiseStatus, list.Single(f => f.Id == now.Id).PaidSinceContact));
+        Assert.Equal(200_000m, list.Single(f => f.Id == visit.Id).PaidSinceContact);
+    }
+
+    [CreditDbFact]
     public async Task Wrong_or_pointless_reminders_are_refused_and_the_table_checks_hold()
     {
         await using var e = await CreditTestDatabase.StartAsync(Token);
