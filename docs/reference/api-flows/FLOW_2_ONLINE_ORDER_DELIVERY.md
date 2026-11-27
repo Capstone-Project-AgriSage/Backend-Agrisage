@@ -559,6 +559,16 @@ on a map, and the Farmer sees the driver of their own order. Positions are kept 
 There is no route planning: the map link of the delivery slip stays. Maps use OpenStreetMap tiles, with no key. Screens
 refresh by polling every 15 seconds; there is no SignalR event.
 
+**Maps stay in the store's region (2026-11-27, user).** Every map (Management web, Farmer web, Farmer app) is locked to
+the Mekong Delta and Ho Chi Minh City (latitude 8.3–11.8, longitude 103.8–107.2, Phu Quoc and Con Dao included). The
+minimum zoom is 9 (a province), and tiles outside the region are not loaded. OpenStreetMap labels the Paracel and Spratly
+islands in a way Vietnam does not recognise, so the maps never show the open sea or the islands.
+
+**Driver app cadence.** The app asks Android for a position every 20 s with no distance filter, so a driver standing still
+still reports. Indoors Android holds high-accuracy updates while it waits for satellites. When no position has come for
+40 s, the app sends the phone's last known position instead, if that position is at most 2 minutes old (often Wi-Fi,
+about ±15 m).
+
 | Method | Route | Roles | Permission | Body | Response |
 |---|---|---|---|---|---|
 | POST | `/api/deliveries/{id}/attempts/{attemptId}/locations` | Read (DELIVERY_STAFF included) | `DELIVERY_ATTEMPTS.START` | `RecordLocationsRequest` | `200 RecordLocationsResponse` |
