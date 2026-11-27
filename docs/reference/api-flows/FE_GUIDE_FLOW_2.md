@@ -674,9 +674,19 @@ export interface MyDelivery {
 Hợp đồng đầy đủ ở FLOW_2 §9a. Bản đồ dùng OpenStreetMap (web: `leaflet` + `react-leaflet`; Flutter: `flutter_map`),
 không cần key. Không có sự kiện SignalR cho vị trí: màn hình tự tải lại mỗi 15 giây khi đang mở.
 
+**Mọi bản đồ chỉ hiện vùng cửa hàng:**
+- khung Đồng bằng sông Cửu Long và TP.HCM: vĩ độ 8,3–11,8, kinh độ 103,8–107,2;
+- thu nhỏ tối thiểu cấp 9 (cấp tỉnh);
+- không tải ô bản đồ ngoài khung.
+
+Web: `minZoom`, `maxBounds` + `maxBoundsViscosity: 1`, `TileLayer bounds`. Flutter: `minZoom`, `CameraConstraint.contain`,
+`TileLayer.tileBounds`.
+
+Lý do: OpenStreetMap ghi tên và ranh giới ở Hoàng Sa, Trường Sa không đúng chủ quyền Việt Nam.
+
 | Ai | Làm gì | API |
 |---|---|---|
-| Tài xế (app Delivery) | Bắt đầu lượt giao thì bắt đầu gửi vị trí, kể cả khi tắt màn hình; gom điểm và gửi mỗi khoảng 20 giây; kết thúc hoặc bị hủy lượt giao thì gửi nốt rồi dừng | `POST /api/deliveries/{id}/attempts/{attemptId}/locations` |
+| Tài xế (app Delivery) | Bắt đầu lượt giao thì bắt đầu gửi vị trí, kể cả khi tắt màn hình. App xin vị trí mỗi 20 giây, không lọc theo quãng đường, nên đứng yên vẫn gửi. Nếu 40 giây không có điểm GPS (ví dụ trong nhà), app gửi vị trí gần nhất của máy, miễn là mới trong 2 phút. Kết thúc hoặc bị hủy lượt giao thì gửi nốt rồi dừng | `POST /api/deliveries/{id}/attempts/{attemptId}/locations` |
 | Chủ, nhân viên bán hàng | Trang "Bản đồ giao hàng": mọi chuyến đang giao | `GET /api/deliveries/live` |
 | Chủ, nhân viên bán hàng | Chi tiết phiếu giao: vị trí lượt đang giao, đường đi của từng lượt | `GET /api/deliveries/{id}/attempts/{attemptId}/locations` |
 | Nông dân | Chi tiết đơn: thẻ "Tài xế đang giao" khi `inProgress = true` | `GET /api/me/orders/{orderId}/deliveries/{deliveryId}/tracking` |
