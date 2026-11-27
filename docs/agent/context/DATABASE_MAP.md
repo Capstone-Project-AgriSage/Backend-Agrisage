@@ -120,6 +120,10 @@ Use it to locate the correct domain, then open the exact authoritative table sec
 - `inventory_seasonal_suggestion_items` — the ranked products of a run (carried by the Store or not), reason, evidence
   and suggested target, all written by the server. Nothing here changes stock, rules or store products.
 
+### Added after the baseline (live delivery location, 2026-11-27) — see `DATABASE_DESIGN.md` §35.26
+- `delivery_location_points` — the driver's positions during an IN_PROGRESS delivery attempt (latitude, longitude,
+  accuracy, recorded time), one route per attempt. Append-only; it changes nothing else.
+
 ## Global DB Conventions
 
 ```text

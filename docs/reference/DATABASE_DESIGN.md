@@ -6690,6 +6690,29 @@ inventory_seasonal_suggestion_items (new; children of a run)
 Never automatic: a run creates no stock movement, seasonal rule, store product or goods receipt.
 ```
 
+## 35.26 Live delivery location (table 41; new table delivery_location_points) — migration DeliveryLocationTracking
+
+```text
+F2.8 (2026-11-27, choices by the user): while a delivery attempt is IN_PROGRESS its driver's phone sends its position;
+store staff see running trips and routes, the order's Farmer sees the running trip (FLOW_2 §9a). One new table; no
+existing table, column or permission changes (DELIVERY_ATTEMPTS.START / .READ, DELIVERIES.READ and MY_DELIVERIES.READ
+are reused).
+
+delivery_location_points (new; append-only: inserted by the API, never updated or deleted; no soft delete, no version)
+  id uuid PK
+  delivery_attempt_id uuid NOT NULL FK delivery_attempts (RESTRICT)
+  latitude numeric(10,7) NOT NULL, longitude numeric(10,7) NOT NULL
+  accuracy_meters numeric(8,2) NULL    the phone's horizontal accuracy
+  recorded_at timestamptz NOT NULL     when the phone took the position
+  created_at, updated_at               created_at = when the server received it
+  CHECK latitude BETWEEN -90 AND 90; CHECK longitude BETWEEN -180 AND 180;
+  CHECK accuracy_meters IS NULL OR accuracy_meters >= 0
+  UNIQUE (delivery_attempt_id, recorded_at)   a resent batch adds no row; also the index for routes in time order.
+
+Written only while the attempt is IN_PROGRESS and only by the store member who started it (Application + Domain).
+Never automatic: a point changes no delivery, attempt, stock, debt or notification, and writes no audit log.
+```
+
 ## 35.24 Debt follow-ups: manual reminders after overdue (table 48; new table debt_follow_ups) — migration DebtFollowUps
 
 ```text

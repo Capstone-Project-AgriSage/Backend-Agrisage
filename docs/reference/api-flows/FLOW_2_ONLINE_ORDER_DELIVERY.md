@@ -37,6 +37,7 @@ assignment, trips, failures and incidents). It reuses L1's `OrderBuilder`, `Paym
 | F2.5 | Delivery notes | F1.4 (reservation) | F2.6 |
 | F2.6 | Delivery attempts and incidents | M2 (`FulfillmentPostingService`), F4.2 for incident adjustments | — |
 | F2.7 | **New** Farmer delivery tracking, delivery report | F2.6 | — |
+| F2.8 | **New** Live delivery location: the driver's position and route while an attempt is in progress (§9a) | F2.6 | — |
 
 ---
 
@@ -548,6 +549,89 @@ Attempts are counted on their completion day; `successRate` = successful ÷ comp
 
 ---
 
+## 9a. F2.8 — Live delivery location (new, 2026-11-27)
+
+Chosen by the user on 2026-11-27. While a delivery attempt is `IN_PROGRESS`, the driver's phone shares its position,
+also with the screen off (Android shows a permanent "sharing location" notification). The store sees every running trip
+on a map, and the Farmer sees the driver of their own order. Positions are kept as a route per attempt (table
+`delivery_location_points`, `DATABASE_DESIGN.md` §35.26).
+
+There is no route planning: the map link of the delivery slip stays. Maps use OpenStreetMap tiles, with no key. Screens
+refresh by polling every 15 seconds; there is no SignalR event.
+
+| Method | Route | Roles | Permission | Body | Response |
+|---|---|---|---|---|---|
+| POST | `/api/deliveries/{id}/attempts/{attemptId}/locations` | Read (DELIVERY_STAFF included) | `DELIVERY_ATTEMPTS.START` | `RecordLocationsRequest` | `200 RecordLocationsResponse` |
+| GET | `/api/deliveries/{id}/attempts/{attemptId}/locations` | Read | `DELIVERY_ATTEMPTS.READ` | — | `200 LocationPointResponse[]` |
+| GET | `/api/deliveries/live` | Read | `DELIVERIES.READ` | — | `200 LiveDeliveryResponse[]` |
+| GET | `/api/me/orders/{orderId}/deliveries/{deliveryId}/tracking` | FARMER (own order) | `MY_DELIVERIES.READ` | — | `200 MyDeliveryTrackingResponse` |
+
+```json
+// RecordLocationsRequest: 1-100 points, in any order
+{ "points": [ { "latitude": 10.0452101, "longitude": 105.7469201, "accuracyMeters": 12.5,
+                "recordedAt": "2026-11-27T03:10:20Z" } ] }
+
+// RecordLocationsResponse
+{ "accepted": 9, "ignored": 1 }
+
+// LocationPointResponse
+{ "latitude": 10.0452101, "longitude": 105.7469201, "accuracyMeters": 12.5, "recordedAt": "2026-11-27T03:10:20Z" }
+
+// LiveDeliveryResponse: one per IN_PROGRESS attempt in the caller's scope, oldest start first
+{ "deliveryId": "uuid", "deliveryNumber": "DL-20261127-0001", "orderId": "uuid", "orderNumber": "…",
+  "recipientName": "…", "addressLine": "…", "destination": { "latitude": 10.04, "longitude": 105.74 },
+  "attemptId": "uuid", "attemptNumber": 1, "startedAt": "…",
+  "driver": { "userId": "uuid", "fullName": "…", "phoneNumber": "…" },
+  "lastPoint": { "latitude": 10.0452101, "longitude": 105.7469201, "accuracyMeters": 12.5, "recordedAt": "…" } }
+
+// MyDeliveryTrackingResponse
+{ "deliveryId": "uuid", "deliveryNumber": "DL-20261127-0001", "status": "OUT_FOR_DELIVERY", "inProgress": true,
+  "attemptNumber": 1, "startedAt": "…", "driver": { "fullName": "…", "phoneNumber": "…" },
+  "destination": { "latitude": 10.04, "longitude": 105.74 }, "lastPoint": { … }, "trail": [ LocationPointResponse ] }
+```
+
+`destination` is the delivery's address snapshot (`latitude_snapshot`, `longitude_snapshot`). It is null when the
+address has no coordinates. `lastPoint` is null until the first point arrives.
+
+Rules:
+
+1. **When points are recorded.** Points are recorded only while the attempt is `IN_PROGRESS`. Otherwise the API answers
+   422, and the app stops sharing.
+2. **Who may send them.** Only the store member who started the attempt (`attempted_by_member_id`) sends points. Anyone
+   else who can see the delivery gets 403.
+3. **Scope.** The delivery must be in the caller's scope (D8; DELIVERY_STAFF: only deliveries assigned to them), or the
+   API answers 404. An attempt that belongs to another delivery is also 404.
+4. **Valid input.** The rules below are checked; anything else is 400:
+   - 1-100 points per request;
+   - latitude between -90 and 90;
+   - longitude between -180 and 180;
+   - `accuracyMeters` between 0 and 10000, or null;
+   - `recordedAt` is required.
+5. **Ignored points.** These points are counted in `ignored`; they are not errors:
+   - `recordedAt` earlier than the attempt's `startedAt` minus 5 minutes (phone clock drift);
+   - `recordedAt` later than now plus 2 minutes;
+   - a `recordedAt` the attempt already has, so a resent batch adds nothing (within one batch the first point with a
+     given time is kept). Times are compared in UTC whole milliseconds. If two copies of a batch arrive at the same
+     moment, the second may answer 409 (unique index); the app treats that as sent.
+6. **No side effects.** Recording a location changes nothing else: no status, stock, debt, notification or audit log.
+   Sharing is never required: an attempt starts and completes with or without points.
+7. **Staff reads.**
+   - The route is the attempt's points in `recordedAt` order, at most the latest 2000.
+   - `live` lists the IN_PROGRESS attempts in the caller's scope; DELIVERY_STAFF see only their own.
+   - Finished attempts keep their route for staff.
+8. **Farmer reads.**
+   - The tracking route answers only for a delivery of the Farmer's own order (404 otherwise, as for F2.7).
+   - `inProgress` is true while the delivery has an IN_PROGRESS attempt. The response then carries:
+     - the driver of that attempt (the store member who started it);
+     - the destination;
+     - the last point;
+     - the route of that attempt.
+   - Otherwise `lastPoint` is null and `trail` is empty: the Farmer does not see finished trips.
+9. **Freshness on screens.** Clients decide freshness: a last point older than 3 minutes shows as "Mất tín hiệu từ HH:mm".
+10. **Storage.** Points are append-only. There is no update or delete API, and no automatic clean-up in this version.
+
+---
+
 ## 10. Tests — must prove
 
 | Task | Must prove |
@@ -559,6 +643,7 @@ Attempts are counted on their completion day; `successRate` = successful ÷ comp
 | F2.5 | planned quantity limit, lot change keeps history and moves the reservation, delivery-staff scope |
 | F2.6 | design example 20 → 18 + 2, proof required, one attempt in progress, failed attempt posts nothing, two trips complete the order |
 | F2.7 | Farmer sees only own deliveries without lots/costs; report counts per staff and failure reasons |
+| F2.8 | only the attempt's driver records points (other staff 403, other driver 404), only while IN_PROGRESS (422 after completion); a resent batch adds no row, out-of-window points are ignored; `live` lists only running attempts in scope; the Farmer sees only their own order's running trip and nothing after it ends; DB checks and the unique (attempt, recorded_at) index |
 
 ---
 
@@ -578,3 +663,4 @@ Attempts are counted on their completion day; `successRate` = successful ÷ comp
 | C-D8 | Missed webhook: when `sync` finds the link PAID, the payment is applied exactly like a webhook (`confirmation_source = PAYOS_WEBHOOK`, `provider_metadata.confirmedVia = "STATUS_QUERY"`) |
 | C-D9 | payOS amounts are whole VND; a fractional amount is refused (422) and that part is paid in cash |
 | F-D5 | Reports are Manage-only and owned by the flow whose data they read |
+| T-D1 | Live delivery location (F2.8, 2026-11-27, user): shared only during an IN_PROGRESS attempt, by its driver, also with the screen off; store staff and the order's Farmer see it (the Farmer only while the trip runs); the whole route is kept; no route planning; OpenStreetMap maps; polling every 15 s; existing permissions are reused, so the migration adds one table and no permission |
