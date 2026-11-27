@@ -139,6 +139,8 @@ public sealed class AgriSageDbContext : DbContext, IAgriSageDbContext
 
     public DbSet<DeliveryIncident> DeliveryIncidents => Set<DeliveryIncident>();
 
+    public DbSet<DeliveryLocationPoint> DeliveryLocationPoints => Set<DeliveryLocationPoint>();
+
     public DbSet<CreditTier> CreditTiers => Set<CreditTier>();
 
     public DbSet<FarmerCreditProfile> FarmerCreditProfiles => Set<FarmerCreditProfile>();

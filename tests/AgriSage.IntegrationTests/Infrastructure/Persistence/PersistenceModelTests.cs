@@ -25,7 +25,7 @@ public class PersistenceModelTests
         "stocktakes", "stocktake_items", "inventory_reservations", "inventory_reservation_items",
         "carts", "cart_items", "orders", "order_items", "payments", "payment_allocations",
         "deliveries", "delivery_items", "delivery_item_lot_allocations", "delivery_attempts",
-        "delivery_attempt_items", "delivery_incidents",
+        "delivery_attempt_items", "delivery_incidents", "delivery_location_points",
         "credit_tiers", "farmer_credit_profiles", "credit_limit_histories", "credit_reservations",
         "debt_accounts", "debt_entries", "debt_entry_actions", "debt_transactions",
         "crop_seasons", "store_debt_policies", "debt_follow_ups", "debt_sms_outbox",
@@ -59,11 +59,11 @@ public class PersistenceModelTests
         Table(table).GetCheckConstraints().Single(check => check.Name == $"ck_{table}_{name}");
 
     [Fact]
-    public void Model_maps_exactly_the_91_documented_tables()
+    public void Model_maps_exactly_the_92_documented_tables()
     {
         var tables = Model.GetEntityTypes().Select(entityType => entityType.GetTableName()).ToList();
 
-        Assert.Equal(91, DocumentedTables.Length);
+        Assert.Equal(92, DocumentedTables.Length);
         Assert.Equal(DocumentedTables.Order(), tables.Order());
         Assert.DoesNotContain(Model.GetEntityTypes(), entityType => entityType.IsOwned());
     }
@@ -90,7 +90,8 @@ public class PersistenceModelTests
             .Where(entityType => entityType.FindProperty(nameof(SoftDeletableEntity.DeletedAt)) is null)
             .Select(entityType => entityType.GetTableName());
 
-        Assert.Equal(new[] { "audit_logs", "invoice_emails", "permissions", "role_permissions", "sales_invoices", "store_member_permissions" }, withoutSoftDelete.Order());
+        // delivery_location_points: append-only driver positions (F2.8, §35.26), never updated or deleted.
+        Assert.Equal(new[] { "audit_logs", "delivery_location_points", "invoice_emails", "permissions", "role_permissions", "sales_invoices", "store_member_permissions" }, withoutSoftDelete.Order());
         Assert.Null(Table("audit_logs").FindProperty(nameof(AuditableEntity.CreatedAt)));
     }
 

@@ -2505,6 +2505,61 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AgriSage.Domain.Features.Deliveries.Entities.DeliveryLocationPoint", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<decimal?>("AccuracyMeters")
+                        .HasPrecision(8, 2)
+                        .HasColumnType("numeric(8,2)")
+                        .HasColumnName("accuracy_meters");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("DeliveryAttemptId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("delivery_attempt_id");
+
+                    b.Property<decimal>("Latitude")
+                        .HasPrecision(10, 7)
+                        .HasColumnType("numeric(10,7)")
+                        .HasColumnName("latitude");
+
+                    b.Property<decimal>("Longitude")
+                        .HasPrecision(10, 7)
+                        .HasColumnType("numeric(10,7)")
+                        .HasColumnName("longitude");
+
+                    b.Property<DateTimeOffset>("RecordedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("recorded_at");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_delivery_location_points");
+
+                    b.HasIndex("DeliveryAttemptId", "RecordedAt")
+                        .IsUnique()
+                        .HasDatabaseName("ux_delivery_location_points_delivery_attempt_id_recorded_at");
+
+                    b.ToTable("delivery_location_points", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_delivery_location_points_accuracy_meters", "accuracy_meters IS NULL OR accuracy_meters >= 0");
+
+                            t.HasCheckConstraint("ck_delivery_location_points_latitude", "latitude BETWEEN -90 AND 90");
+
+                            t.HasCheckConstraint("ck_delivery_location_points_longitude", "longitude BETWEEN -180 AND 180");
+                        });
+                });
+
             modelBuilder.Entity("AgriSage.Domain.Features.Diagnosis.Entities.AgentReview", b =>
                 {
                     b.Property<Guid>("Id")
@@ -11521,6 +11576,16 @@ namespace AgriSage.Infrastructure.Persistence.Migrations
                         .HasForeignKey("InventoryReservationItemId")
                         .OnDelete(DeleteBehavior.NoAction)
                         .HasConstraintName("fk_delivery_item_lot_allocations_inventory_reservation_item_id");
+                });
+
+            modelBuilder.Entity("AgriSage.Domain.Features.Deliveries.Entities.DeliveryLocationPoint", b =>
+                {
+                    b.HasOne("AgriSage.Domain.Features.Deliveries.Entities.DeliveryAttempt", null)
+                        .WithMany()
+                        .HasForeignKey("DeliveryAttemptId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_delivery_location_points_delivery_attempt_id");
                 });
 
             modelBuilder.Entity("AgriSage.Domain.Features.Diagnosis.Entities.AgentReview", b =>

@@ -138,6 +138,8 @@ public interface IAgriSageDbContext
 
     DbSet<DeliveryIncident> DeliveryIncidents { get; }
 
+    DbSet<DeliveryLocationPoint> DeliveryLocationPoints { get; }
+
     // Credit
     DbSet<CreditTier> CreditTiers { get; }
 

@@ -142,6 +142,7 @@ public static class DependencyInjection
         services.AddScoped<IDeliveryAttemptService, DeliveryAttemptService>();
         services.AddScoped<IDeliveryIncidentService, DeliveryIncidentService>();
         services.AddScoped<IMyDeliveryService, MyDeliveryService>();
+        services.AddScoped<IDeliveryLocationService, DeliveryLocationService>();
         services.AddScoped<IDeliveryReportService, DeliveryReportService>();
 
         services.AddScoped<PaymentAllocator>();
