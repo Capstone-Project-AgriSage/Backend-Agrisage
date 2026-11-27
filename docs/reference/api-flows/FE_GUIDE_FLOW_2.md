@@ -666,3 +666,48 @@ export interface MyDelivery {
               receiverName: string | null; proofImageUrl: string | null; failureReasonCode: FailureReason | null }[]
 }
 ```
+
+---
+
+## 11. Theo dõi vị trí giao hàng (F2.8, 27/11/2026)
+
+Hợp đồng đầy đủ ở FLOW_2 §9a. Bản đồ dùng OpenStreetMap (web: `leaflet` + `react-leaflet`; Flutter: `flutter_map`),
+không cần key. Không có sự kiện SignalR cho vị trí: màn hình tự tải lại mỗi 15 giây khi đang mở.
+
+| Ai | Làm gì | API |
+|---|---|---|
+| Tài xế (app Delivery) | Bắt đầu lượt giao thì bắt đầu gửi vị trí, kể cả khi tắt màn hình; gom điểm và gửi mỗi khoảng 20 giây; kết thúc hoặc bị hủy lượt giao thì gửi nốt rồi dừng | `POST /api/deliveries/{id}/attempts/{attemptId}/locations` |
+| Chủ, nhân viên bán hàng | Trang "Bản đồ giao hàng": mọi chuyến đang giao | `GET /api/deliveries/live` |
+| Chủ, nhân viên bán hàng | Chi tiết phiếu giao: vị trí lượt đang giao, đường đi của từng lượt | `GET /api/deliveries/{id}/attempts/{attemptId}/locations` |
+| Nông dân | Chi tiết đơn: thẻ "Tài xế đang giao" khi `inProgress = true` | `GET /api/me/orders/{orderId}/deliveries/{deliveryId}/tracking` |
+
+Cách hiển thị và xử lý lỗi:
+- `lastPoint.recordedAt` cũ hơn 3 phút → ghi "Mất tín hiệu từ HH:mm"; `lastPoint = null` → "Chưa có tín hiệu vị trí".
+- `destination = null` (địa chỉ không có tọa độ) → chỉ vẽ tài xế và đường đi.
+- App tài xế: 422 khi gửi điểm nghĩa là lượt giao đã kết thúc → dừng gửi, bỏ bộ đệm. Lỗi mạng hoặc 5xx → giữ điểm lại
+  (tối đa 500) và gửi lần sau. Gửi lại cùng một lô không sao: điểm trùng thời gian bị bỏ qua (`ignored`); 409 (hai bản
+  của một lô tới cùng lúc) coi như đã gửi.
+- Tài xế từ chối quyền vị trí vẫn giao hàng bình thường; chỉ hiện cảnh báo.
+
+```ts
+export interface LocationPoint { latitude: number; longitude: number; accuracyMeters: number | null; recordedAt: string }
+export interface GeoPoint { latitude: number; longitude: number }
+
+export interface RecordLocationsRequest { points: LocationPoint[] }          // 1-100 điểm
+export interface RecordLocationsResponse { accepted: number; ignored: number }
+
+export interface LiveDelivery {
+  deliveryId: string; deliveryNumber: string; orderId: string; orderNumber: string
+  recipientName: string; addressLine: string; destination: GeoPoint | null
+  attemptId: string; attemptNumber: number; startedAt: string
+  driver: { userId: string; fullName: string; phoneNumber: string | null }
+  lastPoint: LocationPoint | null
+}
+
+export interface MyDeliveryTracking {
+  deliveryId: string; deliveryNumber: string; status: DeliveryStatus; inProgress: boolean
+  attemptNumber: number | null; startedAt: string | null
+  driver: { fullName: string; phoneNumber: string | null } | null
+  destination: GeoPoint | null; lastPoint: LocationPoint | null; trail: LocationPoint[]
+}
+```
