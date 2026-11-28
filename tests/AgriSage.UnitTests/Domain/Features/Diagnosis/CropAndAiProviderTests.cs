@@ -9,10 +9,12 @@ namespace AgriSage.UnitTests.Domain.Features.Diagnosis;
 public class CropAndAiProviderTests
 {
     [Fact]
-    public void Catalog_lists_rice_first_then_the_four_added_crops()
+    public void Catalog_lists_rice_first_then_the_added_crops()
     {
-        Assert.Equal(["RICE", "DURIAN", "COFFEE", "CORN", "MANGO"], CropCatalog.All.OrderBy(c => c.Order).Select(c => c.Code));
+        Assert.Equal(
+            ["RICE", "DURIAN", "COFFEE", "CORN", "MANGO", "DRAGON_FRUIT"], CropCatalog.All.OrderBy(c => c.Order).Select(c => c.Code));
         Assert.Equal("Lúa", CropCatalog.Find("RICE")!.Name);
+        Assert.Equal("Thanh long", CropCatalog.Find(CropCatalog.DragonFruit)!.Name);
         Assert.Equal(Disease.RiceCropType, CropCatalog.Rice);
     }
 

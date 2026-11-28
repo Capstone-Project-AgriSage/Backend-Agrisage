@@ -11,18 +11,15 @@ using ValidationException = AgriSage.Application.Common.Exceptions.ValidationExc
 namespace AgriSage.Application.Features.Diagnosis;
 
 // Registry of the model versions and the policies that interpret them (AI_DIAGNOSIS.md section 5).
-// At most one model is ACTIVE (D5); a policy may be activated only on an ACTIVE model and never overlaps another ACTIVE
-// policy of the same model in time. Every status change is audited in the same save.
+// At most one general model (Claude or Gemini) and one crop model (fixed classes, FastAPI) are ACTIVE together (D5, D19);
+// a policy may be activated only on an ACTIVE model and never overlaps another ACTIVE policy of the same model in time.
+// Every status change is audited in the same save.
 public sealed class AiModelService(
     IAgriSageDbContext context,
     ICurrentUserService currentUser,
     IDateTimeProvider clock,
     AuditTrail audit) : IAiModelService
 {
-    // The classes the production model must predict: exactly the seeded diseases (DiseaseSeeder).
-    private static readonly string[] RequiredLabels =
-        ["LEAF_BLAST", "BACTERIAL_LEAF_BLIGHT", "BROWN_SPOT", "SHEATH_BLIGHT", "HEALTHY"];
-
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     public async Task<PagedResult<AiModelResponse>> ListAsync(AiModelListRequest request, CancellationToken cancellationToken)
@@ -46,8 +43,11 @@ public sealed class AiModelService(
         var policies = await context.AiPolicyConfigs.AsNoTracking()
             .Where(p => ids.Contains(p.AiModelId)).OrderByDescending(p => p.EffectiveFrom).ToListAsync(cancellationToken);
 
+        var crops = await CropModels.DiseaseCropsAsync(
+            context, models.SelectMany(m => CropModels.Labels(m.ClassLabels)), cancellationToken);
+
         return new PagedResult<AiModelResponse>(
-            models.Select(m => ToResponse(m, policies.Where(p => p.AiModelId == m.Id))).ToList(),
+            models.Select(m => ToResponse(m, policies.Where(p => p.AiModelId == m.Id), crops)).ToList(),
             request.Page, request.PageSize, total);
     }
 
@@ -72,9 +72,28 @@ public sealed class AiModelService(
                     + (unknown.Count > 0 ? $"; unknown: {string.Join(", ", unknown)}." : "."));
             }
         }
-        else if (labels.Count != RequiredLabels.Length || !labels.ToHashSet().SetEquals(RequiredLabels))
+        else
         {
-            throw Invalid("classLabels", $"classLabels must be exactly: {string.Join(", ", RequiredLabels)}.");
+            // A crop model (D19): served by the AI service with fixed classes, it answers one crop only: HEALTHY plus active
+            // DISEASE problems of that crop (the five rice classes, or HEALTHY + DRAGONFRUIT_STEM_CANKER).
+            var known = await context.Diseases.AsNoTracking()
+                .Where(d => d.IsActive && labels.Contains(d.Code))
+                .Select(d => new { d.Code, d.CropType, d.ProblemType, d.IsHealthyClass })
+                .ToListAsync(cancellationToken);
+            var unknown = labels.Except(known.Select(d => d.Code)).ToList();
+            var problems = known.Where(d => !d.IsHealthyClass).ToList();
+            var notDiseases = problems.Where(d => d.ProblemType != ProblemType.Disease).Select(d => d.Code).ToList();
+            var crops = problems.Select(d => d.CropType).Distinct().ToList();
+            if (labels.Count != labels.Distinct().Count() || unknown.Count > 0 || !labels.Contains("HEALTHY")
+                || problems.Count == 0 || notDiseases.Count > 0 || crops.Count != 1)
+            {
+                throw Invalid("classLabels",
+                    "classLabels of a crop model must be distinct codes: HEALTHY plus active DISEASE problems of one crop"
+                    + (unknown.Count > 0 ? $"; unknown: {string.Join(", ", unknown)}" : string.Empty)
+                    + (notDiseases.Count > 0 ? $"; not a disease: {string.Join(", ", notDiseases)}" : string.Empty)
+                    + (crops.Count > 1 ? $"; crops: {string.Join(", ", crops)}" : string.Empty)
+                    + ".");
+            }
         }
 
         var name = request.Name.Trim();
@@ -107,8 +126,13 @@ public sealed class AiModelService(
         var model = await FindModelAsync(id, cancellationToken);
         var now = clock.UtcNow;
 
-        var others = await context.AiModels
-            .Where(m => m.Id != id && m.Status == AiModelStatus.Active).ToListAsync(cancellationToken);
+        // Only a model of the same kind is replaced (D5, D19): a general model replaces the general model, a crop model the
+        // crop model (one AI service URL serves every crop model, so only one can answer at a time).
+        var general = AiFrameworks.IsGeneralModel(model.Framework);
+        var others = (await context.AiModels
+                .Where(m => m.Id != id && m.Status == AiModelStatus.Active).ToListAsync(cancellationToken))
+            .Where(m => AiFrameworks.IsGeneralModel(m.Framework) == general)
+            .ToList();
         foreach (var other in others)
         {
             other.Retire(now);
@@ -243,8 +267,9 @@ public sealed class AiModelService(
             ?? throw new NotFoundException("AI model", id);
         var policies = await context.AiPolicyConfigs.AsNoTracking()
             .Where(p => p.AiModelId == id).OrderByDescending(p => p.EffectiveFrom).ToListAsync(cancellationToken);
+        var crops = await CropModels.DiseaseCropsAsync(context, CropModels.Labels(model.ClassLabels), cancellationToken);
 
-        return ToResponse(model, policies);
+        return ToResponse(model, policies, crops);
     }
 
     private static string? ToJson(JsonElement? value)
@@ -285,7 +310,8 @@ public sealed class AiModelService(
         p.Id, p.AiModelId, p.Version, p.MinimumConfidence, p.MinimumMargin, p.TopK, p.RequiresHumanReview,
         FromJson(p.Parameters), EnumText.Format(p.Status), p.EffectiveFrom, p.EffectiveTo);
 
-    private static AiModelResponse ToResponse(AiModel m, IEnumerable<AiPolicyConfig> policies)
+    private static AiModelResponse ToResponse(
+        AiModel m, IEnumerable<AiPolicyConfig> policies, IReadOnlyDictionary<string, string> diseaseCrops)
     {
         List<string> labels;
         try
@@ -300,7 +326,8 @@ public sealed class AiModelService(
         return new AiModelResponse(
             m.Id, m.Name, m.Version, m.Architecture, m.Framework, m.ModelStorageUrl, m.InputWidth, m.InputHeight, labels,
             FromJson(m.Metrics), EnumText.Format(m.Status), m.DeployedAt, m.RetiredAt, m.CreatedAt,
-            policies.Select(ToResponse).ToList());
+            policies.Select(ToResponse).ToList(),
+            AiFrameworks.IsGeneralModel(m.Framework) ? null : CropModels.CropOf(labels, diseaseCrops));
     }
 
     private static ValidationException Invalid(string field, string message) =>

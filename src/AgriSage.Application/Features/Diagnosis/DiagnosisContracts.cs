@@ -239,7 +239,9 @@ public sealed record AiModelResponse(
     DateTimeOffset? DeployedAt,
     DateTimeOffset? RetiredAt,
     DateTimeOffset CreatedAt,
-    IReadOnlyList<AiPolicyResponse> Policies);
+    IReadOnlyList<AiPolicyResponse> Policies,
+    // The crop a crop model answers (its disease labels' crop); null for a general model, which answers every crop (D19).
+    string? CropType = null);
 
 public sealed record AiModelListRequest : PaginationRequest
 {

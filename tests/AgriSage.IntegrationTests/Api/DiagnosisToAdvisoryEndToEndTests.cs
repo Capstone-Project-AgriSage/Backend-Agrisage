@@ -207,7 +207,7 @@ public sealed class DiagnosisToAdvisoryEndToEndTests(StaffHttpTests.StaffApiFact
             durianCrop.GetProperty("diseases").EnumerateArray().Select(d => d.GetProperty("code").GetString()).Order());
         Assert.Equal(3, durianCrop.GetProperty("diseaseCount").GetInt32());
         var all = await OkAsync(await owner.GetAsync("/api/diagnosis/crops", token), token);
-        Assert.Equal(5, all.GetArrayLength());
+        Assert.Equal(6, all.GetArrayLength());
 
         // 1. A durian photo: the model is offered only durian diseases and healthy, and is sure of the rot.
         ai.Next = Answer("claude-opus-5-5", ("DURIAN_PHYTOPHTHORA", 0.88m), ("DURIAN_ANTHRACNOSE", 0.06m));
@@ -256,6 +256,132 @@ public sealed class DiagnosisToAdvisoryEndToEndTests(StaffHttpTests.StaffApiFact
         Assert.Equal("DURIAN", durianAdvice.GetProperty("problem").GetProperty("cropType").GetString());
         Assert.Single(durianAdvice.GetProperty("protection").EnumerateArray());
     }
+
+    // AI_DIAGNOSIS.md 2.4 (D19): dragon fruit stem photos go to the team's own model (fixed classes, AI service), every other
+    // crop to the general model. Both stay ACTIVE together; activating a model replaces only a model of the same kind.
+    [CreditDbFact]
+    public async Task A_crop_model_answers_its_crop_and_the_general_model_every_other_crop()
+    {
+        var token = TestContext.Current.CancellationToken;
+        await using var e = await CreditTestDatabase.StartAsync(token);
+        var ai = new FakeAi();
+        await using var host = Start(factory, e, services =>
+        {
+            services.RemoveAll<IAiDiagnosisClient>();
+            services.AddSingleton<IAiDiagnosisClient>(ai);
+            services.RemoveAll<IPrivateFileStore>();
+            services.AddSingleton<IPrivateFileStore>(new FakePrivateStore());
+        });
+        await host.GrantDefaultsAsync(RoleCode.Farmer, "FARMER", token);
+        using var owner = await host.ClientAsync(e.User.UserId!.Value, "STORE_OWNER", token);
+        using var farmer = await host.ClientAsync(e.FarmerUserId, "FARMER", token);
+
+        using (var s = e.Scope())
+        {
+            var db = s.ServiceProvider.GetRequiredService<AgriSageDbContext>();
+            foreach (var code in Classes)
+                db.Diseases.Add(new Disease(code, code, isHealthyClass: code == "HEALTHY"));
+            await db.SaveChangesAsync(token);
+        }
+
+        await OkAsync(await owner.PostAsJsonAsync("/api/diseases", new
+        {
+            code = "DURIAN_PHYTOPHTHORA", name = "Thối gốc chảy nhựa", problemType = "DISEASE", cropType = "DURIAN",
+        }, token), token);
+        var canker = await OkAsync(await owner.PostAsJsonAsync("/api/diseases", new
+        {
+            code = "DRAGONFRUIT_STEM_CANKER", name = "Bệnh đốm nâu (tắc kè)", problemType = "DISEASE", cropType = "dragon_fruit",
+        }, token), token);
+        Assert.Equal("DRAGON_FRUIT", canker.GetProperty("cropType").GetString());
+
+        // A crop model answers one crop: HEALTHY plus that crop's diseases. Two crops, or no HEALTHY, are refused.
+        Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync("/api/ai-models", CropModel(
+            "mixed", "1", "HEALTHY", "DRAGONFRUIT_STEM_CANKER", "DURIAN_PHYTOPHTHORA"), token)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync("/api/ai-models", CropModel(
+            "no-healthy", "1", "DRAGONFRUIT_STEM_CANKER"), token)).StatusCode);
+
+        string[] general = [.. Classes, "DURIAN_PHYTOPHTHORA"];
+        var claude = await RegisterAndActivateAsync(owner, new
+        {
+            name = "claude", version = "claude-opus-5-5", framework = "ANTHROPIC", modelStorageUrl = "https://api.anthropic.com",
+            classLabels = general,
+        }, topK: 3, token);
+        Assert.Equal(JsonValueKind.Null, claude.GetProperty("cropType").ValueKind);
+        var dragon = await RegisterAndActivateAsync(owner, CropModel(
+            "agrisage-dragonfruit-stem-classifier", "0.1.0", "HEALTHY", "DRAGONFRUIT_STEM_CANKER"), topK: 2, token);
+        Assert.Equal("DRAGON_FRUIT", dragon.GetProperty("cropType").GetString());
+        Assert.Equal(["claude", "agrisage-dragonfruit-stem-classifier"], await ActiveModelsAsync(owner, token));
+
+        // The Farmer's crops: dragon fruit through its own model (one disease), durian and rice through the general model.
+        var crops = await OkAsync(await farmer.GetAsync("/api/me/diagnosis/crops", token), token);
+        Assert.Equal(["RICE", "DURIAN", "DRAGON_FRUIT"], crops.EnumerateArray().Select(c => c.GetProperty("code").GetString()));
+        var dragonCrop = crops.EnumerateArray().Single(c => c.GetProperty("code").GetString() == "DRAGON_FRUIT");
+        Assert.Equal("Thanh long", dragonCrop.GetProperty("name").GetString());
+        Assert.Equal(["DRAGONFRUIT_STEM_CANKER"],
+            dragonCrop.GetProperty("diseases").EnumerateArray().Select(d => d.GetProperty("code").GetString()));
+
+        // 1. A dragon fruit stem photo is answered by the crop model, under its own policy.
+        ai.Next = Answer("0.1.0", ("DRAGONFRUIT_STEM_CANKER", 0.93m), ("HEALTHY", 0.07m));
+        var stem = (await SendPhotoAsync(farmer, token, "DRAGON_FRUIT")).Case.GetProperty("result");
+        Assert.Equal("CONFIDENT", stem.GetProperty("certainty").GetString());
+        Assert.Equal("DRAGONFRUIT_STEM_CANKER", stem.GetProperty("disease").GetProperty("code").GetString());
+        Assert.Equal("pytorch", ai.Last!.Framework);
+        Assert.Equal(["DRAGONFRUIT_STEM_CANKER", "HEALTHY"], ai.Last!.Candidates!.Select(c => c.Code));
+
+        // 2. A durian photo still goes to the general model; an answer from another model's version fails the case.
+        ai.Next = Answer("claude-opus-5-5", ("DURIAN_PHYTOPHTHORA", 0.9m));
+        var durian = (await SendPhotoAsync(farmer, token, "DURIAN")).Case.GetProperty("result");
+        Assert.Equal("DURIAN_PHYTOPHTHORA", durian.GetProperty("disease").GetProperty("code").GetString());
+        Assert.Equal("ANTHROPIC", ai.Last!.Framework);
+        ai.Next = Answer("claude-opus-5-5", ("DRAGONFRUIT_STEM_CANKER", 0.9m), ("HEALTHY", 0.1m));
+        Assert.Equal("FAILED", (await SendPhotoAsync(farmer, token, "DRAGON_FRUIT")).Case.GetProperty("status").GetString());
+
+        // 3. Another crop model replaces the dragon fruit model (one AI service serves the crop model); the general model stays.
+        await RegisterAndActivateAsync(owner, CropModel("agrisage-rice-classifier", ModelVersion, Classes), topK: 3, token);
+        Assert.Equal(["claude", "agrisage-rice-classifier"], await ActiveModelsAsync(owner, token));
+        var after = await OkAsync(await farmer.GetAsync("/api/me/diagnosis/crops", token), token);
+        Assert.Equal(["RICE", "DURIAN"], after.EnumerateArray().Select(c => c.GetProperty("code").GetString()));
+        ai.Next = Answer(("BROWN_SPOT", 0.9m));
+        await SendPhotoAsync(farmer, token, "RICE");
+        Assert.Equal("pytorch", ai.Last!.Framework);
+
+        // 4. Another general model replaces only the general model.
+        await RegisterAndActivateAsync(owner, new
+        {
+            name = "gemini", version = "gemini-3.8-flash", framework = "GOOGLE", modelStorageUrl = "https://ai.google.dev",
+            classLabels = general,
+        }, topK: 3, token);
+        Assert.Equal(["gemini", "agrisage-rice-classifier"], await ActiveModelsAsync(owner, token));
+    }
+
+    private static object CropModel(string name, string version, params string[] labels) => new
+    {
+        name, version, framework = "pytorch", architecture = "vit_base_patch16_224", modelStorageUrl = "https://example.test/weights",
+        inputWidth = 224, inputHeight = 224, classLabels = labels,
+    };
+
+    // Registers a model through the API, activates it and gives it an effective ACTIVE policy.
+    private static async Task<JsonElement> RegisterAndActivateAsync(HttpClient owner, object manifest, int topK, CancellationToken token)
+    {
+        var model = await OkAsync(await owner.PostAsJsonAsync("/api/ai-models", manifest, token), token);
+        var id = model.GetProperty("id").GetGuid();
+        var active = await OkAsync(await owner.PostAsync($"/api/ai-models/{id}/activate", null, token), token);
+        Assert.Equal("ACTIVE", active.GetProperty("status").GetString());
+        var policy = await OkAsync(await owner.PostAsJsonAsync($"/api/ai-models/{id}/policies", new
+        {
+            version = "p1", minimumConfidence = 0.70m, effectiveFrom = DateTimeOffset.UtcNow.AddDays(-1), topK,
+        }, token), token);
+        await OkAsync(await owner.PostAsync($"/api/ai-policies/{policy.GetProperty("id").GetGuid()}/activate", null, token), token);
+        return active;
+    }
+
+    // The names of the ACTIVE models: the general model first, then the crop model.
+    private static async Task<string[]> ActiveModelsAsync(HttpClient owner, CancellationToken token) =>
+        (await OkAsync(await owner.GetAsync("/api/ai-models?status=ACTIVE&pageSize=10", token), token))
+            .GetProperty("items").EnumerateArray()
+            .OrderBy(m => m.GetProperty("cropType").ValueKind != JsonValueKind.Null)
+            .Select(m => m.GetProperty("name").GetString() ?? string.Empty)
+            .ToArray();
 
     private static AiPredictionResult Answer(params (string Label, decimal Score)[] top) => Answer(ModelVersion, top);
 
