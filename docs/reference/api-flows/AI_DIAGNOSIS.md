@@ -1,5 +1,8 @@
 # AI diagnosis — crop leaf disease, AI result shown to the Farmer, suggestions
 
+Version 2.4 — 2026-11-28: a **crop model** next to the general model (D19). Dragon fruit (`DRAGON_FRUIT`, stem photos)
+is answered by the team's own model (ViT-B/16, classes `HEALTHY` and `DRAGONFRUIT_STEM_CANKER`, served by the AI service);
+every other crop by the general model (Claude or Gemini). Both are ACTIVE together; no migration. See §16.
 Version 2.2 — 2026-11-20: the Farmer **chooses the crop** before the photo, a **general vision model** answers among that crop's diseases, and the admin enters its **API key** (stored encrypted). See §15 and D16–D18; the FastAPI model keeps working unchanged.
 Version 2.3 — 2026-11-21: the general model can be **Claude** (framework `ANTHROPIC`) **or Gemini** (framework `GOOGLE`, Gemini API key from Google AI Studio); one provider setting each, routes `/api/admin/ai-providers/{provider}` (§15).
 Version 2.1 — 2026-11-02: suggested products now come from reviewed problem-to-product links ([ADVISORY.md](ADVISORY.md), D13 replaced), no longer from an active-ingredient match.
@@ -29,7 +32,7 @@ limited by D3 and D13.
 
 | # | Step (screen) | API | Effect |
 |---|---|---|---|
-| 1 | Admin registers the exported model and a policy, activates both | `POST /api/ai-models`, `POST /api/ai-models/{id}/policies`, `…/activate` | one ACTIVE model, one ACTIVE policy |
+| 1 | Admin registers the exported model and a policy, activates both | `POST /api/ai-models`, `POST /api/ai-models/{id}/policies`, `…/activate` | one ACTIVE general model and at most one ACTIVE crop model (D5, D19), one ACTIVE policy each |
 | 2 | Owner enters disease content and treatments, links products to the disease and a reviewer approves the links ([ADVISORY.md](ADVISORY.md) §6) | `PUT /api/diseases/{id}`, `POST /api/diseases/{id}/treatments`, `POST /api/diseases/{id}/products`, `POST /api/disease-products/{id}/approve` | content and suggestions available |
 | 3 | Farmer photographs a leaf (mobile or Farmer web) | `POST /api/me/diagnosis-cases` | case `AI_COMPLETED` with a `result` (or `FAILED`) |
 | 4 | Farmer reads the result: disease, certainty, guidance, products (confident only) and adds a product to the cart | `GET /api/me/diagnosis-cases/{id}`, cart routes | — |
@@ -65,19 +68,20 @@ a migration) and are hidden from the permission screens (§11).
 | D2 | **A failed policy is an UNCERTAIN result, not INCONCLUSIVE.** The case becomes `AI_COMPLETED` with `passed_policy = false`; the Farmer sees the top guess marked `UNCERTAIN` with the hint `RETAKE_PHOTO_OR_ASK_STORE`. `passed_policy` is the value stored at inference time, under the policy effective then; old cases are never re-judged against today's policy. |
 | D3 | **No human review** (2.0). The result of the latest SUCCESS inference is the result. An `UNCERTAIN` result shows no CHEMICAL treatment and no product; a `CONFIDENT` result shows all active treatments and up to five products (D13); the Healthy class never gets products. `requires_human_review` is stored and ignored. |
 | D4 | **The AI is called after the case is saved and outside any transaction.** Transaction 1: number, case, image → commit. Then the HTTP call (timeout `AiService:TimeoutSeconds`, default 15). Transaction 2: `StartProcessing` → `RecordInference` → `CompleteAi`/`FailAi`. A crash in between leaves the case `SUBMITTED`, which the Farmer's retry accepts after two minutes. No transaction is held open across an HTTP call. |
-| D5 | **At most one ACTIVE model** (Application retires the previous one in the activation transaction) and at most one ACTIVE policy effective at a given moment per model. |
+| D5 | **At most one ACTIVE general model and one ACTIVE crop model (2.4, D19)**: activating a model retires the ACTIVE model of the same kind in the activation transaction (a general model replaces the general model, a crop model the crop model) and never touches the other kind. At most one ACTIVE policy effective at a given moment per model. Before 2.4 a single model was ACTIVE. |
 | D6 | **Always ask the service for `top_k = 5`** and store all five in `top_predictions`; the store screens show `policy.top_k` of them. Margin is computed from the stored list. |
 | D7 | ~~Reviewer authorization (`can_review_ai`)~~ — retired in 2.0. Reading cases needs only the permission code `DIAGNOSIS.READ`. |
 | D8 | **The Farmer sees a disease and a certainty, never a number.** The Farmer response carries no probability, margin, top-k, model or policy. It carries the disease (predicted, or final for a 1.0 VERIFIED case), `certainty` and the guidance. |
 | D9 | **Photos are private.** Bucket `diagnosis-images`, objects fetched through short-lived signed URLs (1 hour) created at read time; the stored `image_url` is not directly fetchable. |
-| D10 | **Model identity is checked.** An answer whose `model_version` differs from the ACTIVE model's `version`, or that has `stub = true` outside Development, is recorded as a FAILED inference (`raw_output.error = MODEL_VERSION_MISMATCH` / `STUB_REFUSED`), never as a result. |
+| D10 | **Model identity is checked.** An answer whose `model_version` differs from the `version` of the model chosen for the case's crop (D19), or that has `stub = true` outside Development, is recorded as a FAILED inference (`raw_output.error = MODEL_VERSION_MISMATCH` / `STUB_REFUSED`), never as a result. |
 | D11 | **DELETE is semantic.** Cases are cancelled, treatments deactivated. No route removes an inference. |
 | D12 | **Case numbers** are `DG-yyyyMMdd-NNNN` (append `DG` to `DocumentNumbers`). |
 | D13 | **Suggested products come from reviewed links and are computed at read time (2.1, replaces the active-ingredient match of 2.0).** Products = the `APPROVED` `PROTECTION` rows of `disease_products` for the predicted disease whose store product passes `CatalogRules.Sellable` and whose stock and price pass [ADVISORY.md](ADVISORY.md) V7; order V8; at most 5; `reason` is the text of the link (e.g. "Đăng ký trị đạo ôn trên lúa"). A product with the same active ingredient but no approved link is **not** offered. `disease_treatments.active_ingredient_id` stays as information. Nothing is stored in `recommendation_items`; each successful AI run still writes a `DIAGNOSIS_AI_RESULT` audit entry with the certainty and the suggested store product ids. |
-| D14 | **The Farmer retries a failed analysis.** `retry` is allowed on a `FAILED` case, or a `SUBMITTED` case older than two minutes (D4 crash). It reruns the AI on the primary image with the active model; an unreachable AI Service gives `503` and records nothing. The store has no rerun any more. |
-| D16 | **The crop comes first (2.2).** The Farmer picks a crop (`CropCatalog`: RICE, DURIAN, COFFEE, CORN, MANGO) before the photo; the case stores it in `diagnosis_cases.crop_type` (RICE when an older app sends none). A crop is offered only when the ACTIVE model can name at least one of its active `DISEASE` problems; another crop is `422` on create. |
-| D17 | **A general model only chooses among the chosen crop's diseases (2.2).** For each case the backend sends the candidates = the active `DISEASE` rows of the case's crop that are in the model's `class_labels`, plus HEALTHY, with their Vietnamese names and symptoms. An answer outside the candidates is a FAILED inference (`CLASS_NOT_FOR_CROP`); a crop without any candidate disease is FAILED without calling the model (`CROP_NOT_SUPPORTED_BY_MODEL`). The model may answer NONE (not this crop, unreadable photo): the result names its likeliest listed disease with confidence 0, so the policy shows UNCERTAIN. A model of framework `ANTHROPIC` or `GOOGLE` registers any active disease codes (HEALTHY required); a model of fixed classes still needs exactly the five rice classes. |
+| D14 | **The Farmer retries a failed analysis.** `retry` is allowed on a `FAILED` case, or a `SUBMITTED` case older than two minutes (D4 crash). It reruns the AI on the primary image with the model chosen for the case's crop today (D19); an unreachable AI Service gives `503` and records nothing. The store has no rerun any more. |
+| D16 | **The crop comes first (2.2).** The Farmer picks a crop (`CropCatalog`: RICE, DURIAN, COFFEE, CORN, MANGO, DRAGON_FRUIT since 2.4) before the photo; the case stores it in `diagnosis_cases.crop_type` (RICE when an older app sends none). A crop is offered only when the model chosen for it (D19) can name at least one of its active `DISEASE` problems; another crop is `422` on create. |
+| D17 | **A general model only chooses among the chosen crop's diseases (2.2).** For each case the backend sends the candidates = the active `DISEASE` rows of the case's crop that are in the model's `class_labels`, plus HEALTHY, with their Vietnamese names and symptoms. An answer outside the candidates is a FAILED inference (`CLASS_NOT_FOR_CROP`); a crop without any candidate disease is FAILED without calling the model (`CROP_NOT_SUPPORTED_BY_MODEL`). The model may answer NONE (not this crop, unreadable photo): the result names its likeliest listed disease with confidence 0, so the policy shows UNCERTAIN. A model of framework `ANTHROPIC` or `GOOGLE` registers any active disease codes (HEALTHY required); a model of fixed classes is a crop model and registers HEALTHY plus active `DISEASE` codes of one crop (D19; before 2.4: exactly the five rice classes). |
 | D18 | **The admin owns the providers and their keys (2.2, 2.3).** One `ai_provider_settings` row per provider (`ANTHROPIC` = Claude, `GOOGLE` = Gemini) holds the model id, timeout, on/off, and the API key encrypted with AES-256-GCM under a master key from configuration (`SecretEncryption:Key`, never in the database). No response and no audit entry carries the key (the audit redacts any field named like a key); the admin sees only that a key is stored. Clearing the key turns the provider off; it cannot be turned on without one. Which provider diagnoses is decided by the ACTIVE model's framework, not by this setting. |
+| D19 | **A crop model next to the general model (2.4, 2026-11-28, user's decision).** A model of fixed classes (any framework but `ANTHROPIC`/`GOOGLE`, served by the AI service at `AiService:BaseUrl`) is a *crop model*: its labels are `HEALTHY` plus active `DISEASE` codes of **one** crop, and that crop is its crop (derived from the labels, nothing stored; `AiModelResponse.cropType`, null for a general model). A case is answered by the ACTIVE crop model when its crop is the case's crop, otherwise by the ACTIVE general model; the policy is the chosen model's. One AI service URL serves the crop model, so only one crop model is ACTIVE at a time (D5). Today: dragon fruit → the team's stem model (`agrisage-dragonfruit-stem-classifier`), every other crop → Gemini. |
 | D15 | **Cases decided under 1.0 stay readable.** `VERIFIED` shows the reviewer's final disease and the stored recommendations of the current review (`certainty = VERIFIED`); `INCONCLUSIVE` keeps its comment and retake hint; an old `UNDER_REVIEW` case reads like `AI_COMPLETED`. No status is added or removed (the status check constraint stays). |
 
 ---
@@ -139,7 +143,7 @@ Mapping of `POST {BaseUrl}/v1/inference` (multipart: `image`, `top_k`, `case_id`
 | GET | `/api/ai-models` | `AI_MODELS.READ` | `status`, paging | `200 PagedResult<AiModelResponse>` |
 | GET | `/api/ai-models/{id}` | `AI_MODELS.READ` | — | `200 AiModelResponse` (with policies) |
 | POST | `/api/ai-models` | `AI_MODELS.CREATE` | `AiModelRequest` | `201 AiModelResponse`, status DRAFT |
-| POST | `/api/ai-models/{id}/activate` | `AI_MODELS.ACTIVATE` | — | `200`, the previously ACTIVE model becomes RETIRED (D5) |
+| POST | `/api/ai-models/{id}/activate` | `AI_MODELS.ACTIVATE` | — | `200`, the ACTIVE model of the same kind (general or crop model) becomes RETIRED (D5, D19) |
 | POST | `/api/ai-models/{id}/retire` | `AI_MODELS.RETIRE` | — | `200` |
 | GET | `/api/ai-models/{id}/policies` | `AI_POLICIES.READ` | — | `200 AiPolicyResponse[]` |
 | POST | `/api/ai-models/{id}/policies` | `AI_POLICIES.CREATE` | `AiPolicyRequest` | `201`, status DRAFT |
@@ -158,7 +162,9 @@ Mapping of `POST {BaseUrl}/v1/inference` (multipart: `image`, `top_k`, `case_id`
   "effectiveFrom": "2026-11-01T00:00:00Z", "effectiveTo": null, "parameters": { "note": "…" } }
 ```
 
-- `classLabels` must be **exactly** the five `diseases.code` values (set equality, any order) → else `422`.
+- `classLabels` of a crop model (fixed classes): distinct, `HEALTHY` plus active `DISEASE` codes of one crop (D19) → else
+  `400`; of a general model: distinct active disease codes including `HEALTHY` (D17). `AiModelResponse` adds `cropType`
+  (the crop model's crop; null for a general model).
 - `(name, version)` unique → `409`. Policy `(aiModelId, version)` unique → `409`.
 - Activating a policy whose effective period overlaps another ACTIVE policy of the same model → `422` naming it.
   A policy can only be activated while its model is ACTIVE.
@@ -358,7 +364,7 @@ Controller and action names that key the map: `MeDiagnosisCases.{Create,List,Get
 | Task | Must prove |
 |---|---|
 | F5.1 | field mapping for a normal answer; unreachable / timeout / 5xx / bad JSON → `AiServiceUnavailableException`; unknown label, version mismatch and `stub` are FAILED inferences; `Simulated` refused outside Development; the API key is never logged |
-| F5.2 | `classLabels` set equality (missing, extra, duplicate → 422); one ACTIVE model after two activations; overlapping policy → 422; activation needs an ACTIVE model; 409 on duplicates |
+| F5.2 | crop model labels: HEALTHY + one crop's diseases (two crops, no HEALTHY, unknown → 400); a general and a crop model stay ACTIVE together, a model of the same kind is retired; the case goes to its crop's model; overlapping policy → 422; activation needs an ACTIVE model; 409 on duplicates |
 | F5.3 | bucket mapping for `DiagnosisImages`; signed URL only for a case's own image; oversized / wrong type → 400 |
 | F5.4 | 401 / 403 (not FARMER); another Farmer's case → 404; case saved before the AI call; AI down → `FAILED`, photo kept; CONFIDENT result right in the create response with treatments and ingredient-matched products, excluding inactive, unsellable, other-store, non-ACTIVE and deleted products; UNCERTAIN result without CHEMICAL treatments and products; Healthy without products; response never contains a probability or a model name; retry: 503 records nothing, success completes the case, 422 on a completed case; 1.0 VERIFIED / INCONCLUSIVE / UNDER_REVIEW cases still readable; cancel states |
 | F5.5 | read without any review right; `farmerResult` equals the Farmer's result; removed routes answer 404/405; `aiPassed` and the newest-first order |
@@ -381,7 +387,7 @@ Controller and action names that key the map: `MeDiagnosisCases.{Create,List,Get
 
 | Method | Route | Role / permission | Body / query | Response |
 |---|---|---|---|---|
-| GET | `/api/me/diagnosis/crops` | Farmer / `MY_DIAGNOSIS.CREATE` | — | `200 CropResponse[]`: the crops a photo can be sent for now (D16); `diseases` = only those the ACTIVE model can name, `diseaseCount` = every active disease of the crop |
+| GET | `/api/me/diagnosis/crops` | Farmer / `MY_DIAGNOSIS.CREATE` | — | `200 CropResponse[]`: the crops a photo can be sent for now (D16); `diseases` = only those the model chosen for the crop (D19) can name, `diseaseCount` = every active disease of the crop |
 | GET | `/api/diagnosis/crops` | Operate / `DISEASES.READ` | — | `200 CropResponse[]`: every catalog crop, `photoDiagnosis` tells whether it is offered |
 | POST | `/api/me/diagnosis-cases` | Farmer / `MY_DIAGNOSIS.CREATE` | multipart: `image`, `note?`, **`cropType?`** | as before; `400` unknown crop, `422` crop not offered |
 | GET | `/api/me/diagnosis-cases`, `/api/me/diagnosis-cases/{id}` | Farmer | as before | list items and the case add **`cropType`, `cropName`** (the crop chosen before the photo; RICE / Lúa for older cases) |
@@ -425,7 +431,8 @@ AiProviderSettingsResponse { "provider": "ANTHROPIC", "modelId": "claude-opus-5-
   (paid service) when Farmers' real photos are sent; the admin page says so on the Gemini tab.
 - Turning a provider on: the admin saves its key and model (`PUT`), checks them (`POST …/test`), registers a model of
   framework `ANTHROPIC` or `GOOGLE` whose `version` is that provider's model id and whose labels are the active diseases to
-  answer (+ HEALTHY), adds a policy with thresholds from the evaluation and activates it (the previous model is retired, D5).
+  answer (+ HEALTHY), adds a policy with thresholds from the evaluation and activates it (the previous general model is retired; the crop
+  model stays, D5, D19).
 - Configuration: `SecretEncryption:Key` = 32 random bytes in base64 (User Secrets or environment); without it no key can
   be stored and a stored key cannot be read. Changing it makes the stored key unreadable: enter the key again.
 - Migration `20261120145730_AiProviderSettings`: table `ai_provider_settings` and the admin-only permissions
@@ -434,3 +441,24 @@ AiProviderSettingsResponse { "provider": "ANTHROPIC", "modelId": "claude-opus-5-
   `GeminiDiagnosisClientTests` (request shape, key only in the header, every failure unavailable, connection check),
   `AiProviderEndToEndTests` (admin only, one setting per provider, key never returned or audited, version, clear, 404), and
   `DiagnosisToAdvisoryEndToEndTests.A_crop_chosen_before_the_photo_narrows_a_general_model_to_that_crops_diseases`.
+
+---
+
+## 16. Version 2.4 — dragon fruit through the team's own model (2026-11-28)
+
+The general model answers every crop except the one that has its own crop model (D19). The first crop model is the
+team's research model for dragon fruit stems (Nguyễn Trọng Thiện; ViT-B/16 `vit_base_patch16_224.augreg_in21k_ft_in1k`,
+1,934 images from three public datasets, leave-one-dataset-out AUROC 0.98–1.00; package and model card outside the repo).
+
+- Crop: `DRAGON_FRUIT` "Thanh long" in `CropCatalog`. Problem `DRAGONFRUIT_STEM_CANKER` (stem canker, *Neoscytalidium
+  dimidiatum*) with `crop_type = DRAGON_FRUIT`; the result `HEALTHY` is the shared healthy class. Other dragon fruit
+  problems may exist for typed advice; the photo model names only stem canker.
+- The service follows the FastAPI contract of §4 (`POST {AiService:BaseUrl}/v1/inference`, `X-Api-Key`); two classes, so
+  `top_predictions` has at most two rows whatever `top_k` is. Registration = its `manifest.json` (`framework: pytorch`,
+  `classLabels: ["HEALTHY", "DRAGONFRUIT_STEM_CANKER"]`) and a policy `minimumConfidence 0.70`, `minimumMargin` null
+  (two classes: margin = 2p − 1), `topK 2`; the threshold comes from the model card and is re-chosen on real photos.
+- Known limits (model card, shown to the Farmer through the problem's content, not code): photos of the stem only;
+  anthracnose stems are often answered as stem canker with high confidence; a photo that is not a dragon fruit stem is
+  not refused. A CONFIDENT stem canker is therefore advice to check, and products still come only from approved links.
+- Order on a shared database: the backend with D19 must be running everywhere before the crop model is activated. A
+  backend before 2.4 picks the newest ACTIVE model for every crop, and activating with it retires the general model.

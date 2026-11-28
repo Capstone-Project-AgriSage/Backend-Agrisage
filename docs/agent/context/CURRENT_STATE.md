@@ -280,6 +280,12 @@ setup documentation
   a person; replaces the active-ingredient match. One migration (tables `disease_products`, `advisory_sessions`,
   `advisory_session_items`, two `diseases` columns, permissions). Code follows in separate PRs: backend, then
   Management-Webs, Farmer-Mobile, Farmer-Web. Photo model choice postponed.
+- In progress (branch `feature/dragon-fruit-model`, 2026-11-28) — a crop model next to the general model
+  (`api-flows/AI_DIAGNOSIS.md` 2.4, D19): `DRAGON_FRUIT` in `CropCatalog`; `CropModels` picks the crop's own model (fixed
+  classes, its crop derived from its labels) or the general model, used by `DiagnosisAiRunner` and `CropService`;
+  `AiModelService` accepts a crop model's labels (HEALTHY + one crop's diseases) and activation retires only the same kind;
+  `AiModelResponse.cropType`. No migration. The dragon fruit stem model must be activated on a shared database only after
+  every backend runs this code.
 - In progress (branch `feature/crop-diagnosis-claude`, 2026-11-20) — crop-first photo diagnosis with a general model
   (`api-flows/AI_DIAGNOSIS.md` 2.2): `CropCatalog`, `GET /api/me/diagnosis/crops`, `cropType` on case create and disease
   create, candidates per crop in `DiagnosisAiRunner`, `ClaudeDiagnosisClient` (Anthropic SDK) and `GeminiDiagnosisClient`

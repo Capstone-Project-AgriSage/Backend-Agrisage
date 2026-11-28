@@ -145,7 +145,7 @@ For DB work, open only exact relevant sections of the full design.
 - payOS webhook processing is idempotent.
 - No AI Human Review (since 2026-10-21): the Farmer sees the AI result, CONFIDENT or UNCERTAIN, never a probability.
 - Product suggestions only from approved `disease_products` links (registration source, dose, price, stock); never from an ingredient match or a model; for AI, only for a CONFIDENT, non-Healthy result.
-- Production AI classes: Leaf Blast, Bacterial Leaf Blight, Brown Spot, Sheath Blight, Healthy.
+- Photo diagnosis: crop chosen first; Gemini/Claude answer among that crop's diseases; dragon fruit stems use the team's own model (Healthy, stem canker); see AI_DIAGNOSIS.md D19.
 - Promotions are out of scope.
 
 Full rules: `docs/agent/context/BUSINESS_RULES.md`.

@@ -37,7 +37,7 @@ Use this summary for navigation. For exact schema implications, open the relevan
 32. Return value reduces attributable unpaid receivable first; already-paid remainder is refunded.
 33. No automated payOS refund in MVP; external refund is recorded.
 34. Product review requires purchase + successful fulfillment; max one review per Order Item/Farmer.
-35. Production AI scope: Rice — Leaf Blast, Bacterial Leaf Blight, Brown Spot, Sheath Blight, Healthy.
+35. Photo diagnosis scope (AI_DIAGNOSIS.md 2.2–2.4): the Farmer picks the crop first; a general model (Claude or Gemini) answers among that crop's active diseases and Healthy; dragon fruit stem photos are answered by the team's own crop model (Healthy, dragon fruit stem canker). One ACTIVE general model and one ACTIVE crop model at a time. The five seeded rice classes stay (rule 66).
 36. No Human Review (since 2026-10-21, AI_DIAGNOSIS.md 2.0): the Farmer sees the result of the latest successful AI inference at once, marked CONFIDENT (policy passed) or UNCERTAIN (not passed), never as a probability.
 37. Product suggestions for a CONFIDENT, non-Healthy AI result come only from reviewed links: the `APPROVED` `PROTECTION` rows of `disease_products` for the predicted disease, limited to store products the catalog sells and that have a price and stock (at most 5, computed at read time). An active-ingredient match alone never offers a product. An UNCERTAIN result shows no CHEMICAL treatment and no product.
 38. Reports include Sales Revenue, COGS and Gross Profit; COGS uses actual fulfilled lot cost.
