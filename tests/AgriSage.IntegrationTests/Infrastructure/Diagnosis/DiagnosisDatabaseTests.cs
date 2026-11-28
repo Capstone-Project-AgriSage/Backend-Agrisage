@@ -719,7 +719,7 @@ public sealed class DiagnosisDatabaseTests
             $"m-{env.Tag}", "1.0.0", "pytorch", "https://example.test/m1", Codes, "mobilenet_v2", 224, 224,
             JsonDocument.Parse("""{"testMacroF1":0.92}""").RootElement.Clone());
 
-        // The class labels must be exactly the five disease codes.
+        // A crop model's labels are HEALTHY plus diseases of one crop (D19): no HEALTHY, or an unknown code, is refused.
         await Assert.ThrowsAsync<ValidationException>(() => env.Models(s => s.CreateAsync(
             manifest with { ClassLabels = Codes.Take(4).ToList() }, Token)));
         await Assert.ThrowsAsync<ValidationException>(() => env.Models(s => s.CreateAsync(
@@ -746,7 +746,7 @@ public sealed class DiagnosisDatabaseTests
         await env.Models(s => s.DeactivatePolicyAsync(policy1.Id, Token));
         Assert.Equal("ACTIVE", (await env.Models(s => s.ActivatePolicyAsync(overlapping.Id, Token))).Status);
 
-        // Activating another model retires the first: one model answers at a time.
+        // Activating another crop model retires the first: the AI service serves one crop model at a time (D5, D19).
         Assert.Equal("ACTIVE", (await env.Models(s => s.ActivateAsync(second.Id, Token))).Status);
         Assert.Equal("RETIRED", (await env.Models(s => s.GetAsync(first.Id, Token))).Status);
         var active = await env.Models(s => s.ListAsync(new AiModelListRequest { Status = "ACTIVE" }, Token));

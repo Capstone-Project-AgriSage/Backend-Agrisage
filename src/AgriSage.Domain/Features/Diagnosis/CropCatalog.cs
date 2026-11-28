@@ -1,7 +1,8 @@
 namespace AgriSage.Domain.Features.Diagnosis;
 
-// The crops the store advises on (AI_DIAGNOSIS.md 2.2). A crop's code is the value of diseases.crop_type and
-// diagnosis_cases.crop_type; a crop is offered for photo diagnosis once it has at least one active disease.
+// The crops the store advises on (AI_DIAGNOSIS.md 2.2, 2.4). A crop's code is the value of diseases.crop_type and
+// diagnosis_cases.crop_type; a crop is offered for photo diagnosis once the model answering it can name one of its active
+// diseases. Dragon fruit photos (of the stem) go to the team's own model; the other crops to the general model (D19).
 public static class CropCatalog
 {
     public sealed record Crop(string Code, string Name, int Order);
@@ -11,6 +12,7 @@ public static class CropCatalog
     public const string Coffee = "COFFEE";
     public const string Corn = "CORN";
     public const string Mango = "MANGO";
+    public const string DragonFruit = "DRAGON_FRUIT";
 
     public static IReadOnlyList<Crop> All { get; } =
     [
@@ -19,6 +21,7 @@ public static class CropCatalog
         new(Coffee, "Cà phê", 3),
         new(Corn, "Bắp (ngô)", 4),
         new(Mango, "Xoài", 5),
+        new(DragonFruit, "Thanh long", 6),
     ];
 
     private static readonly Dictionary<string, Crop> ByCode = All.ToDictionary(c => c.Code, StringComparer.Ordinal);

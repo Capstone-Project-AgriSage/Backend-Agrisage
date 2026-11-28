@@ -47,10 +47,8 @@ public sealed class DiagnosisAiRunner(
         var caseNumber = caseInfo.CaseNumber;
 
         var now = clock.UtcNow;
-        var model = await context.AiModels.AsNoTracking()
-            .Where(m => m.Status == AiModelStatus.Active)
-            .OrderByDescending(m => m.DeployedAt)
-            .FirstOrDefaultAsync(cancellationToken);
+        // The crop's own model when it has one (e.g. dragon fruit), otherwise the general model (D19).
+        var model = CropModels.ForCrop(await CropModels.ActiveAsync(context, cancellationToken), caseInfo.CropType)?.Model;
         var policy = model is null
             ? null
             : await context.AiPolicyConfigs.AsNoTracking()
@@ -154,8 +152,8 @@ public sealed class DiagnosisAiRunner(
         await transaction.CommitAsync(cancellationToken);
     }
 
-    // The answer is evidence only if it comes from the ACTIVE model, is not a simulation outside Development and names
-    // one of the model's classes that is a known disease.
+    // The answer is evidence only if it comes from the model chosen for the case's crop (its version), is not a simulation
+    // outside Development and names one of the model's classes that is a known disease.
     private async Task<(string? Error, Guid? DiseaseId)> CheckAsync(
         AiPredictionResult result, Domain.Features.Diagnosis.Entities.AiModel model, IReadOnlyList<AiCandidate> candidates,
         CancellationToken cancellationToken)
@@ -221,7 +219,7 @@ public sealed class DiagnosisAiRunner(
     }
 
     // The classes this case may be answered with: the active diseases of its crop that the model knows, plus the healthy
-    // class. A model of fixed classes (the FastAPI one) only knows rice, so another crop gets no disease candidate.
+    // class. A crop model (fixed classes, FastAPI) only knows its own crop's diseases (D19).
     private async Task<IReadOnlyList<AiCandidate>> CandidatesAsync(
         Domain.Features.Diagnosis.Entities.AiModel model, string cropType, CancellationToken cancellationToken)
     {

@@ -1,4 +1,3 @@
-using System.Text.Json;
 using AgriSage.Application.Common.Interfaces;
 using AgriSage.Domain.Features.Diagnosis;
 using AgriSage.Domain.Features.Diagnosis.Enums;
@@ -8,14 +7,16 @@ namespace AgriSage.Application.Features.Diagnosis;
 
 public sealed record CropDiseaseItem(string Code, string Name);
 
-// DiseaseCount: every active disease of the crop. Diseases: only those the ACTIVE model can name (what the Farmer's app lists
-// as "AI nhận diện được"; all of them while no model is active). PhotoDiagnosis: at least one, so a photo may be sent.
+// DiseaseCount: every active disease of the crop. Diseases: only those the model answering the crop (D19) can name (what the
+// Farmer's app lists as "AI nhận diện được"; all of them while no model is active). PhotoDiagnosis: at least one, so a photo
+// may be sent.
 public sealed record CropResponse(string Code, string Name, int DiseaseCount, bool PhotoDiagnosis, IReadOnlyList<CropDiseaseItem> Diseases);
 
 public interface ICropService
 {
-    // Crops a Farmer can choose before sending a photo (AI_DIAGNOSIS.md 2.2): crops with an active disease the active model
-    // can name. Before any model is active, every crop with diseases is listed (the case then fails and can be retried).
+    // Crops a Farmer can choose before sending a photo (AI_DIAGNOSIS.md 2.2, 2.4): crops with an active disease the model
+    // answering the crop (its crop model, else the general model) can name. Before any model is active, every crop with
+    // diseases is listed (the case then fails and can be retried).
     Task<IReadOnlyList<CropResponse>> ListForPhotoDiagnosisAsync(CancellationToken cancellationToken);
 
     // Every crop of the catalog with its active diseases, for the staff screens (a crop with none is listed too).
@@ -24,21 +25,18 @@ public interface ICropService
 
 public sealed class CropService(IAgriSageDbContext context) : ICropService
 {
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
-
     public async Task<IReadOnlyList<CropResponse>> ListForPhotoDiagnosisAsync(CancellationToken cancellationToken)
     {
-        var labels = await ActiveModelLabelsAsync(context, cancellationToken);
-        var crops = await BuildAsync(labels, cancellationToken);
+        var crops = await BuildAsync(cancellationToken);
 
         return crops.Where(crop => crop.PhotoDiagnosis).ToList();
     }
 
-    public async Task<IReadOnlyList<CropResponse>> ListAllAsync(CancellationToken cancellationToken) =>
-        await BuildAsync(await ActiveModelLabelsAsync(context, cancellationToken), cancellationToken);
+    public Task<IReadOnlyList<CropResponse>> ListAllAsync(CancellationToken cancellationToken) => BuildAsync(cancellationToken);
 
-    private async Task<IReadOnlyList<CropResponse>> BuildAsync(IReadOnlySet<string>? modelLabels, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<CropResponse>> BuildAsync(CancellationToken cancellationToken)
     {
+        var active = await CropModels.ActiveAsync(context, cancellationToken);
         var diseases = await context.Diseases.AsNoTracking()
             .Where(d => d.IsActive && !d.IsHealthyClass && d.ProblemType == ProblemType.Disease)
             .OrderBy(d => d.Name)
@@ -48,33 +46,14 @@ public sealed class CropService(IAgriSageDbContext context) : ICropService
         return CropCatalog.All.OrderBy(crop => crop.Order).Select(crop =>
         {
             var own = diseases.Where(d => d.CropType == crop.Code).ToList();
-            var answerable = modelLabels is null ? own : own.Where(d => modelLabels.Contains(d.Code)).ToList();
+            // No model active at all: every crop with diseases is listed (the case then fails and can be retried). Otherwise
+            // a crop is answered by its own crop model or the general model (D19), and only the diseases that model names count.
+            var answerable = active.Count == 0
+                ? own
+                : CropModels.ForCrop(active, crop.Code) is { } model ? own.Where(d => model.Labels.Contains(d.Code)).ToList() : [];
             return new CropResponse(
                 crop.Code, crop.Name, own.Count, answerable.Count > 0,
                 answerable.Select(d => new CropDiseaseItem(d.Code, d.Name)).ToList());
         }).ToList();
-    }
-
-    // The class labels of the ACTIVE model; null when no model is active.
-    internal static async Task<IReadOnlySet<string>?> ActiveModelLabelsAsync(IAgriSageDbContext context, CancellationToken cancellationToken)
-    {
-        var labels = await context.AiModels.AsNoTracking()
-            .Where(m => m.Status == AiModelStatus.Active)
-            .OrderByDescending(m => m.DeployedAt)
-            .Select(m => m.ClassLabels)
-            .FirstOrDefaultAsync(cancellationToken);
-        if (labels is null)
-        {
-            return null;
-        }
-
-        try
-        {
-            return (JsonSerializer.Deserialize<List<string>>(labels, Json) ?? []).ToHashSet(StringComparer.Ordinal);
-        }
-        catch (JsonException)
-        {
-            return new HashSet<string>();
-        }
     }
 }
